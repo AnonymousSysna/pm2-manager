@@ -60,7 +60,10 @@ router.delete("/:name", async (req, res) => {
 });
 
 router.get("/:name/logs", async (req, res) => {
-  const lines = Number(req.query.lines || 100);
+  const requested = Number(req.query.lines || 100);
+  const lines = Number.isFinite(requested)
+    ? Math.min(2000, Math.max(1, Math.floor(requested)))
+    : 100;
   const result = await getProcessLogs(req.params.name, lines);
   res.status(result.success ? 200 : 500).json(result);
 });

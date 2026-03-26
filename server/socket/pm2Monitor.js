@@ -44,8 +44,11 @@ function registerPM2Monitor(io) {
 
     await sendProcesses();
 
-    const intervalMs = Number(socket.handshake?.query?.interval || 2000);
-    const timer = setInterval(sendProcesses, intervalMs > 0 ? intervalMs : 2000);
+    const requested = Number(socket.handshake?.query?.interval || 2000);
+    const intervalMs = Number.isFinite(requested)
+      ? Math.min(15000, Math.max(1000, Math.floor(requested)))
+      : 2000;
+    const timer = setInterval(sendProcesses, intervalMs);
 
     socket.on("disconnect", () => {
       clearInterval(timer);

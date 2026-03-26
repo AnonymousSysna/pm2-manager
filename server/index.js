@@ -40,10 +40,31 @@ const app = express();
 const server = http.createServer(app);
 const PORT = Number(process.env.PORT || 8000);
 const trustProxy = String(process.env.TRUST_PROXY || "").trim() === "1";
+const configuredOrigins = String(process.env.CORS_ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((v) => v.trim())
+  .filter(Boolean);
 
 app.set("trust proxy", trustProxy);
 
-app.use(cors());
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      if (configuredOrigins.length === 0) {
+        callback(
+          new Error("CORS blocked: origin not allowed. Set CORS_ALLOWED_ORIGINS."),
+          false
+        );
+        return;
+      }
+      callback(null, configuredOrigins.includes(origin));
+    }
+  })
+);
 app.use(express.json({ limit: "1mb" }));
 
 app.get("/health", (_req, res) => {
@@ -78,7 +99,7 @@ if (process.env.NODE_ENV === "production") {
 
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: configuredOrigins.length > 0 ? configuredOrigins : false,
     methods: ["GET", "POST"]
   }
 });

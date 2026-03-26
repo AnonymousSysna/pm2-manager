@@ -85,9 +85,7 @@ router.post("/login", async (req, res) => {
   }
 
   const incomingMatches = await bcrypt.compare(password || "", getCurrentPasswordHash());
-  const fallbackMatch = password === expectedPassword;
-
-  if (!incomingMatches && !fallbackMatch) {
+  if (!incomingMatches) {
     const count = (state?.count || 0) + 1;
     attemptsByIp.set(ip, {
       count,
@@ -121,9 +119,7 @@ router.post("/change-password", verifyToken, async (req, res) => {
   }
 
   const currentMatches = await bcrypt.compare(currentPassword, getCurrentPasswordHash());
-  const currentFallback = currentPassword === cachedPassword;
-
-  if (!currentMatches && !currentFallback) {
+  if (!currentMatches) {
     return res.status(400).json({
       success: false,
       data: null,

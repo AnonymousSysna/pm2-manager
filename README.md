@@ -36,11 +36,13 @@ JWT_SECRET=your-secret-key-here
 PORT=8000
 AUTH_ALLOWED_IPS=203.0.113.10
 TRUST_PROXY=1
+CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 ```
 
 `AUTH_ALLOWED_IPS` supports a comma-separated allowlist of client IPs.
 If set, only those IPs can log in or use authenticated API/socket endpoints.
 Use `TRUST_PROXY=1` when running behind Nginx/Cloudflare so real client IP is detected.
+`CORS_ALLOWED_ORIGINS` is a comma-separated list of allowed browser origins.
 
 Server local dev file (`server/.env`) is already scaffolded.
 
