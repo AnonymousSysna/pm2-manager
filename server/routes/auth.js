@@ -4,10 +4,15 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { verifyToken } = require("../middleware/auth");
+const { isIpAllowed, getRequestIp } = require("../utils/ipAccess");
 
 const router = express.Router();
 
-let cachedPassword = process.env.PM2_PASS || "changeme";
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOGIN_BLOCK_MS = 15 * 60 * 1000;
+const attemptsByIp = new Map();
+
+let cachedPassword = process.env.PM2_PASS || "";
 let cachedHash = null;
 
 function getCurrentPasswordHash() {
@@ -35,12 +40,45 @@ function updateEnvPassword(newPassword) {
 }
 
 router.post("/login", async (req, res) => {
+  const ip = getRequestIp(req) || "unknown";
+  if (!isIpAllowed(ip)) {
+    return res.status(403).json({
+      success: false,
+      data: null,
+      error: "Access denied for this IP"
+    });
+  }
+
+  const now = Date.now();
+  const state = attemptsByIp.get(ip);
+  if (state?.blockedUntil && state.blockedUntil > now) {
+    return res.status(429).json({
+      success: false,
+      data: null,
+      error: "Too many login attempts. Try again later."
+    });
+  }
+
   const { username, password } = req.body || {};
 
-  const expectedUser = process.env.PM2_USER || "admin";
+  const expectedUser = process.env.PM2_USER || "";
   const expectedPassword = cachedPassword;
+  const jwtSecret = String(process.env.JWT_SECRET || "").trim();
+
+  if (!expectedUser || !expectedPassword || !jwtSecret) {
+    return res.status(503).json({
+      success: false,
+      data: null,
+      error: "Server auth misconfigured"
+    });
+  }
 
   if (username !== expectedUser) {
+    const count = (state?.count || 0) + 1;
+    attemptsByIp.set(ip, {
+      count,
+      blockedUntil: count >= MAX_LOGIN_ATTEMPTS ? now + LOGIN_BLOCK_MS : 0
+    });
     return res
       .status(401)
       .json({ success: false, data: null, error: "Invalid credentials" });
@@ -50,14 +88,21 @@ router.post("/login", async (req, res) => {
   const fallbackMatch = password === expectedPassword;
 
   if (!incomingMatches && !fallbackMatch) {
+    const count = (state?.count || 0) + 1;
+    attemptsByIp.set(ip, {
+      count,
+      blockedUntil: count >= MAX_LOGIN_ATTEMPTS ? now + LOGIN_BLOCK_MS : 0
+    });
     return res
       .status(401)
       .json({ success: false, data: null, error: "Invalid credentials" });
   }
 
+  attemptsByIp.delete(ip);
+
   const token = jwt.sign(
     { username, role: "admin" },
-    process.env.JWT_SECRET || "dev-secret-key",
+    jwtSecret,
     { expiresIn: "24h" }
   );
 

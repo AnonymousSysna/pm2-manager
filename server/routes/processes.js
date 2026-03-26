@@ -9,7 +9,9 @@ const {
   getProcessLogs,
   reloadProcess,
   flushLogs,
-  getProcessDetails
+  getProcessDetails,
+  npmInstall,
+  npmBuild
 } = require("../controllers/processController");
 const { verifyToken } = require("../middleware/auth");
 
@@ -65,6 +67,16 @@ router.get("/:name/logs", async (req, res) => {
 
 router.post("/:name/flush", async (req, res) => {
   const result = await flushLogs(req.params.name);
+  res.status(result.success ? 200 : 500).json(result);
+});
+
+router.post("/:name/npm-install", async (req, res) => {
+  const result = await npmInstall(req.params.name);
+  res.status(result.success ? 200 : 500).json(result);
+});
+
+router.post("/:name/npm-build", async (req, res) => {
+  const result = await npmBuild(req.params.name);
   res.status(result.success ? 200 : 500).json(result);
 });
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { X, Copy, Play, Square, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
+import { X, Copy, Play, Square, RefreshCw, RotateCcw, Trash2, Download, Hammer } from "lucide-react";
 
 const tabs = ["Overview", "Environment", "Resource Graph", "Quick Actions"];
 
@@ -141,6 +141,12 @@ export default function ProcessDetailModal({ process, onClose, onAction }) {
             </button>
             <button type="button" className="rounded bg-amber-600 px-3 py-2" onClick={() => onAction("reload", process.name)}>
               <RotateCcw className="inline" size={16} /> Reload
+            </button>
+            <button type="button" className="rounded bg-cyan-700 px-3 py-2" onClick={() => onAction("npmInstall", process.name)}>
+              <Download className="inline" size={16} /> NPM Install
+            </button>
+            <button type="button" className="rounded bg-violet-700 px-3 py-2" onClick={() => onAction("npmBuild", process.name)}>
+              <Hammer className="inline" size={16} /> NPM Build
             </button>
             <button type="button" className="col-span-2 rounded bg-rose-700 px-3 py-2" onClick={() => onAction("delete", process.name)}>
               <Trash2 className="inline" size={16} /> Delete

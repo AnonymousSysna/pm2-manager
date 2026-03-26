@@ -34,7 +34,13 @@ PM2_USER=admin
 PM2_PASS=changeme
 JWT_SECRET=your-secret-key-here
 PORT=8000
+AUTH_ALLOWED_IPS=203.0.113.10
+TRUST_PROXY=1
 ```
+
+`AUTH_ALLOWED_IPS` supports a comma-separated allowlist of client IPs.
+If set, only those IPs can log in or use authenticated API/socket endpoints.
+Use `TRUST_PROXY=1` when running behind Nginx/Cloudflare so real client IP is detected.
 
 Server local dev file (`server/.env`) is already scaffolded.
 

@@ -8,10 +8,15 @@ const defaultEnvRow = { key: "", value: "" };
 export default function CreateProcess() {
   const navigate = useNavigate();
   const [tab, setTab] = useState("simple");
+  const [mode, setMode] = useState("script");
   const [error, setError] = useState("");
   const [form, setForm] = useState({
     name: "",
     script: "",
+    project_path: "",
+    start_script: "start",
+    install_dependencies: true,
+    run_build: false,
     args: "",
     port: "",
     cwd: "",
@@ -37,8 +42,18 @@ export default function CreateProcess() {
     event.preventDefault();
     setError("");
 
-    if (!form.name.trim() || !form.script.trim()) {
-      setError("Process Name and Script Path are required.");
+    if (!form.name.trim()) {
+      setError("Process Name is required.");
+      return;
+    }
+
+    if (mode === "script" && !form.script.trim()) {
+      setError("Script Path is required in Script Mode.");
+      return;
+    }
+
+    if (mode === "project" && !form.project_path.trim()) {
+      setError("Project Directory is required in Project Mode.");
       return;
     }
 
@@ -51,10 +66,14 @@ export default function CreateProcess() {
 
     const payload = {
       name: form.name,
-      script: form.script,
-      args: form.args || undefined,
+      script: mode === "script" ? form.script : undefined,
+      project_path: mode === "project" ? form.project_path : undefined,
+      start_script: mode === "project" ? form.start_script || "start" : undefined,
+      install_dependencies: mode === "project" ? Boolean(form.install_dependencies) : undefined,
+      run_build: mode === "project" ? Boolean(form.run_build) : undefined,
+      args: mode === "script" ? form.args || undefined : undefined,
       port: form.port || undefined,
-      cwd: form.cwd || undefined,
+      cwd: mode === "script" ? form.cwd || undefined : undefined,
       watch: form.watch,
       exec_mode: form.exec_mode,
       instances: form.exec_mode === "cluster" ? Number(form.instances || 1) : 1,
@@ -81,6 +100,23 @@ export default function CreateProcess() {
 
   return (
     <div className="mx-auto max-w-3xl rounded-lg bg-slate-900 p-5">
+      <div className="mb-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setMode("script")}
+          className={`rounded px-4 py-2 text-sm ${mode === "script" ? "bg-emerald-500/20 text-emerald-300" : "bg-slate-800 text-slate-300"}`}
+        >
+          Script Mode
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("project")}
+          className={`rounded px-4 py-2 text-sm ${mode === "project" ? "bg-emerald-500/20 text-emerald-300" : "bg-slate-800 text-slate-300"}`}
+        >
+          Project Directory Mode
+        </button>
+      </div>
+
       <div className="mb-4 flex gap-2">
         <button
           type="button"
@@ -103,20 +139,69 @@ export default function CreateProcess() {
           <input value={form.name} onChange={(e) => update("name", e.target.value)} className="input" />
         </Field>
 
-        <Field label="Script Path" required>
-          <input value={form.script} onChange={(e) => update("script", e.target.value)} placeholder="app.js or npm" className="input" />
-        </Field>
+        {mode === "script" && (
+          <>
+            <Field label="Script Path" required>
+              <input
+                value={form.script}
+                onChange={(e) => update("script", e.target.value)}
+                placeholder="app.js, npm, or /absolute/path/to/app.js"
+                className="input"
+              />
+            </Field>
 
-        <Field label="Arguments">
-          <input value={form.args} onChange={(e) => update("args", e.target.value)} className="input" />
-        </Field>
+            <Field label="Arguments">
+              <input value={form.args} onChange={(e) => update("args", e.target.value)} className="input" />
+            </Field>
+
+            <Field label="Working Directory">
+              <input value={form.cwd} onChange={(e) => update("cwd", e.target.value)} className="input" />
+            </Field>
+          </>
+        )}
+
+        {mode === "project" && (
+          <>
+            <Field label="Project Directory" required>
+              <input
+                value={form.project_path}
+                onChange={(e) => update("project_path", e.target.value)}
+                placeholder="/root/my-app"
+                className="input"
+              />
+            </Field>
+
+            <Field label="Start Script">
+              <input
+                value={form.start_script}
+                onChange={(e) => update("start_script", e.target.value)}
+                placeholder="start"
+                className="input"
+              />
+            </Field>
+
+            <label className="flex items-center gap-3 text-sm text-slate-200">
+              <input
+                type="checkbox"
+                checked={form.install_dependencies}
+                onChange={(e) => update("install_dependencies", e.target.checked)}
+              />
+              Run npm install before start
+            </label>
+
+            <label className="flex items-center gap-3 text-sm text-slate-200">
+              <input
+                type="checkbox"
+                checked={form.run_build}
+                onChange={(e) => update("run_build", e.target.checked)}
+              />
+              Run npm run build before start
+            </label>
+          </>
+        )}
 
         <Field label="Port">
           <input type="number" value={form.port} onChange={(e) => update("port", e.target.value)} className="input" />
-        </Field>
-
-        <Field label="Working Directory">
-          <input value={form.cwd} onChange={(e) => update("cwd", e.target.value)} className="input" />
         </Field>
 
         <label className="flex items-center gap-3 text-sm text-slate-200">

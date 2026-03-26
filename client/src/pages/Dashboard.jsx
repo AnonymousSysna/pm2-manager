@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Play, Square, RefreshCw, RotateCcw, ScrollText, Trash2 } from "lucide-react";
+import { Play, Square, RefreshCw, RotateCcw, ScrollText, Trash2, Download, Hammer } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { processes as processApi } from "../api";
@@ -95,6 +95,8 @@ export default function Dashboard() {
         stop: processApi.stop,
         restart: processApi.restart,
         reload: processApi.reload,
+        npmInstall: processApi.npmInstall,
+        npmBuild: processApi.npmBuild,
         delete: processApi.delete
       };
       const result = await handlers[action](name);
@@ -205,6 +207,20 @@ export default function Dashboard() {
                         color="bg-slate-600"
                         onClick={() => navigate(`/dashboard/logs?process=${encodeURIComponent(proc.name)}`)}
                         icon={<ScrollText size={14} />}
+                      />
+                      <ActionButton
+                        title="NPM Install"
+                        disabled={loadingAction[`${proc.name}:npmInstall`]}
+                        color="bg-cyan-700"
+                        onClick={() => callAction("npmInstall", proc.name)}
+                        icon={<Download size={14} />}
+                      />
+                      <ActionButton
+                        title="NPM Build"
+                        disabled={loadingAction[`${proc.name}:npmBuild`]}
+                        color="bg-violet-700"
+                        onClick={() => callAction("npmBuild", proc.name)}
+                        icon={<Hammer size={14} />}
                       />
                       <ActionButton
                         title="Delete"

@@ -1,11 +1,24 @@
 const jwt = require("jsonwebtoken");
 const pm2 = require("pm2");
 const { listProcesses } = require("../controllers/processController");
+const { isIpAllowed, getSocketIp } = require("../utils/ipAccess");
 
 let busAttached = false;
 
 function registerPM2Monitor(io) {
   io.use((socket, next) => {
+    const ip = getSocketIp(socket);
+    if (!isIpAllowed(ip)) {
+      next(new Error("Unauthorized: IP not allowed"));
+      return;
+    }
+
+    const secret = String(process.env.JWT_SECRET || "").trim();
+    if (!secret) {
+      next(new Error("Unauthorized: server auth misconfigured"));
+      return;
+    }
+
     const token = socket.handshake?.auth?.token;
     if (!token) {
       next(new Error("Unauthorized: missing token"));
@@ -13,10 +26,7 @@ function registerPM2Monitor(io) {
     }
 
     try {
-      const decoded = jwt.verify(
-        token,
-        process.env.JWT_SECRET || "dev-secret-key"
-      );
+      const decoded = jwt.verify(token, secret);
       socket.user = decoded;
       next();
     } catch (_error) {

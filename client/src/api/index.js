@@ -41,6 +41,8 @@ export const processes = {
   stop: (name) => api.post(`/api/processes/${encodeURIComponent(name)}/stop`).then(unwrap),
   restart: (name) => api.post(`/api/processes/${encodeURIComponent(name)}/restart`).then(unwrap),
   reload: (name) => api.post(`/api/processes/${encodeURIComponent(name)}/reload`).then(unwrap),
+  npmInstall: (name) => api.post(`/api/processes/${encodeURIComponent(name)}/npm-install`).then(unwrap),
+  npmBuild: (name) => api.post(`/api/processes/${encodeURIComponent(name)}/npm-build`).then(unwrap),
   delete: (name) => api.delete(`/api/processes/${encodeURIComponent(name)}`).then(unwrap),
   logs: (name, lines = 100) => api.get(`/api/processes/${encodeURIComponent(name)}/logs?lines=${lines}`).then(unwrap),
   flush: (name) => api.post(`/api/processes/${encodeURIComponent(name)}/flush`).then(unwrap)
