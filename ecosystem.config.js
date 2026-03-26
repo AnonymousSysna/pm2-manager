@@ -4,7 +4,6 @@ module.exports = {
       name: "pm2-dashboard",
       script: "./server/index.js",
       cwd: "./",
-      env_file: "./server/.env",
       instances: 1,
       exec_mode: "fork",
       env: {
