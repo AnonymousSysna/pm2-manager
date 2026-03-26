@@ -4,14 +4,12 @@ module.exports = {
       name: "pm2-dashboard",
       script: "./server/index.js",
       cwd: "./",
+      env_file: "./server/.env",
       instances: 1,
       exec_mode: "fork",
       env: {
         NODE_ENV: "production",
-        PORT: 8000,
-        PM2_USER: "admin",
-        PM2_PASS: "changeme",
-        JWT_SECRET: "change-this-secret"
+        PORT: 8000
       },
       watch: false,
       autorestart: true,
