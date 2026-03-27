@@ -6,13 +6,35 @@ const DEFAULT_METRICS_PATH = path.resolve(__dirname, "../../logs/metrics-history
 const MAX_POINTS_PER_PROCESS = Number.isFinite(Number(process.env.METRICS_HISTORY_MAX_POINTS))
   ? Math.max(120, Math.floor(Number(process.env.METRICS_HISTORY_MAX_POINTS)))
   : 720;
+const PROJECT_ROOT = path.resolve(__dirname, "../../");
 
 const restartState = new Map();
 const alertState = new Map();
 
 function getMetricsPath() {
   const configured = String(process.env.METRICS_HISTORY_PATH || "").trim();
-  return configured ? path.resolve(configured) : DEFAULT_METRICS_PATH;
+  if (!configured) {
+    return DEFAULT_METRICS_PATH;
+  }
+
+  const defaultFileName = path.basename(DEFAULT_METRICS_PATH);
+  if (configured === "." || configured === "./" || configured === ".\\") {
+    return path.join(PROJECT_ROOT, defaultFileName);
+  }
+
+  const resolved = path.isAbsolute(configured)
+    ? configured
+    : path.resolve(PROJECT_ROOT, configured);
+
+  try {
+    if (fs.statSync(resolved).isDirectory()) {
+      return path.join(resolved, defaultFileName);
+    }
+  } catch (_error) {
+    // Path may not exist yet; treat as file path.
+  }
+
+  return resolved;
 }
 
 async function ensureDir() {

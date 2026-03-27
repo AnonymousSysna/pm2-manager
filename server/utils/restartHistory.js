@@ -9,10 +9,32 @@ const MAX_HISTORY_BYTES = Number.isFinite(Number(process.env.RESTART_HISTORY_MAX
   ? Math.max(512 * 1024, Math.floor(Number(process.env.RESTART_HISTORY_MAX_BYTES)))
   : 10 * 1024 * 1024;
 let rotateInProgress = false;
+const PROJECT_ROOT = path.resolve(__dirname, "../../");
 
 function getHistoryPath() {
   const configured = String(process.env.RESTART_HISTORY_PATH || "").trim();
-  return configured ? path.resolve(configured) : DEFAULT_HISTORY_PATH;
+  if (!configured) {
+    return DEFAULT_HISTORY_PATH;
+  }
+
+  const defaultFileName = path.basename(DEFAULT_HISTORY_PATH);
+  if (configured === "." || configured === "./" || configured === ".\\") {
+    return path.join(PROJECT_ROOT, defaultFileName);
+  }
+
+  const resolved = path.isAbsolute(configured)
+    ? configured
+    : path.resolve(PROJECT_ROOT, configured);
+
+  try {
+    if (fs.statSync(resolved).isDirectory()) {
+      return path.join(resolved, defaultFileName);
+    }
+  } catch (_error) {
+    // Path may not exist yet; treat as file path.
+  }
+
+  return resolved;
 }
 
 async function ensureHistoryDir() {

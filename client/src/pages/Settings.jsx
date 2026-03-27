@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { RefreshCw } from "lucide-react";
 import toast, { getErrorMessage } from "../lib/toast";
 import { auth, pm2Admin, processes as processApi, alerts as alertsApi } from "../api";
 import Button from "../components/ui/Button";
@@ -22,7 +23,26 @@ export default function Settings() {
   const [channelSeverity, setChannelSeverity] = useState("warning");
   const [channelEnabled, setChannelEnabled] = useState(true);
   const [deploymentHistory, setDeploymentHistory] = useState([]);
+  const [deploymentHistoryLoading, setDeploymentHistoryLoading] = useState(false);
   const fileRef = useRef(null);
+
+  const loadDeploymentHistory = async ({ silent = false } = {}) => {
+    if (!silent) {
+      setDeploymentHistoryLoading(true);
+    }
+    try {
+      const result = await processApi.deploymentHistory("all", "", true);
+      if (result.success && Array.isArray(result.data)) {
+        setDeploymentHistory(result.data);
+      }
+    } catch (_error) {
+      // Optional panel.
+    } finally {
+      if (!silent) {
+        setDeploymentHistoryLoading(false);
+      }
+    }
+  };
 
   useEffect(() => {
     pm2Admin
@@ -47,16 +67,7 @@ export default function Settings() {
         // Keep settings usable without channel list.
       });
 
-    processApi
-      .deploymentHistory("all")
-      .then((result) => {
-        if (result.success && Array.isArray(result.data)) {
-          setDeploymentHistory(result.data);
-        }
-      })
-      .catch(() => {
-        // Optional panel.
-      });
+    loadDeploymentHistory();
   }, []);
 
   useEffect(() => {
@@ -331,9 +342,22 @@ export default function Settings() {
       </section>
 
       <section className="page-panel">
-        <h2 className="section-title mb-3">Deployment History</h2>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h2 className="section-title">Deployment History</h2>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => loadDeploymentHistory()}
+            disabled={deploymentHistoryLoading}
+          >
+            <RefreshCw size={14} className={deploymentHistoryLoading ? "animate-spin" : ""} />
+            Refresh
+          </Button>
+        </div>
         <div className="max-h-60 space-y-2 overflow-y-auto text-sm">
-          {deploymentHistory.length === 0 && <p className="text-text-3">No deployments yet.</p>}
+          {deploymentHistoryLoading && <p className="text-text-3">Loading deployment history...</p>}
+          {!deploymentHistoryLoading && deploymentHistory.length === 0 && <p className="text-text-3">No deployments yet.</p>}
           {deploymentHistory
             .slice()
             .reverse()

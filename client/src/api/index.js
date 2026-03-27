@@ -74,12 +74,12 @@ export const processes = {
     api.get(`/api/v1/processes/${encodeURIComponent(name)}/metrics?limit=${limit}`).then(unwrap),
   exportConfig: () => api.get("/api/v1/processes/config/export").then(unwrap),
   importConfig: (payload) => api.post("/api/v1/processes/config/import", payload).then(unwrap),
-  deploymentHistory: (limit = 100, processName = "") =>
+  deploymentHistory: (limit = 100, processName = "", forceFresh = false) =>
     api
       .get(
         `/api/v1/processes/history/deployments?limit=${encodeURIComponent(String(limit))}${
           processName ? `&process=${encodeURIComponent(processName)}` : ""
-        }`
+        }${forceFresh ? `&_ts=${Date.now()}` : ""}`
       )
       .then(unwrap),
   gitCommits: (name, limit = 20) =>
