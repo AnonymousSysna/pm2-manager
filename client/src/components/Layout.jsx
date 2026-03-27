@@ -3,6 +3,8 @@ import { Activity, Plus, ScrollText, Settings, LogOut } from "lucide-react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useSocket } from "../hooks/useSocket";
 import { auth } from "../api";
+import Badge from "./ui/Badge";
+import Button from "./ui/Button";
 
 const links = [
   { to: "/dashboard", label: "Processes", icon: Activity },
@@ -41,11 +43,11 @@ export default function Layout() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 md:flex">
-      <aside className="w-full bg-slate-800 p-4 md:fixed md:inset-y-0 md:left-0 md:w-60 md:p-5">
+    <div className="min-h-screen bg-bg text-text-1 md:flex">
+      <aside className="w-full border-b border-border bg-surface p-4 md:fixed md:inset-y-0 md:left-0 md:w-64 md:border-b-0 md:border-r md:p-5">
         <div className="mb-8 flex items-center gap-3">
-          <div className="h-10 w-10 rounded-full bg-green-500 p-2 text-center text-sm font-bold leading-6 text-slate-900">PM2</div>
-          <h1 className="text-lg font-semibold">Dashboard</h1>
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-500 text-sm font-bold text-bg">PM2</div>
+          <p className="text-lg font-semibold text-text-1">PM2 Manager</p>
         </div>
 
         <nav className="space-y-2">
@@ -55,8 +57,8 @@ export default function Layout() {
               <Link
                 key={to}
                 to={to}
-                className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition ${
-                  active ? "bg-green-500/20 text-green-300" : "text-slate-300 hover:bg-slate-700"
+                className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 ${
+                  active ? "bg-success-500/20 text-success-300" : "text-text-2 hover:bg-surface-2"
                 }`}
               >
                 <Icon size={17} />
@@ -66,24 +68,23 @@ export default function Layout() {
           })}
         </nav>
 
-        <button
+        <Button
           type="button"
+          variant="secondary"
           onClick={logout}
-          className="mt-8 flex w-full items-center gap-3 rounded-md bg-slate-700 px-3 py-2 text-sm text-slate-100 hover:bg-slate-600 md:absolute md:bottom-5 md:left-5 md:right-5 md:w-auto"
+          className="mt-8 w-full justify-start md:absolute md:bottom-5 md:left-5 md:right-5 md:w-auto"
         >
           <LogOut size={17} />
           Logout
-        </button>
+        </Button>
       </aside>
 
-      <main className="flex-1 p-6 md:ml-60">
-        <header className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-lg bg-slate-900 p-4">
-          <h2 className="text-xl font-semibold">{title}</h2>
+      <main className="flex-1 p-4 md:ml-64 md:p-6">
+        <header className="page-panel mb-5 flex flex-wrap items-center justify-between gap-4">
+          <h1 className="page-title">{title}</h1>
           <div className="flex items-center gap-4 text-sm">
-            <span className={`rounded-full px-3 py-1 font-medium ${connected ? "bg-green-500/20 text-green-300" : "bg-red-500/20 text-red-300"}`}>
-              {connected ? "Connected" : "Disconnected"}
-            </span>
-            <span className="text-slate-300">{now.toLocaleString()}</span>
+            <Badge tone={connected ? "success" : "danger"}>{connected ? "Connected" : "Disconnected"}</Badge>
+            <span className="text-text-3">{now.toLocaleString()}</span>
           </div>
         </header>
         <Outlet />

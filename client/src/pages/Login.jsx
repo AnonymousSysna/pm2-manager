@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast, { getErrorMessage } from "../lib/toast";
 import { auth } from "../api";
+import Button from "../components/ui/Button";
+import Input from "../components/ui/Input";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -68,41 +70,19 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#0f172a] p-4">
-      <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-8 shadow-2xl">
+    <div className="flex min-h-screen items-center justify-center bg-bg p-4">
+      <div className="w-full max-w-md rounded-lg border border-border bg-surface p-8 shadow-2xl shadow-black/30">
         <div className="mb-6 flex flex-col items-center gap-3">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-green-500 text-lg font-bold text-slate-900">PM2</div>
-          <h1 className="text-2xl font-semibold text-slate-100">PM2 Dashboard</h1>
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-500 text-lg font-bold text-bg">PM2</div>
+          <h1 className="page-title">PM2 Manager</h1>
         </div>
 
         <form className="space-y-4" onSubmit={handleSubmit}>
-          <input
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="Username"
-            className="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 text-slate-100 outline-none focus:border-green-500"
-            required
-          />
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password"
-            className="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 text-slate-100 outline-none focus:border-green-500"
-            required
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            className="flex w-full items-center justify-center rounded-lg bg-green-600 px-4 py-3 font-medium text-white transition hover:bg-green-500 disabled:opacity-70"
-          >
-            {loading ? (
-              <span className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-            ) : (
-              "Sign In"
-            )}
-          </button>
+          <Input type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Username" required />
+          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" required />
+          <Button type="submit" variant="success" disabled={loading} className="w-full">
+            {loading ? <span className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" /> : "Sign In"}
+          </Button>
         </form>
       </div>
     </div>

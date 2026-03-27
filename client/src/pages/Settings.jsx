@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import toast, { getErrorMessage } from "../lib/toast";
 import { auth, pm2Admin } from "../api";
+import Button from "../components/ui/Button";
+import Input from "../components/ui/Input";
 
 export default function Settings() {
   const [info, setInfo] = useState({ pm2Version: "-", nodeVersion: "-", pm2Home: "-" });
@@ -82,33 +84,33 @@ export default function Settings() {
   };
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-lg bg-slate-900 p-4">
-        <h3 className="mb-3 text-lg font-semibold">PM2 Daemon Controls</h3>
+    <div className="space-y-4">
+      <section className="page-panel">
+        <h2 className="section-title mb-3">PM2 Daemon Controls</h2>
         <div className="flex flex-wrap gap-2">
-          <button className="rounded bg-blue-600 px-3 py-2 text-sm" onClick={() => runAction("Resurrect", pm2Admin.resurrect)}>
+          <Button variant="info" onClick={() => runAction("Resurrect", pm2Admin.resurrect)}>
             Resurrect Saved Processes
-          </button>
-          <button className="rounded bg-green-600 px-3 py-2 text-sm" onClick={() => runAction("Save", pm2Admin.save)}>
+          </Button>
+          <Button variant="success" onClick={() => runAction("Save", pm2Admin.save)}>
             Save Current Process List
-          </button>
-          <button
-            className="rounded bg-rose-700 px-3 py-2 text-sm"
+          </Button>
+          <Button
+            variant="danger"
             onClick={() => runAction("Kill PM2", pm2Admin.kill, "Kill PM2 daemon? This can stop all managed processes.")}
           >
             Kill PM2 Daemon
-          </button>
+          </Button>
         </div>
-        <div className="mt-4 grid gap-2 text-sm text-slate-300 md:grid-cols-3">
+        <div className="mt-4 grid gap-2 text-sm text-text-2 md:grid-cols-3">
           <p>PM2 Version: {info.pm2Version || "unknown"}</p>
           <p>Node Version: {info.nodeVersion || "unknown"}</p>
           <p>PM2 Home: {info.pm2Home || "unknown"}</p>
         </div>
       </section>
 
-      <section className="rounded-lg bg-slate-900 p-4">
-        <h3 className="mb-3 text-lg font-semibold">Dashboard Settings</h3>
-        <div className="space-y-3 text-sm">
+      <section className="page-panel">
+        <h2 className="section-title mb-3">Dashboard Settings</h2>
+        <div className="space-y-3 text-sm text-text-2">
           <label className="block">
             Poll interval: {pollSeconds}s
             <input
@@ -117,46 +119,38 @@ export default function Settings() {
               max="10"
               value={pollSeconds}
               onChange={(e) => setPollSeconds(Number(e.target.value))}
-              className="mt-2 w-full"
+              className="mt-2 w-full accent-brand-500"
             />
           </label>
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={autoScroll} onChange={(e) => setAutoScroll(e.target.checked)} />
+            <input type="checkbox" className="h-4 w-4 accent-brand-500" checked={autoScroll} onChange={(e) => setAutoScroll(e.target.checked)} />
             Auto-scroll logs
           </label>
-          <button className="rounded bg-slate-700 px-3 py-2 text-sm" onClick={saveDashboardSettings}>
+          <Button variant="secondary" onClick={saveDashboardSettings}>
             Save Dashboard Settings
-          </button>
+          </Button>
         </div>
       </section>
 
-      <section className="rounded-lg bg-slate-900 p-4">
-        <h3 className="mb-3 text-lg font-semibold">Change Password</h3>
+      <section className="page-panel">
+        <h2 className="section-title mb-3">Change Password</h2>
         <div className="grid gap-2 md:max-w-md">
-          <input
+          <Input
             type="password"
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
             placeholder="Current password"
-            className="rounded bg-slate-800 px-3 py-2"
           />
-          <input
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            placeholder="New password"
-            className="rounded bg-slate-800 px-3 py-2"
-          />
-          <input
+          <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="New password" />
+          <Input
             type="password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             placeholder="Confirm new password"
-            className="rounded bg-slate-800 px-3 py-2"
           />
-          <button className="rounded bg-green-600 px-3 py-2 text-sm" onClick={changePassword}>
+          <Button variant="success" onClick={changePassword}>
             Update Password
-          </button>
+          </Button>
         </div>
       </section>
     </div>

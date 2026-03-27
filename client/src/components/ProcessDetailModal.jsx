@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { X, Copy, Play, Square, RefreshCw, RotateCcw, Trash2, Download, Hammer } from "lucide-react";
 import toast from "../lib/toast";
+import Badge from "./ui/Badge";
+import Button from "./ui/Button";
+import ProgressBar from "./ui/ProgressBar";
 
 const tabs = ["Overview", "Environment", "Resource Graph", "Quick Actions"];
 
@@ -95,46 +98,43 @@ export default function ProcessDetailModal({ process, onClose, onAction }) {
   return (
     <div className="fixed inset-0 z-50">
       <button type="button" className="absolute inset-0 bg-black/60" aria-label="Close panel" onClick={onClose} />
-      <aside className="absolute right-0 top-0 h-full w-full max-w-xl transform bg-slate-900 p-6 text-slate-100 shadow-xl transition-transform duration-300">
+      <aside className="absolute right-0 top-0 h-full w-full max-w-xl border-l border-border bg-surface p-6 text-text-1 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold">{process.name}</h3>
-          <button type="button" onClick={onClose} className="rounded p-1 hover:bg-slate-800">
+          <h2 className="section-title">{process.name}</h2>
+          <Button type="button" variant="ghost" size="icon" onClick={onClose}>
             <X size={20} />
-          </button>
+          </Button>
         </div>
 
         <div className="mb-4 flex gap-2 overflow-x-auto">
           {tabs.map((item) => (
-            <button
-              type="button"
-              key={item}
-              onClick={() => setTab(item)}
-              className={`rounded px-3 py-1 text-sm ${tab === item ? "bg-green-500/20 text-green-300" : "bg-slate-800 text-slate-300"}`}
-            >
+            <Button key={item} type="button" onClick={() => setTab(item)} variant={tab === item ? "success" : "secondary"} size="sm">
               {item}
-            </button>
+            </Button>
           ))}
         </div>
 
         {tab === "Overview" && (
           <div className="grid grid-cols-2 gap-3 text-sm">
             {Object.entries(details).map(([key, value]) => (
-              <div key={key} className="rounded bg-slate-800 p-2">
-                <p className="text-xs uppercase text-slate-400">{key}</p>
-                <p className="break-all text-slate-100">{String(value ?? "-")}</p>
+              <div key={key} className="rounded-md border border-border bg-surface-2 p-2">
+                <p className="text-xs uppercase text-text-3">{key}</p>
+                <p className="break-all text-text-1">{String(value ?? "-")}</p>
               </div>
             ))}
           </div>
         )}
 
         {tab === "Environment" && (
-          <div className="max-h-[70vh] overflow-y-auto rounded border border-slate-700">
+          <div className="max-h-[70vh] overflow-y-auto rounded-md border border-border">
             {Object.entries(envVars).map(([key, value]) => (
-              <div key={key} className="grid grid-cols-[1fr,1fr,40px] items-center gap-2 border-b border-slate-800 p-2 text-xs">
-                <span className="text-slate-300">{key}</span>
-                <span className="truncate text-slate-100">{String(value)}</span>
-                <button
+              <div key={key} className="grid grid-cols-[1fr,1fr,40px] items-center gap-2 border-b border-border p-2 text-xs">
+                <span className="text-text-2">{key}</span>
+                <span className="truncate text-text-1">{String(value)}</span>
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="icon"
                   onClick={async () => {
                     try {
                       await copyToClipboard(value);
@@ -143,10 +143,9 @@ export default function ProcessDetailModal({ process, onClose, onAction }) {
                       toast.error("Failed to copy");
                     }
                   }}
-                  className="rounded bg-slate-700 p-1 hover:bg-slate-600"
                 >
                   <Copy size={14} />
-                </button>
+                </Button>
               </div>
             ))}
           </div>
@@ -154,21 +153,17 @@ export default function ProcessDetailModal({ process, onClose, onAction }) {
 
         {tab === "Resource Graph" && (
           <div className="space-y-3">
-            {readingsRef.current.length === 0 && <p className="text-sm text-slate-400">No readings yet.</p>}
+            {readingsRef.current.length === 0 && <p className="text-sm text-text-3">No readings yet.</p>}
             {readingsRef.current.map((item, index) => (
               <div key={`${item.cpu}-${index}`} className="space-y-1 text-xs">
-                <div className="flex justify-between text-slate-300">
+                <div className="flex justify-between text-text-2">
                   <span>Sample {index + 1}</span>
                   <span>
                     CPU {item.cpu}% | MEM {(item.memory / 1024 / 1024).toFixed(1)}MB
                   </span>
                 </div>
-                <div className="h-2 rounded bg-slate-800">
-                  <div className="h-2 rounded bg-green-500" style={{ width: `${Math.min(100, item.cpu)}%` }} />
-                </div>
-                <div className="h-2 rounded bg-slate-800">
-                  <div className="h-2 rounded bg-blue-500" style={{ width: `${Math.min(100, (item.memory / maxMemory) * 100)}%` }} />
-                </div>
+                <ProgressBar value={item.cpu} tone="success" />
+                <ProgressBar value={(item.memory / maxMemory) * 100} tone="info" />
               </div>
             ))}
           </div>
@@ -176,65 +171,68 @@ export default function ProcessDetailModal({ process, onClose, onAction }) {
 
         {tab === "Quick Actions" && (
           <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              className="rounded bg-green-600 px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
+            <QuickAction
+              label="Start"
+              icon={Play}
+              variant="success"
               disabled={isOnline || loadingAction.start}
               onClick={() => runAction("start", process.name)}
-            >
-              <Play className="inline" size={16} /> Start
-            </button>
-            <button
-              type="button"
-              className="rounded bg-red-600 px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
+            />
+            <QuickAction
+              label="Stop"
+              icon={Square}
+              variant="danger"
               disabled={isStopped || loadingAction.stop}
               onClick={() => runAction("stop", process.name)}
-            >
-              <Square className="inline" size={16} /> Stop
-            </button>
-            <button
-              type="button"
-              className="rounded bg-blue-600 px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
+            />
+            <QuickAction
+              label="Restart"
+              icon={RefreshCw}
+              variant="info"
               disabled={loadingAction.restart}
               onClick={() => runAction("restart", process.name)}
-            >
-              <RefreshCw className="inline" size={16} /> Restart
-            </button>
-            <button
-              type="button"
-              className="rounded bg-amber-600 px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
+            />
+            <QuickAction
+              label="Reload"
+              icon={RotateCcw}
+              variant="warning"
               disabled={!isCluster || !isOnline || loadingAction.reload}
               onClick={() => runAction("reload", process.name)}
-            >
-              <RotateCcw className="inline" size={16} /> Reload
-            </button>
-            <button
-              type="button"
-              className="rounded bg-cyan-700 px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
+            />
+            <QuickAction
+              label="NPM Install"
+              icon={Download}
+              variant="secondary"
               disabled={loadingAction.npmInstall}
               onClick={() => runAction("npmInstall", process.name)}
-            >
-              <Download className="inline" size={16} /> NPM Install
-            </button>
-            <button
-              type="button"
-              className="rounded bg-violet-700 px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
+            />
+            <QuickAction
+              label="NPM Build"
+              icon={Hammer}
+              variant="secondary"
               disabled={loadingAction.npmBuild}
               onClick={() => runAction("npmBuild", process.name)}
-            >
-              <Hammer className="inline" size={16} /> NPM Build
-            </button>
-            <button
+            />
+            <Button
               type="button"
-              className="col-span-2 rounded bg-rose-700 px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
+              className="col-span-2"
+              variant="danger"
               disabled={loadingAction.delete}
               onClick={() => runAction("delete", process.name)}
             >
-              <Trash2 className="inline" size={16} /> Delete
-            </button>
+              <Trash2 size={16} /> Delete
+            </Button>
           </div>
         )}
       </aside>
     </div>
+  );
+}
+
+function QuickAction({ label, icon: Icon, variant, onClick, disabled }) {
+  return (
+    <Button type="button" variant={variant} disabled={disabled} onClick={onClick}>
+      <Icon size={16} /> {label}
+    </Button>
   );
 }

@@ -5,6 +5,10 @@ import toast, { getErrorMessage } from "../lib/toast";
 import { processes as processApi } from "../api";
 import { useSocket } from "../hooks/useSocket";
 import ProcessDetailModal from "../components/ProcessDetailModal";
+import Badge from "../components/ui/Badge";
+import Button from "../components/ui/Button";
+import Input from "../components/ui/Input";
+import ProgressBar from "../components/ui/ProgressBar";
 
 function bytesToMB(value) {
   return `${(Number(value || 0) / 1024 / 1024).toFixed(1)} MB`;
@@ -130,28 +134,28 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-        <StatCard label="Total Processes" value={stats.total} color="text-slate-100" />
-        <StatCard label="Online" value={stats.online} color="text-green-400" />
-        <StatCard label="Stopped" value={stats.stopped} color="text-red-400" />
-        <StatCard label="Errored" value={stats.errored} color="text-yellow-400" />
-      </div>
+    <div className="space-y-4">
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <StatCard label="Total Processes" value={stats.total} tone="neutral" />
+        <StatCard label="Online" value={stats.online} tone="success" />
+        <StatCard label="Stopped" value={stats.stopped} tone="danger" />
+        <StatCard label="Errored" value={stats.errored} tone="warning" />
+      </section>
 
-      <div className="rounded-lg bg-slate-900 p-4">
+      <section className="page-panel">
         <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <h3 className="text-lg font-semibold">Processes</h3>
-          <input
+          <h2 className="section-title">Process List</h2>
+          <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search by name or status"
-            className="w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm md:w-72"
+            className="w-full md:w-72"
           />
         </div>
 
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead className="text-left text-slate-400">
+            <thead className="text-left text-text-3">
               <tr>
                 <th className="px-2 py-2">ID</th>
                 <th className="px-2 py-2">Name</th>
@@ -167,10 +171,14 @@ export default function Dashboard() {
             </thead>
             <tbody>
               {filtered.map((proc) => (
-                <tr key={proc.name} className="border-t border-slate-800">
+                <tr key={proc.name} className="border-t border-border">
                   <td className="px-2 py-3">{proc.id ?? "-"}</td>
                   <td className="px-2 py-3">
-                    <button type="button" className="text-green-400 hover:underline" onClick={() => openDetails(proc)}>
+                    <button
+                      type="button"
+                      className="font-medium text-info-300 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info-300"
+                      onClick={() => openDetails(proc)}
+                    >
                       {proc.name}
                     </button>
                   </td>
@@ -179,10 +187,8 @@ export default function Dashboard() {
                   </td>
                   <td className="px-2 py-3">
                     <div className="w-28">
-                      <div className="mb-1 text-xs text-slate-300">{proc.cpu}%</div>
-                      <div className="h-1.5 rounded bg-slate-800">
-                        <div className="h-1.5 rounded bg-green-500" style={{ width: `${Math.min(proc.cpu || 0, 100)}%` }} />
-                      </div>
+                      <div className="mb-1 text-xs text-text-3">{proc.cpu}%</div>
+                      <ProgressBar value={proc.cpu} tone="success" />
                     </div>
                   </td>
                   <td className="px-2 py-3">{bytesToMB(proc.memory)}</td>
@@ -194,56 +200,56 @@ export default function Dashboard() {
                     <div className="flex flex-wrap gap-1">
                       <ActionButton
                         title="Start"
+                        variant="success"
                         disabled={proc.status === "online" || loadingAction[`${proc.name}:start`]}
-                        color="bg-green-600"
                         onClick={() => callAction("start", proc.name)}
                         icon={<Play size={14} />}
                       />
                       <ActionButton
                         title="Stop"
+                        variant="danger"
                         disabled={proc.status === "stopped" || loadingAction[`${proc.name}:stop`]}
-                        color="bg-red-600"
                         onClick={() => callAction("stop", proc.name)}
                         icon={<Square size={14} />}
                       />
                       <ActionButton
                         title="Restart"
+                        variant="info"
                         disabled={loadingAction[`${proc.name}:restart`]}
-                        color="bg-blue-600"
                         onClick={() => callAction("restart", proc.name)}
                         icon={<RefreshCw size={14} />}
                       />
                       <ActionButton
                         title="Reload"
+                        variant="warning"
                         disabled={proc.mode !== "cluster" || loadingAction[`${proc.name}:reload`]}
-                        color="bg-amber-600"
                         onClick={() => callAction("reload", proc.name)}
                         icon={<RotateCcw size={14} />}
                       />
                       <ActionButton
                         title="Logs"
-                        color="bg-slate-600"
+                        variant="secondary"
                         onClick={() => navigate(`/dashboard/logs?process=${encodeURIComponent(proc.name)}`)}
                         icon={<ScrollText size={14} />}
                       />
                       <ActionButton
                         title="NPM Install"
+                        variant="secondary"
                         disabled={loadingAction[`${proc.name}:npmInstall`]}
-                        color="bg-cyan-700"
                         onClick={() => callAction("npmInstall", proc.name)}
                         icon={<Download size={14} />}
                       />
                       <ActionButton
                         title="NPM Build"
+                        variant="secondary"
                         disabled={loadingAction[`${proc.name}:npmBuild`]}
-                        color="bg-violet-700"
                         onClick={() => callAction("npmBuild", proc.name)}
                         icon={<Hammer size={14} />}
                       />
                       <ActionButton
                         title="Delete"
+                        variant="danger"
                         disabled={loadingAction[`${proc.name}:delete`]}
-                        color="bg-rose-700"
                         onClick={() => callAction("delete", proc.name)}
                         icon={<Trash2 size={14} />}
                       />
@@ -253,7 +259,7 @@ export default function Dashboard() {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td className="px-2 py-8 text-center text-slate-400" colSpan={10}>
+                  <td className="px-2 py-8 text-center text-text-3" colSpan={10}>
                     No processes found.
                   </td>
                 </tr>
@@ -261,7 +267,7 @@ export default function Dashboard() {
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
 
       {selectedProcess && (
         <ProcessDetailModal process={selectedProcess} onClose={() => setSelectedProcess(null)} onAction={callAction} />
@@ -270,35 +276,36 @@ export default function Dashboard() {
   );
 }
 
-function StatCard({ label, value, color }) {
+function StatCard({ label, value, tone }) {
+  const toneClass = {
+    success: "text-success-300",
+    danger: "text-danger-300",
+    warning: "text-warning-300",
+    neutral: "text-text-1"
+  };
+
   return (
-    <div className="rounded-lg bg-slate-900 p-4">
-      <p className="text-sm text-slate-400">{label}</p>
-      <p className={`mt-2 text-2xl font-semibold ${color}`}>{value}</p>
+    <div className="page-panel">
+      <p className="text-sm text-text-3">{label}</p>
+      <p className={`mt-2 text-2xl font-semibold ${toneClass[tone] || toneClass.neutral}`}>{value}</p>
     </div>
   );
 }
 
-function ActionButton({ title, icon, color, onClick, disabled }) {
+function ActionButton({ title, icon, variant, onClick, disabled }) {
   return (
-    <button
-      type="button"
-      title={title}
-      disabled={disabled}
-      onClick={onClick}
-      className={`${color} rounded px-2 py-1 text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40`}
-    >
+    <Button type="button" title={title} size="icon" variant={variant} disabled={disabled} onClick={onClick} className="h-7 w-7 rounded">
       {icon}
-    </button>
+    </Button>
   );
 }
 
 function StatusBadge({ status }) {
   const map = {
-    online: "bg-green-500/20 text-green-300",
-    stopped: "bg-red-500/20 text-red-300",
-    errored: "bg-yellow-500/20 text-yellow-300"
+    online: "success",
+    stopped: "danger",
+    errored: "warning"
   };
 
-  return <span className={`rounded-full px-2 py-1 text-xs ${map[status] || "bg-slate-700 text-slate-300"}`}>{status || "unknown"}</span>;
+  return <Badge tone={map[status] || "neutral"}>{status || "unknown"}</Badge>;
 }

@@ -2,6 +2,9 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast, { getErrorMessage } from "../lib/toast";
 import { processes } from "../api";
+import Button from "../components/ui/Button";
+import Input from "../components/ui/Input";
+import Select from "../components/ui/Select";
 
 const defaultEnvRow = { key: "", value: "" };
 
@@ -106,196 +109,184 @@ export default function CreateProcess() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl rounded-lg bg-slate-900 p-5">
-      <div className="mb-4 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => setMode("script")}
-          className={`rounded px-4 py-2 text-sm ${mode === "script" ? "bg-emerald-500/20 text-emerald-300" : "bg-slate-800 text-slate-300"}`}
-        >
-          Script Mode
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode("project")}
-          className={`rounded px-4 py-2 text-sm ${mode === "project" ? "bg-emerald-500/20 text-emerald-300" : "bg-slate-800 text-slate-300"}`}
-        >
-          Project Directory Mode
-        </button>
-      </div>
+    <section className="mx-auto max-w-3xl space-y-4">
+      <div className="page-panel">
+        <div className="mb-4 flex flex-wrap gap-2">
+          <ModeButton active={mode === "script"} onClick={() => setMode("script")}>Script Mode</ModeButton>
+          <ModeButton active={mode === "project"} onClick={() => setMode("project")}>Project Directory Mode</ModeButton>
+        </div>
 
-      <div className="mb-4 flex gap-2">
-        <button
-          type="button"
-          onClick={() => setTab("simple")}
-          className={`rounded px-4 py-2 text-sm ${tab === "simple" ? "bg-green-500/20 text-green-300" : "bg-slate-800 text-slate-300"}`}
-        >
-          Simple
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab("advanced")}
-          className={`rounded px-4 py-2 text-sm ${tab === "advanced" ? "bg-green-500/20 text-green-300" : "bg-slate-800 text-slate-300"}`}
-        >
-          Advanced
-        </button>
-      </div>
+        <div className="mb-4 flex flex-wrap gap-2">
+          <ModeButton active={tab === "simple"} onClick={() => setTab("simple")}>Simple</ModeButton>
+          <ModeButton active={tab === "advanced"} onClick={() => setTab("advanced")}>Advanced</ModeButton>
+        </div>
 
-      <form onSubmit={submit} className="space-y-4">
-        <Field label="Process Name" required>
-          <input value={form.name} onChange={(e) => update("name", e.target.value)} className="input" />
-        </Field>
+        <form onSubmit={submit} className="space-y-4">
+          <Field label="Process Name" required>
+            <Input value={form.name} onChange={(e) => update("name", e.target.value)} />
+          </Field>
 
-        {mode === "script" && (
-          <>
-            <Field label="Script Path" required>
-              <input
-                value={form.script}
-                onChange={(e) => update("script", e.target.value)}
-                placeholder="app.js, npm, or /absolute/path/to/app.js"
-                className="input"
-              />
-            </Field>
-
-            <Field label="Arguments">
-              <input value={form.args} onChange={(e) => update("args", e.target.value)} className="input" />
-            </Field>
-
-            <Field label="Working Directory">
-              <input value={form.cwd} onChange={(e) => update("cwd", e.target.value)} className="input" />
-            </Field>
-          </>
-        )}
-
-        {mode === "project" && (
-          <>
-            <Field label="Project Directory" required>
-              <input
-                value={form.project_path}
-                onChange={(e) => update("project_path", e.target.value)}
-                placeholder="/root/my-app"
-                className="input"
-              />
-            </Field>
-
-            <Field label="Start Script">
-              <input
-                value={form.start_script}
-                onChange={(e) => update("start_script", e.target.value)}
-                placeholder="start"
-                className="input"
-              />
-            </Field>
-
-            <label className="flex items-center gap-3 text-sm text-slate-200">
-              <input
-                type="checkbox"
-                checked={form.install_dependencies}
-                onChange={(e) => update("install_dependencies", e.target.checked)}
-              />
-              Run npm install before start
-            </label>
-
-            <label className="flex items-center gap-3 text-sm text-slate-200">
-              <input
-                type="checkbox"
-                checked={form.run_build}
-                onChange={(e) => update("run_build", e.target.checked)}
-              />
-              Run npm run build before start
-            </label>
-          </>
-        )}
-
-        <Field label="Port">
-          <input type="number" value={form.port} onChange={(e) => update("port", e.target.value)} className="input" />
-        </Field>
-
-        <label className="flex items-center gap-3 text-sm text-slate-200">
-          <input type="checkbox" checked={form.watch} onChange={(e) => update("watch", e.target.checked)} />
-          Watch Mode
-        </label>
-
-        {tab === "advanced" && (
-          <>
-            <Field label="Exec Mode">
-              <select value={form.exec_mode} onChange={(e) => update("exec_mode", e.target.value)} className="input">
-                <option value="fork">fork</option>
-                <option value="cluster">cluster</option>
-              </select>
-            </Field>
-
-            {form.exec_mode === "cluster" && (
-              <Field label="Instances">
-                <input type="number" value={form.instances} onChange={(e) => update("instances", e.target.value)} className="input" min={1} />
+          {mode === "script" && (
+            <>
+              <Field label="Script Path" required>
+                <Input
+                  value={form.script}
+                  onChange={(e) => update("script", e.target.value)}
+                  placeholder="app.js, npm, or /absolute/path/to/app.js"
+                />
               </Field>
-            )}
 
-            <Field label="Max Memory Restart">
-              <input value={form.max_memory_restart} onChange={(e) => update("max_memory_restart", e.target.value)} placeholder="500M" className="input" />
-            </Field>
+              <Field label="Arguments">
+                <Input value={form.args} onChange={(e) => update("args", e.target.value)} />
+              </Field>
 
-            <Field label="Node Args">
-              <input value={form.node_args} onChange={(e) => update("node_args", e.target.value)} className="input" />
-            </Field>
+              <Field label="Working Directory">
+                <Input value={form.cwd} onChange={(e) => update("cwd", e.target.value)} />
+              </Field>
+            </>
+          )}
 
-            <Field label="Interpreter">
-              <input value={form.interpreter} onChange={(e) => update("interpreter", e.target.value)} className="input" />
-            </Field>
+          {mode === "project" && (
+            <>
+              <Field label="Project Directory" required>
+                <Input
+                  value={form.project_path}
+                  onChange={(e) => update("project_path", e.target.value)}
+                  placeholder="/root/my-app"
+                />
+              </Field>
 
-            <Field label="Log Date Format">
-              <input value={form.log_date_format} onChange={(e) => update("log_date_format", e.target.value)} className="input" />
-            </Field>
+              <Field label="Start Script">
+                <Input
+                  value={form.start_script}
+                  onChange={(e) => update("start_script", e.target.value)}
+                  placeholder="start"
+                />
+              </Field>
 
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-slate-200">Environment Variables</p>
-              {form.envRows.map((row, index) => (
-                <div key={`env-${index}`} className="grid grid-cols-[1fr,1fr,auto] gap-2">
-                  <input
-                    value={row.key}
-                    onChange={(e) => updateEnvRow(index, "key", e.target.value)}
-                    placeholder="KEY"
-                    className="input"
-                  />
-                  <input
-                    value={row.value}
-                    onChange={(e) => updateEnvRow(index, "value", e.target.value)}
-                    placeholder="VALUE"
-                    className="input"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => update("envRows", form.envRows.filter((_, i) => i !== index))}
-                    className="rounded bg-rose-700 px-3 py-2 text-sm"
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => update("envRows", [...form.envRows, { ...defaultEnvRow }])}
-                className="rounded bg-slate-700 px-3 py-2 text-sm"
-              >
-                Add Variable
-              </button>
-            </div>
-          </>
-        )}
+              <label className="flex items-center gap-3 text-sm text-text-2">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-brand-500"
+                  checked={form.install_dependencies}
+                  onChange={(e) => update("install_dependencies", e.target.checked)}
+                />
+                Run npm install before start
+              </label>
 
-        {error && <p className="text-sm text-red-400">{error}</p>}
+              <label className="flex items-center gap-3 text-sm text-text-2">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-brand-500"
+                  checked={form.run_build}
+                  onChange={(e) => update("run_build", e.target.checked)}
+                />
+                Run npm run build before start
+              </label>
+            </>
+          )}
 
-        <button type="submit" className="w-full rounded bg-green-600 px-4 py-3 font-medium text-white hover:bg-green-500">
-          Launch Process
-        </button>
-      </form>
-    </div>
+          <Field label="Port">
+            <Input type="number" value={form.port} onChange={(e) => update("port", e.target.value)} />
+          </Field>
+
+          <label className="flex items-center gap-3 text-sm text-text-2">
+            <input type="checkbox" className="h-4 w-4 accent-brand-500" checked={form.watch} onChange={(e) => update("watch", e.target.checked)} />
+            Watch Mode
+          </label>
+
+          {tab === "advanced" && (
+            <>
+              <Field label="Exec Mode">
+                <Select value={form.exec_mode} onChange={(e) => update("exec_mode", e.target.value)}>
+                  <option value="fork">fork</option>
+                  <option value="cluster">cluster</option>
+                </Select>
+              </Field>
+
+              {form.exec_mode === "cluster" && (
+                <Field label="Instances">
+                  <Input type="number" value={form.instances} onChange={(e) => update("instances", e.target.value)} min={1} />
+                </Field>
+              )}
+
+              <Field label="Max Memory Restart">
+                <Input value={form.max_memory_restart} onChange={(e) => update("max_memory_restart", e.target.value)} placeholder="500M" />
+              </Field>
+
+              <Field label="Node Args">
+                <Input value={form.node_args} onChange={(e) => update("node_args", e.target.value)} />
+              </Field>
+
+              <Field label="Interpreter">
+                <Input value={form.interpreter} onChange={(e) => update("interpreter", e.target.value)} />
+              </Field>
+
+              <Field label="Log Date Format">
+                <Input value={form.log_date_format} onChange={(e) => update("log_date_format", e.target.value)} />
+              </Field>
+
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-text-2">Environment Variables</p>
+                {form.envRows.map((row, index) => (
+                  <div key={`env-${index}`} className="grid grid-cols-[1fr,1fr,auto] gap-2">
+                    <Input
+                      value={row.key}
+                      onChange={(e) => updateEnvRow(index, "key", e.target.value)}
+                      placeholder="KEY"
+                    />
+                    <Input
+                      value={row.value}
+                      onChange={(e) => updateEnvRow(index, "value", e.target.value)}
+                      placeholder="VALUE"
+                    />
+                    <Button
+                      type="button"
+                      variant="danger"
+                      onClick={() => update("envRows", form.envRows.filter((_, i) => i !== index))}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => update("envRows", [...form.envRows, { ...defaultEnvRow }])}
+                >
+                  Add Variable
+                </Button>
+              </div>
+            </>
+          )}
+
+          {error && <p className="text-sm text-danger-300">{error}</p>}
+
+          <Button type="submit" variant="success" className="w-full">
+            Launch Process
+          </Button>
+        </form>
+      </div>
+    </section>
+  );
+}
+
+function ModeButton({ active, onClick, children }) {
+  return (
+    <Button
+      type="button"
+      variant={active ? "success" : "secondary"}
+      onClick={onClick}
+      className={active ? "shadow-sm shadow-success-500/30" : ""}
+    >
+      {children}
+    </Button>
   );
 }
 
 function Field({ label, required, children }) {
   return (
-    <label className="block space-y-1 text-sm text-slate-200">
+    <label className="block space-y-1 text-sm text-text-2">
       <span>
         {label}
         {required ? " *" : ""}
