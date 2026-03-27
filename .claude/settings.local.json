@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --prefix server test)",
+      "Bash(find D:Documentsgithubpm2-manager -type f -name .env*)"
+    ]
+  }
+}

@@ -19,7 +19,6 @@ export default function Login() {
         throw new Error(result.error || "Login failed");
       }
 
-      localStorage.setItem("pm2_token", result.data.token);
       navigate("/dashboard", { replace: true });
     } catch (error) {
       toast.error(error?.response?.data?.error || error.message || "Login failed");

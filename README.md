@@ -4,7 +4,7 @@ Web dashboard for managing PM2 processes with:
 - Node.js + Express backend
 - React + Vite + Tailwind frontend
 - Socket.io real-time process updates/log stream
-- JWT authentication
+- JWT-backed HttpOnly cookie authentication
 
 Access target: `http://YOUR_VPS_IP:8000`
 
@@ -31,12 +31,19 @@ Root `.env.example`:
 
 ```env
 PM2_USER=admin
-PM2_PASS=changeme
+PM2_PASS_HASH=$2a$10$replace_with_bcrypt_hash
 JWT_SECRET=your-secret-key-here
 PORT=8000
 AUTH_ALLOWED_IPS=203.0.113.10
 TRUST_PROXY=1
 CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+PROJECTS_ROOT=D:/apps
+COMMAND_TIMEOUT_MS=300000
+LOG_TAIL_MAX_BYTES=1048576
+RESTART_HISTORY_PATH=./logs/restart-history.jsonl
+RESTART_HISTORY_MAX_LINES=20000
+RESTART_HISTORY_MAX_BYTES=10485760
+METRICS_TOKEN=replace_with_long_random_token
 ```
 
 `AUTH_ALLOWED_IPS` supports a comma-separated allowlist of client IPs.
@@ -106,32 +113,43 @@ npm run deploy
 
 ## API Overview
 
+Versioned base path:
+- `v1`: `/api/v1/...`
+- compatibility alias: `/api/...`
+
 Auth:
-- `POST /api/auth/login`
-- `POST /api/auth/change-password`
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/logout`
+- `GET /api/v1/auth/me`
+- `POST /api/v1/auth/change-password`
+
+CSRF:
+- Mutating routes require `x-csrf-token` matching `pm2_csrf` cookie (double-submit cookie pattern).
 
 Processes:
-- `GET /api/processes`
-- `GET /api/processes/:name`
-- `POST /api/processes/create`
-- `POST /api/processes/:name/start`
-- `POST /api/processes/:name/stop`
-- `POST /api/processes/:name/restart`
-- `POST /api/processes/:name/reload`
-- `DELETE /api/processes/:name`
-- `GET /api/processes/:name/logs?lines=100`
-- `POST /api/processes/:name/flush`
+- `GET /api/v1/processes`
+- `GET /api/v1/processes/history/restarts?limit=200`
+- `GET /api/v1/processes/:name`
+- `POST /api/v1/processes/create`
+- `POST /api/v1/processes/:name/start`
+- `POST /api/v1/processes/:name/stop`
+- `POST /api/v1/processes/:name/restart`
+- `POST /api/v1/processes/:name/reload`
+- `DELETE /api/v1/processes/:name`
+- `GET /api/v1/processes/:name/logs?lines=100`
+- `POST /api/v1/processes/:name/flush`
 
 PM2 daemon:
-- `POST /api/pm2/save`
-- `POST /api/pm2/resurrect`
-- `POST /api/pm2/kill`
-- `GET /api/pm2/info`
+- `POST /api/v1/pm2/save`
+- `POST /api/v1/pm2/resurrect`
+- `POST /api/v1/pm2/kill`
+- `GET /api/v1/pm2/info`
 
 Public:
 - `GET /health`
+- `GET /metrics` (`Authorization: Bearer <METRICS_TOKEN>` required)
 
 ## Notes
 
 - In production, `server/index.js` serves `client/dist` and handles SPA routing.
-- Set strong values for `PM2_PASS` and `JWT_SECRET` before deploying.
+- Set strong values for `PM2_PASS_HASH`, `JWT_SECRET`, and `METRICS_TOKEN` before deploying.

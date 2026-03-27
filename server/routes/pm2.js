@@ -3,39 +3,17 @@ const express = require("express");
 const pm2 = require("pm2");
 const pm2Package = require("pm2/package.json");
 const { verifyToken } = require("../middleware/auth");
+const { withPM2 } = require("../utils/pm2Client");
+const { readLimiter, criticalWriteLimiter } = require("../middleware/rateLimit");
+const { asyncHandler } = require("../middleware/asyncHandler");
+const { trackPm2Operation } = require("../middleware/metrics");
 
 const router = express.Router();
 
-function withPM2(action) {
-  return new Promise((resolve) => {
-    pm2.connect((connectError) => {
-      if (connectError) {
-        resolve({ success: false, data: null, error: connectError.message });
-        return;
-      }
-
-      const closeAndResolve = (result) => {
-        pm2.disconnect();
-        resolve(result);
-      };
-
-      Promise.resolve()
-        .then(action)
-        .then((data) => closeAndResolve({ success: true, data, error: null }))
-        .catch((error) =>
-          closeAndResolve({
-            success: false,
-            data: null,
-            error: error.message || "PM2 command failed"
-          })
-        );
-    });
-  });
-}
-
 router.use(verifyToken);
+router.use(readLimiter);
 
-router.post("/save", async (_req, res) => {
+router.post("/save", criticalWriteLimiter, asyncHandler(async (_req, res) => {
   const result = await withPM2(
     () =>
       new Promise((resolve, reject) => {
@@ -49,10 +27,11 @@ router.post("/save", async (_req, res) => {
       })
   );
 
+  trackPm2Operation("save", result.success);
   res.status(result.success ? 200 : 500).json(result);
-});
+}));
 
-router.post("/resurrect", async (_req, res) => {
+router.post("/resurrect", criticalWriteLimiter, asyncHandler(async (_req, res) => {
   const result = await withPM2(
     () =>
       new Promise((resolve, reject) => {
@@ -66,10 +45,11 @@ router.post("/resurrect", async (_req, res) => {
       })
   );
 
+  trackPm2Operation("resurrect", result.success);
   res.status(result.success ? 200 : 500).json(result);
-});
+}));
 
-router.post("/kill", async (_req, res) => {
+router.post("/kill", criticalWriteLimiter, asyncHandler(async (_req, res) => {
   const result = await withPM2(
     () =>
       new Promise((resolve, reject) => {
@@ -83,10 +63,11 @@ router.post("/kill", async (_req, res) => {
       })
   );
 
+  trackPm2Operation("kill", result.success);
   res.status(result.success ? 200 : 500).json(result);
-});
+}));
 
-router.get("/info", async (_req, res) => {
+router.get("/info", asyncHandler(async (_req, res) => {
   const result = await withPM2(
     () =>
       new Promise((resolve, reject) => {
@@ -105,7 +86,8 @@ router.get("/info", async (_req, res) => {
       })
   );
 
+  trackPm2Operation("info", result.success);
   res.status(result.success ? 200 : 500).json(result);
-});
+}));
 
 module.exports = router;

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Activity, Plus, ScrollText, Settings, LogOut } from "lucide-react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useSocket } from "../hooks/useSocket";
+import { auth } from "../api";
 
 const links = [
   { to: "/dashboard", label: "Processes", icon: Activity },
@@ -30,8 +31,12 @@ export default function Layout() {
 
   const title = useMemo(() => pageTitleMap[location.pathname] || "Dashboard", [location.pathname]);
 
-  const logout = () => {
-    localStorage.removeItem("pm2_token");
+  const logout = async () => {
+    try {
+      await auth.logout();
+    } catch (_error) {
+      // Redirect to login even if the session is already gone server-side.
+    }
     navigate("/login", { replace: true });
   };
 

@@ -12,15 +12,10 @@ export function useSocket() {
   }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem("pm2_token");
-    if (!token) {
-      return undefined;
-    }
-
     const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
     const socket = io(baseUrl, {
       transports: ["websocket", "polling"],
-      auth: { token },
+      withCredentials: true,
       query: { interval: String(pollInterval) }
     });
 
@@ -31,6 +26,23 @@ export function useSocket() {
       if (Array.isArray(data)) {
         setProcesses(data);
       }
+    });
+
+    socket.on("processes:delta", (payload) => {
+      if (!payload || !Array.isArray(payload.upserts) || !Array.isArray(payload.removed)) {
+        return;
+      }
+
+      setProcesses((prev) => {
+        const index = new Map(prev.map((item) => [item.name, item]));
+        for (const proc of payload.upserts) {
+          index.set(proc.name, proc);
+        }
+        for (const name of payload.removed) {
+          index.delete(name);
+        }
+        return Array.from(index.values());
+      });
     });
 
     socket.on("process:log", (payload) => {

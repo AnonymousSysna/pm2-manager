@@ -1,5 +1,19 @@
 const jwt = require("jsonwebtoken");
 const { isIpAllowed, getRequestIp } = require("../utils/ipAccess");
+const { parseCookieHeader } = require("../utils/cookies");
+
+const AUTH_COOKIE_NAME = "pm2_session";
+
+function getTokenFromRequest(req) {
+  const authHeader = req.headers.authorization || "";
+  const [scheme, token] = authHeader.split(" ");
+  if (scheme === "Bearer" && token) {
+    return token;
+  }
+
+  const cookies = parseCookieHeader(req.headers.cookie || "");
+  return cookies[AUTH_COOKIE_NAME] || "";
+}
 
 function verifyToken(req, res, next) {
   const ip = getRequestIp(req);
@@ -16,10 +30,8 @@ function verifyToken(req, res, next) {
       .json({ success: false, data: null, error: "Server auth misconfigured" });
   }
 
-  const authHeader = req.headers.authorization || "";
-  const [scheme, token] = authHeader.split(" ");
-
-  if (scheme !== "Bearer" || !token) {
+  const token = getTokenFromRequest(req);
+  if (!token) {
     return res
       .status(401)
       .json({ success: false, data: null, error: "Unauthorized" });
@@ -36,4 +48,4 @@ function verifyToken(req, res, next) {
   }
 }
 
-module.exports = { verifyToken };
+module.exports = { verifyToken, getTokenFromRequest, AUTH_COOKIE_NAME };
