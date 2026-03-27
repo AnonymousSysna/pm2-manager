@@ -169,7 +169,7 @@ CSRF:
 
 Processes:
 - `GET /api/v1/processes`
-- `GET /api/v1/processes/catalog` (live processes + tags/groups/dependencies metadata)
+- `GET /api/v1/processes/catalog` (live processes + tags/dependencies metadata)
 - `GET /api/v1/processes/monitoring/summary` (uptime/downtime + restart anomaly summary)
 - `GET /api/v1/processes/history/restarts?limit=200`
 - `GET /api/v1/processes/history/deployments?limit=100&process=<name>`
@@ -183,12 +183,11 @@ Processes:
 - `POST /api/v1/processes/:name/restart`
 - `POST /api/v1/processes/:name/reload`
 - `POST /api/v1/processes/:name/deploy` (git pull + optional npm install/build + restart/reload)
+- `POST /api/v1/processes/:name/npm-install`
+- `POST /api/v1/processes/:name/npm-build`
 - `DELETE /api/v1/processes/:name`
 - `GET /api/v1/processes/:name/logs?lines=100`
 - `POST /api/v1/processes/:name/flush`
-- `GET /api/v1/processes/groups`
-- `PUT /api/v1/processes/groups/:groupName` (members array)
-- `POST /api/v1/processes/groups/:groupName/:action(start|stop|restart)` (dependency-aware order)
 - `GET /api/v1/processes/config/export`
 - `POST /api/v1/processes/config/import`
 
@@ -212,4 +211,4 @@ Public:
 
 - In production, `server/index.js` serves `client/dist` and handles SPA routing.
 - Set strong values for `PM2_USER`, `PM2_PASS_HASH`, `JWT_SECRET`, and `METRICS_TOKEN` before deploying.
-- New dashboard features include: process tags/groups with bulk actions, dependency-aware group start/restart, metrics history charts, threshold alerts, restart anomaly flags, combined searchable logs with TXT/CSV export, theme toggle, keyboard shortcuts, process config import/export, one-click deploy, deployment history, and external alert channels (webhook/Slack webhook).
+- New dashboard features include: process tags/dependencies, metrics history charts, threshold alerts, restart anomaly flags, combined searchable logs with TXT/CSV export, theme toggle, keyboard shortcuts, process config import/export, one-click deploy, deployment history, and external alert channels (webhook/Slack webhook).

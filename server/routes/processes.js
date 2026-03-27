@@ -15,8 +15,6 @@ const {
   npmBuild,
   updateProcessMetadata,
   removeProcessMetadata,
-  updateGroupMembers,
-  runBulkGroupAction,
   readProcessMetrics,
   readMonitoringSummary,
   exportProcessConfig,
@@ -70,30 +68,6 @@ router.get("/history/deployments", readLimiter, asyncHandler(async (req, res) =>
 router.get("/monitoring/summary", readLimiter, asyncHandler(async (_req, res) => {
   const result = await readMonitoringSummary();
   res.status(result.success ? 200 : 500).json(result);
-}));
-
-router.get("/groups", readLimiter, asyncHandler(async (_req, res) => {
-  const result = await getProcessCatalog();
-  if (!result.success) {
-    res.status(500).json(result);
-    return;
-  }
-  res.json({ success: true, data: result.data.groups || {}, error: null });
-}));
-
-router.put("/groups/:groupName", writeLimiter, asyncHandler(async (req, res) => {
-  const groupName = String(req.params.groupName || "").trim();
-  const members = Array.isArray(req.body?.members) ? req.body.members : [];
-  const result = await updateGroupMembers(groupName, members);
-  res.status(result.success ? 200 : 500).json(result);
-}));
-
-router.post("/groups/:groupName/:action(start|stop|restart)", writeLimiter, asyncHandler(async (req, res) => {
-  const groupName = String(req.params.groupName || "").trim();
-  const action = String(req.params.action || "").trim();
-  const result = await runBulkGroupAction(groupName, action);
-  const hasFailures = Array.isArray(result.data?.results) && result.data.results.some((item) => !item.success);
-  res.status(result.success ? 200 : hasFailures ? 207 : 500).json(result);
 }));
 
 router.get("/config/export", readLimiter, asyncHandler(async (_req, res) => {

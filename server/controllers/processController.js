@@ -20,9 +20,6 @@ const {
   listProcessMeta,
   setProcessMeta,
   clearProcessMeta,
-  listGroups,
-  setGroup,
-  getGroupMembers,
   exportConfig,
   importConfig
 } = require("../utils/processMetaStore");
@@ -830,42 +827,8 @@ async function getDeploymentHistory(limit = 100, processName = "") {
   return { success: true, data: history, error: null };
 }
 
-function buildDependencyOrder(targetNames, processMeta) {
-  const visiting = new Set();
-  const visited = new Set();
-  const ordered = [];
-
-  const visit = (name) => {
-    if (visited.has(name)) {
-      return;
-    }
-    if (visiting.has(name)) {
-      throw new Error(`Dependency cycle detected at process: ${name}`);
-    }
-
-    visiting.add(name);
-    const dependencies = processMeta[name]?.dependencies || [];
-    for (const dep of dependencies) {
-      visit(dep);
-    }
-    visiting.delete(name);
-    visited.add(name);
-    ordered.push(name);
-  };
-
-  for (const name of targetNames) {
-    visit(name);
-  }
-
-  return ordered;
-}
-
 async function getProcessCatalog() {
-  const [live, processMeta, groups] = await Promise.all([
-    listProcesses(),
-    listProcessMeta(),
-    listGroups()
-  ]);
+  const [live, processMeta] = await Promise.all([listProcesses(), listProcessMeta()]);
 
   if (!live.success) {
     return live;
@@ -889,7 +852,6 @@ async function getProcessCatalog() {
     success: true,
     data: {
       processes: withMeta,
-      groups,
       meta: processMeta
     },
     error: null
@@ -908,56 +870,6 @@ async function updateProcessMetadata(name, payload) {
 async function removeProcessMetadata(name) {
   await clearProcessMeta(name);
   return { success: true, data: { removed: true }, error: null };
-}
-
-async function updateGroupMembers(groupName, members) {
-  const group = await setGroup(groupName, members || []);
-  return { success: true, data: group, error: null };
-}
-
-async function runBulkGroupAction(groupName, actionName) {
-  const groupMembers = await getGroupMembers(groupName);
-  if (!Array.isArray(groupMembers) || groupMembers.length === 0) {
-    throw new Error(`Group is empty or not found: ${groupName}`);
-  }
-
-  const processMeta = await listProcessMeta();
-  const ordered = buildDependencyOrder(groupMembers, processMeta);
-  const targetList = actionName === "start" ? ordered : [...ordered].reverse();
-
-  const handlers = {
-    start: startProcess,
-    stop: stopProcess,
-    restart: restartProcess
-  };
-  const handler = handlers[actionName];
-  if (!handler) {
-    throw new Error(`Unsupported group action: ${actionName}`);
-  }
-
-  const results = [];
-  for (const processName of targetList) {
-    if (!groupMembers.includes(processName)) {
-      continue;
-    }
-    const result = await handler(processName);
-    results.push({
-      name: processName,
-      success: result.success,
-      error: result.error || null
-    });
-  }
-
-  return {
-    success: results.every((item) => item.success),
-    data: {
-      group: String(groupName || ""),
-      action: actionName,
-      order: targetList.filter((name) => groupMembers.includes(name)),
-      results
-    },
-    error: null
-  };
 }
 
 async function readProcessMetrics(name, limit) {
@@ -1000,8 +912,6 @@ module.exports = {
   npmBuild,
   updateProcessMetadata,
   removeProcessMetadata,
-  updateGroupMembers,
-  runBulkGroupAction,
   readProcessMetrics,
   readMonitoringSummary,
   exportProcessConfig,
