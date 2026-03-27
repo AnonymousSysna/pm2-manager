@@ -1,17 +1,18 @@
-import { useMemo, useState } from "react";
-import { Activity, Bell, Menu, Plus, ScrollText, Settings, LogOut, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Activity, Bell, Globe, Menu, Plus, Puzzle, ScrollText, Settings, LogOut, X } from "lucide-react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useSocket } from "../hooks/useSocket";
-import { auth } from "../api";
+import { auth, caddy as caddyApi } from "../api";
 import Badge from "./ui/Badge";
 import Button from "./ui/Button";
 
-const links = [
+const staticLinks = [
   { to: "/dashboard", label: "Dashboard", icon: Activity },
   { to: "/dashboard/create", label: "Create", icon: Plus },
   { to: "/dashboard/notifications", label: "Notifications", icon: Bell },
   { to: "/dashboard/logs", label: "Logs", icon: ScrollText },
-  { to: "/dashboard/settings", label: "Settings", icon: Settings }
+  { to: "/dashboard/settings", label: "Settings", icon: Settings },
+  { to: "/dashboard/extensions", label: "Extensions", icon: Puzzle }
 ];
 
 const pageTitleMap = {
@@ -19,10 +20,12 @@ const pageTitleMap = {
   "/dashboard/create": "Create Process",
   "/dashboard/notifications": "Notification Center",
   "/dashboard/logs": "Logs",
-  "/dashboard/settings": "Settings"
+  "/dashboard/settings": "Settings",
+  "/dashboard/extensions": "Extensions",
+  "/dashboard/caddy": "Caddy Reverse Proxy"
 };
 
-function NavLinks({ pathname, onNavigate }) {
+function NavLinks({ pathname, links, onNavigate }) {
   return (
     <nav className="space-y-1.5">
       {links.map(({ to, label, icon: Icon }) => {
@@ -50,6 +53,39 @@ export default function Layout() {
   const navigate = useNavigate();
   const { connected } = useSocket();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [caddyAvailable, setCaddyAvailable] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const refreshCaddyStatus = () => {
+      caddyApi
+        .status()
+        .then((result) => {
+          if (!active || !result.success) {
+            return;
+          }
+          setCaddyAvailable(Boolean(result.data?.available));
+        })
+        .catch(() => {
+          if (active) {
+            setCaddyAvailable(false);
+          }
+        });
+    };
+    refreshCaddyStatus();
+    const timer = setInterval(refreshCaddyStatus, 15000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, []);
+
+  const links = useMemo(() => {
+    if (!caddyAvailable) {
+      return staticLinks;
+    }
+    return [...staticLinks, { to: "/dashboard/caddy", label: "Caddy", icon: Globe }];
+  }, [caddyAvailable]);
 
   const title = useMemo(() => pageTitleMap[location.pathname] || "PM2 Manager", [location.pathname]);
 
@@ -91,7 +127,7 @@ export default function Layout() {
             <span className="h-2 w-2 rounded-full bg-brand-500" />
             Navigation
           </div>
-          <NavLinks pathname={location.pathname} />
+          <NavLinks pathname={location.pathname} links={links} />
           <Button type="button" variant="secondary" onClick={logout} className="mt-auto w-full justify-start">
             <LogOut size={16} />
             Logout
@@ -118,7 +154,7 @@ export default function Layout() {
                 <X size={16} />
               </button>
             </div>
-            <NavLinks pathname={location.pathname} onNavigate={() => setMobileOpen(false)} />
+            <NavLinks pathname={location.pathname} links={links} onNavigate={() => setMobileOpen(false)} />
             <Button type="button" variant="secondary" onClick={logout} className="mt-4 w-full justify-start">
               <LogOut size={16} />
               Logout

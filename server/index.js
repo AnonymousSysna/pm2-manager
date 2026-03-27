@@ -53,6 +53,7 @@ const processRoutes = require("./routes/processes");
 const authRoutes = require("./routes/auth");
 const pm2Routes = require("./routes/pm2");
 const alertRoutes = require("./routes/alerts");
+const caddyRoutes = require("./routes/caddy");
 const { registerPM2Monitor } = require("./socket/pm2Monitor");
 const { isIpAllowed, getRequestIp } = require("./utils/ipAccess");
 
@@ -171,6 +172,7 @@ v1.use("/auth", authRoutes);
 v1.use("/processes", processRoutes);
 v1.use("/pm2", pm2Routes);
 v1.use("/alerts", alertRoutes);
+v1.use("/caddy", caddyRoutes);
 
 app.use("/api/v1", v1);
 app.use("/api", v1);

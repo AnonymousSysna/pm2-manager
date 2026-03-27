@@ -9,6 +9,8 @@ const CreateProcess = lazy(() => import("./pages/CreateProcess"));
 const Logs = lazy(() => import("./pages/Logs"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Notifications = lazy(() => import("./pages/Notifications"));
+const Extensions = lazy(() => import("./pages/Extensions"));
+const Caddy = lazy(() => import("./pages/Caddy"));
 
 function RouteFallback() {
   return (
@@ -81,6 +83,22 @@ export default function App() {
             element={(
               <LazyRoute>
                 <Settings />
+              </LazyRoute>
+            )}
+          />
+          <Route
+            path="extensions"
+            element={(
+              <LazyRoute>
+                <Extensions />
+              </LazyRoute>
+            )}
+          />
+          <Route
+            path="caddy"
+            element={(
+              <LazyRoute>
+                <Caddy />
               </LazyRoute>
             )}
           />

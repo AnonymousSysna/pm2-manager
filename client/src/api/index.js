@@ -121,4 +121,11 @@ export const alerts = {
   clearHistory: () => api.delete("/api/v1/alerts/history").then(unwrap)
 };
 
+export const caddy = {
+  status: () => api.get("/api/v1/caddy/status").then(unwrap),
+  install: () => api.post("/api/v1/caddy/install").then(unwrap),
+  addProxy: (payload) => api.post("/api/v1/caddy/proxies", payload).then(unwrap),
+  restart: () => api.post("/api/v1/caddy/restart").then(unwrap)
+};
+
 export default api;

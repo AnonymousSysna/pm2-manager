@@ -46,6 +46,8 @@ CORS_ALLOWED_ORIGINS=http://localhost:5173
 PROJECTS_ROOT=/root/pm2-manager/apps/
 COMMAND_TIMEOUT_MS=300000
 LOG_TAIL_MAX_BYTES=1048576
+CADDYFILE_PATH=/etc/caddy/Caddyfile
+CADDY_MANAGED_SITES_PATH=./logs/caddy-managed-sites.json
 
 # Restart history
 RESTART_HISTORY_PATH=./logs/restart-history.jsonl
@@ -187,6 +189,12 @@ Base paths:
 - `POST /api/v1/pm2/resurrect`
 - `POST /api/v1/pm2/kill`
 - `GET /api/v1/pm2/info`
+
+### Caddy / Extensions
+- `GET /api/v1/caddy/status`
+- `POST /api/v1/caddy/install`
+- `POST /api/v1/caddy/proxies`
+- `POST /api/v1/caddy/restart`
 
 ### Public
 - `GET /health`
