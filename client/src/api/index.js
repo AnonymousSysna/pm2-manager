@@ -77,7 +77,7 @@ export const processes = {
   deploymentHistory: (limit = 100, processName = "") =>
     api
       .get(
-        `/api/v1/processes/history/deployments?limit=${encodeURIComponent(limit)}${
+        `/api/v1/processes/history/deployments?limit=${encodeURIComponent(String(limit))}${
           processName ? `&process=${encodeURIComponent(processName)}` : ""
         }`
       )

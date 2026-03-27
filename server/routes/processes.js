@@ -63,10 +63,13 @@ router.get("/history/restarts", readLimiter, asyncHandler(async (req, res) => {
 }));
 
 router.get("/history/deployments", readLimiter, asyncHandler(async (req, res) => {
-  const requested = Number(req.query.limit || 100);
-  const limit = Number.isFinite(requested)
-    ? Math.min(1000, Math.max(1, Math.floor(requested)))
-    : 100;
+  const rawLimit = String(req.query.limit || "100").trim().toLowerCase();
+  const requested = Number(rawLimit);
+  const limit = rawLimit === "all"
+    ? 0
+    : Number.isFinite(requested)
+      ? Math.min(5000, Math.max(1, Math.floor(requested)))
+      : 100;
   const processName = String(req.query.process || "").trim();
   const result = await getDeploymentHistory(limit, processName);
   res.status(result.success ? 200 : 500).json(result);

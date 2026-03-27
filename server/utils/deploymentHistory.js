@@ -69,7 +69,10 @@ async function listDeploymentHistory(limit = 100, processName = "") {
     return [];
   }
 
-  const normalizedLimit = Math.max(1, Math.min(1000, Number(limit) || 100));
+  const rawLimit = Number(limit);
+  const normalizedLimit = Number.isFinite(rawLimit)
+    ? Math.min(MAX_LINES, Math.floor(rawLimit))
+    : 100;
   const normalizedProcessName = String(processName || "").trim();
 
   const items = raw
@@ -85,7 +88,11 @@ async function listDeploymentHistory(limit = 100, processName = "") {
     .filter(Boolean)
     .filter((item) => !normalizedProcessName || item.processName === normalizedProcessName);
 
-  return items.slice(-normalizedLimit);
+  if (normalizedLimit <= 0) {
+    return items;
+  }
+
+  return items.slice(-Math.max(1, normalizedLimit));
 }
 
 module.exports = {

@@ -48,7 +48,7 @@ export default function Settings() {
       });
 
     processApi
-      .deploymentHistory(50)
+      .deploymentHistory("all")
       .then((result) => {
         if (result.success && Array.isArray(result.data)) {
           setDeploymentHistory(result.data);

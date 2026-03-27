@@ -491,6 +491,12 @@ export default function CreateProcess() {
 
           {error && <p className="text-sm text-danger-300">{error}</p>}
 
+          {isLaunching && (
+            <div className="rounded-md border border-border bg-surface-2 px-3 py-2 text-sm text-text-2">
+              Launch in progress. Keep this page open. Elapsed: {launchElapsedSec}s
+            </div>
+          )}
+
           <Button type="submit" variant="success" className="w-full" disabled={isLaunching}>
             {isLaunching ? "Launching..." : "Launch Process"}
           </Button>

@@ -119,6 +119,8 @@ export default function Dashboard() {
     restartMode: "restart"
   });
   const [deploySubmitting, setDeploySubmitting] = useState(false);
+  const [deployStartedAt, setDeployStartedAt] = useState(0);
+  const [deployElapsedSec, setDeployElapsedSec] = useState(0);
 
   const refreshCatalog = async () => {
     try {
@@ -216,6 +218,21 @@ export default function Dashboard() {
       return next;
     });
   }, [processes]);
+
+  useEffect(() => {
+    if (!deploySubmitting || !deployStartedAt) {
+      setDeployElapsedSec(0);
+      return undefined;
+    }
+
+    const tick = () => {
+      setDeployElapsedSec(Math.max(0, Math.floor((Date.now() - deployStartedAt) / 1000)));
+    };
+
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [deploySubmitting, deployStartedAt]);
 
   const openDetails = async (proc) => {
     try {
@@ -347,6 +364,7 @@ export default function Dashboard() {
 
     try {
       setDeploySubmitting(true);
+      setDeployStartedAt(Date.now());
       await callAction("deploy", deployingProcess.name, {
         branch: String(deployForm.branch || "").trim(),
         installDependencies: Boolean(deployForm.installDependencies),
@@ -356,6 +374,7 @@ export default function Dashboard() {
       setDeployingProcess(null);
     } finally {
       setDeploySubmitting(false);
+      setDeployStartedAt(0);
     }
   };
 
@@ -1003,6 +1022,15 @@ export default function Dashboard() {
               )}
             />
             <div className="space-y-3">
+              {deploySubmitting && (
+                <div className="rounded-md border border-border bg-surface-2 p-3">
+                  <div className="flex items-center gap-2 text-sm text-text-2">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-border border-t-brand-500" />
+                    Deployment in progress. Keep this page open.
+                  </div>
+                  <p className="mt-1 text-xs text-text-3">Elapsed: {deployElapsedSec}s</p>
+                </div>
+              )}
               <label className="space-y-1">
                 <span className="text-xs text-text-3">Branch (optional)</span>
                 <Input
@@ -1050,7 +1078,7 @@ export default function Dashboard() {
                 disabled={deploySubmitting || loadingAction[`${deployingProcess.name}:deploy`]}
                 onClick={submitDeployModal}
               >
-                Deploy
+                {deploySubmitting ? "Deploying..." : "Deploy"}
               </Button>
             </div>
           </div>
