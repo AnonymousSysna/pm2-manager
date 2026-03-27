@@ -52,15 +52,6 @@ function downloadBlob(fileName, content, type) {
   URL.revokeObjectURL(url);
 }
 
-function openProcessUrl(port) {
-  const value = Number(port);
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new Error("Invalid process port");
-  }
-  const target = `${window.location.protocol}//${window.location.hostname}:${value}`;
-  window.open(target, "_blank", "noopener,noreferrer");
-}
-
 export default function Logs() {
   const [searchParams] = useSearchParams();
   const defaultProcess = searchParams.get("process") || "";
@@ -238,19 +229,6 @@ export default function Logs() {
     downloadBlob(`pm2-logs-${Date.now()}.csv`, toCsv(visibleEntries), "text/csv;charset=utf-8");
   };
 
-  const selectedProcess = processOptions.find((item) => item.name === selected) || null;
-
-  const openApp = () => {
-    try {
-      if (!selectedProcess?.port) {
-        throw new Error("Selected process has no detected port");
-      }
-      openProcessUrl(selectedProcess.port);
-    } catch (error) {
-      toast.error(getErrorMessage(error, "Unable to open app URL"));
-    }
-  };
-
   return (
     <div className="space-y-4">
       <section className="page-panel grid gap-2 md:grid-cols-2 xl:grid-cols-6">
@@ -301,14 +279,6 @@ export default function Logs() {
         </Button>
         <Button type="button" variant="secondary" onClick={downloadCsv}>
           Download .csv
-        </Button>
-        <Button
-          type="button"
-          variant="info"
-          onClick={openApp}
-          disabled={combinedView || !selectedProcess?.port}
-        >
-          Open App
         </Button>
       </section>
 

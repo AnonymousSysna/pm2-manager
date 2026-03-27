@@ -1,33 +1,33 @@
-﻿# PM2 Dashboard
+# PM2 Dashboard
 
-Web dashboard for managing PM2 processes with:
-- Node.js + Express backend
+PM2 process manager web UI with:
+- Express API + Socket.io backend
 - React + Vite + Tailwind frontend
-- Socket.io real-time process updates/log stream
-- JWT-backed HttpOnly cookie authentication
+- Auth with JWT HttpOnly cookie + CSRF protection
+- Process lifecycle controls, deploy/rollback, logs, alerts, metadata, and app `.env` editing
 
-Access target: `http://YOUR_VPS_IP:8000`
+Default access target: `http://<host>:8000`
 
 ## Project Structure
 
 ```text
 .
-├─ server/              # Express API + PM2 controller + Socket.io
-├─ client/              # React dashboard (Vite + Tailwind)
-├─ logs/                # PM2 app logs
-├─ ecosystem.config.js  # PM2 app definition
-└─ package.json         # Root scripts
+├─ server/              # API, PM2 controller, sockets
+├─ client/              # React dashboard
+├─ logs/                # history stores (alerts/restarts/deployments/etc.)
+├─ ecosystem.config.js  # PM2 app definition for this dashboard
+└─ package.json         # root scripts
 ```
 
 ## Requirements
 
 - Node.js 18+ or 20+
 - npm
-- PM2 installed (`npm i -g pm2`) on the host where you deploy
+- PM2 installed globally on host (`npm i -g pm2`)
 
 ## Environment Variables
 
-Root `.env.example`:
+Use root `.env.example` as baseline:
 
 ```env
 # Auth
@@ -65,52 +65,25 @@ ALERT_TIMEOUT_MS=8000
 METRICS_HISTORY_PATH=./logs/metrics-history.json
 METRICS_HISTORY_MAX_POINTS=720
 METRICS_TOKEN=replace_with_long_random_token
-
 ```
 
-`AUTH_ALLOWED_IPS` supports a comma-separated allowlist of client IPs.
-If set, only those IPs can log in or use authenticated API/socket endpoints.
-Use `TRUST_PROXY=1` when running behind Nginx/Cloudflare so real client IP is detected.
-`CORS_ALLOWED_ORIGINS` is a comma-separated list of allowed browser origins.
-`COOKIE_SECURE` is optional: leave empty for auto-detect from request protocol, or set `true`/`false` to force.
+Notes:
+- `AUTH_ALLOWED_IPS` is a comma-separated allowlist for login/API/socket access.
+- Set `TRUST_PROXY=1` behind reverse proxies (Nginx/Cloudflare).
+- `CORS_ALLOWED_ORIGINS` accepts comma-separated origins.
+- `COOKIE_SECURE` can be empty (auto), `true`, or `false`.
+- Server local file `server/.env` is scaffolded for local development.
 
-Server local dev file (`server/.env`) is already scaffolded.
+## Password Hash Setup
 
-## New User: Create `bcrypt_hash` For Password
-
-Use this when setting `PM2_PASS_HASH`.
-
-1. Install dependencies (if not done yet):
-
-```bash
-npm install
-npm --prefix server install
-```
-
-2. Generate a bcrypt hash (replace `YourStrongPasswordHere`):
+Generate bcrypt hash for `PM2_PASS_HASH`:
 
 ```bash
 cd server
-node -e "const bcrypt=require('bcryptjs'); const p=process.argv[1]; if(!p){console.error('Usage: node -e \"...\" <password>'); process.exit(1);} console.log(bcrypt.hashSync(p, 10));" "YourStrongPasswordHere"
+node -e "const bcrypt=require('bcryptjs'); const p=process.argv[1]; if(!p){process.exit(1);} console.log(bcrypt.hashSync(p,10));" "YourStrongPassword"
 ```
-
-3. Copy the output (starts with `$2a$10$...`), then set it in `.env`:
-
-```env
-PM2_PASS_HASH=$2a$10$replace_with_generated_hash
-```
-
-4. Optional check (compare plain password vs hash):
-
-```bash
-node -e "const bcrypt=require('bcryptjs'); const p=process.argv[1]; const h=process.argv[2]; console.log(bcrypt.compareSync(p,h)?'MATCH':'NO_MATCH');" "YourStrongPasswordHere" "$2a$10$replace_with_generated_hash"
-```
-
-Do not store the plain password in `.env`; only store the hash.
 
 ## Install
-
-From repo root:
 
 ```bash
 npm install
@@ -120,18 +93,16 @@ npm --prefix client install
 
 ## Development
 
-Run backend + frontend together:
-
 ```bash
 npm run dev
 ```
 
-Default URLs:
+Defaults:
 - Frontend: `http://localhost:5173`
 - Backend: `http://localhost:8000`
 - Health: `http://localhost:8000/health`
 
-## Production Build + Run
+## Production
 
 Build frontend:
 
@@ -139,7 +110,7 @@ Build frontend:
 npm run build
 ```
 
-Run with Node directly:
+Run directly:
 
 ```bash
 npm run start
@@ -150,17 +121,12 @@ Run with PM2:
 ```bash
 npm run pm2:start
 npm run pm2:logs
-```
-
-Useful PM2 scripts:
-
-```bash
 npm run pm2:restart
 npm run pm2:stop
 npm run pm2:save
 ```
 
-One-command deploy flow:
+One-command deploy:
 
 ```bash
 npm run deploy
@@ -168,66 +134,81 @@ npm run deploy
 
 ## API Overview
 
-Versioned base path:
-- `v1`: `/api/v1/...`
-- compatibility alias: `/api/...`
+Base paths:
+- Primary: `/api/v1/...`
+- Compatibility alias: `/api/...`
 
-Auth:
+### Auth
 - `POST /api/v1/auth/login`
 - `POST /api/v1/auth/logout`
 - `GET /api/v1/auth/me`
 - `POST /api/v1/auth/change-password`
 
-CSRF:
-- Mutating routes require `x-csrf-token` matching `pm2_csrf` cookie (double-submit cookie pattern).
-
-Processes:
+### Processes
 - `GET /api/v1/processes`
-- `GET /api/v1/processes/catalog` (live processes + metadata + `.env` file availability)
-- `GET /api/v1/processes/monitoring/summary` (uptime/downtime + restart anomaly summary)
+- `GET /api/v1/processes/catalog`
+- `GET /api/v1/processes/monitoring/summary`
 - `GET /api/v1/processes/history/restarts?limit=200`
 - `GET /api/v1/processes/history/deployments?limit=100&process=<name>`
 - `GET /api/v1/processes/:name`
 - `GET /api/v1/processes/:name/metrics?limit=120`
-- `PATCH /api/v1/processes/:name/meta` (group/dependencies/alert thresholds)
+- `PATCH /api/v1/processes/:name/meta`
 - `DELETE /api/v1/processes/:name/meta`
 - `POST /api/v1/processes/create`
-- `POST /api/v1/processes/bulk-action` (batch `start` / `stop` / `restart`)
+- `POST /api/v1/processes/bulk-action`
 - `POST /api/v1/processes/:name/start`
 - `POST /api/v1/processes/:name/stop`
 - `POST /api/v1/processes/:name/restart`
 - `POST /api/v1/processes/:name/reload`
-- `PATCH /api/v1/processes/:name/env` (inline env update + restart with `updateEnv`)
-- `GET /api/v1/processes/:name/dotenv` (read app `.env` from process working directory)
-- `PATCH /api/v1/processes/:name/dotenv` (update existing keys in app `.env`)
-- `POST /api/v1/processes/:name/deploy` (git pull + optional npm install/build + restart/reload)
+- `PATCH /api/v1/processes/:name/env`
+- `GET /api/v1/processes/:name/dotenv`
+- `PATCH /api/v1/processes/:name/dotenv`
 - `POST /api/v1/processes/:name/npm-install`
 - `POST /api/v1/processes/:name/npm-build`
+- `POST /api/v1/processes/:name/deploy`
+- `GET /api/v1/processes/:name/git/commits?limit=20`
+- `POST /api/v1/processes/:name/rollback`
 - `DELETE /api/v1/processes/:name`
 - `GET /api/v1/processes/:name/logs?lines=100`
 - `POST /api/v1/processes/:name/flush`
 - `GET /api/v1/processes/config/export`
 - `POST /api/v1/processes/config/import`
 
-Alerts:
+### Alerts
 - `GET /api/v1/alerts/channels`
 - `POST /api/v1/alerts/channels`
 - `DELETE /api/v1/alerts/channels/:id`
 - `POST /api/v1/alerts/channels/:id/test`
+- `GET /api/v1/alerts/history?limit=200`
+- `DELETE /api/v1/alerts/history`
 
-PM2 daemon:
+### PM2 Daemon
 - `POST /api/v1/pm2/save`
 - `POST /api/v1/pm2/resurrect`
 - `POST /api/v1/pm2/kill`
 - `GET /api/v1/pm2/info`
 
-Public:
+### Public
 - `GET /health`
-- `GET /metrics` (`Authorization: Bearer <METRICS_TOKEN>` required)
+- `GET /metrics` (`Authorization: Bearer <METRICS_TOKEN>`)
 
-## Notes
+## Important Security Notes
+
+- All mutating API routes require CSRF token (`x-csrf-token`) matching `pm2_csrf` cookie.
+- `.env` editing endpoint is restricted to process working directories inside app root:
+  - allowed root is `PROJECTS_ROOT/apps`
+  - if `PROJECTS_ROOT` already ends with `apps`, that path is used directly
+- If process directory is outside allowed app root, dotenv endpoints return `403`.
+
+## Current Dashboard Behavior
+
+- Create process shows blocking launch overlay while backend work runs (clone/install/build/start).
+- On successful create, UI redirects to process logs page.
+- Dashboard action buttons use consistent outlined action style.
+- `Edit .env` is shown only when a process has `.env` inside allowed app root.
+- `Open App` quick action is available from Dashboard process actions when process port is detected.
+
+## Deployment Notes
 
 - In production, `server/index.js` serves `client/dist` and handles SPA routing.
-- Set strong values for `PM2_USER`, `PM2_PASS_HASH`, `JWT_SECRET`, and `METRICS_TOKEN` before deploying.
-- New dashboard features include: bulk actions (select multiple processes and start/stop/restart at once), process templates for reusable create configs, app `.env` editing from popup modal (only shown when `.env` exists, with typed controls for boolean/number/text values), Git Clone create mode (clone from URL with optional `.env` write + optional npm install/build before start), process dependencies, metrics history charts, threshold alerts, restart anomaly flags, combined searchable logs with TXT/CSV export, theme toggle, keyboard shortcuts, process config import/export, one-click deploy, deployment history, and external alert channels (webhook/Slack webhook).
-- `.env` editing is restricted to processes whose working directory is inside the configured apps root (`PROJECTS_ROOT/apps`, or `PROJECTS_ROOT` itself when it already points to `.../apps`).
+- Set strong values for `PM2_USER`, `PM2_PASS_HASH`, `JWT_SECRET`, and `METRICS_TOKEN` before deployment.

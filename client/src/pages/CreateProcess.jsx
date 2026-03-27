@@ -285,29 +285,6 @@ export default function CreateProcess() {
         </div>
 
         <form onSubmit={submit} className="space-y-4">
-          {isLaunching && (
-            <div className="rounded-md border border-info-500/30 bg-info-500/10 p-3 text-sm text-info-200">
-              <p className="font-semibold">Launching process in background...</p>
-              <p className="mt-1">
-                This can take a while for clone/install/build steps. Elapsed: {launchElapsedSec}s.
-              </p>
-              <p className="mt-1">
-                You will be redirected to Logs automatically when launch completes.
-              </p>
-              <div className="mt-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => navigate(`/dashboard/logs?process=${encodeURIComponent(form.name || "")}`)}
-                  disabled={!String(form.name || "").trim()}
-                >
-                  Open Logs Now
-                </Button>
-              </div>
-            </div>
-          )}
-
           <Field label="Process Name" required>
             <Input value={form.name} onChange={(e) => update("name", e.target.value)} />
           </Field>
@@ -518,6 +495,30 @@ export default function CreateProcess() {
           </Button>
         </form>
       </div>
+
+      {isLaunching && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-lg border border-border bg-surface p-5 text-center shadow-xl">
+            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-border border-t-brand-500" />
+            <p className="mt-3 text-base font-semibold text-text-1">This may take a moment</p>
+            <p className="mt-1 text-sm text-text-3">
+              Preparing process, installing dependencies, and starting services.
+            </p>
+            <p className="mt-1 text-xs text-text-3">Elapsed: {launchElapsedSec}s</p>
+            <div className="mt-4">
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => navigate(`/dashboard/logs?process=${encodeURIComponent(form.name || "")}`)}
+                disabled={!String(form.name || "").trim()}
+              >
+                Open Logs
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

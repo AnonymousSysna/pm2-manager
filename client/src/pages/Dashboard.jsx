@@ -591,13 +591,34 @@ export default function Dashboard() {
           <Button type="button" size="sm" variant="secondary" onClick={() => toggleSelectAllFiltered(false)}>
             Clear
           </Button>
-          <Button type="button" size="sm" variant="success" onClick={() => runBulkAction("start")} disabled={selectedCount === 0}>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="border border-success-400/60 bg-transparent text-success-300 hover:bg-success-500/10"
+            onClick={() => runBulkAction("start")}
+            disabled={selectedCount === 0}
+          >
             Start selected
           </Button>
-          <Button type="button" size="sm" variant="danger" onClick={() => runBulkAction("stop")} disabled={selectedCount === 0}>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="border border-danger-400/60 bg-transparent text-danger-300 hover:bg-danger-500/10"
+            onClick={() => runBulkAction("stop")}
+            disabled={selectedCount === 0}
+          >
             Stop selected
           </Button>
-          <Button type="button" size="sm" variant="info" onClick={() => runBulkAction("restart")} disabled={selectedCount === 0}>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="border border-info-400/60 bg-transparent text-info-300 hover:bg-info-500/10"
+            onClick={() => runBulkAction("restart")}
+            disabled={selectedCount === 0}
+          >
             Restart selected
           </Button>
         </div>
@@ -638,6 +659,40 @@ export default function Dashboard() {
                 </div>
                 <div className="mt-3 flex flex-wrap gap-1">
                   <ActionButton
+                    title="Logs"
+                    variant="secondary"
+                    onClick={() => navigate(`/dashboard/logs?process=${encodeURIComponent(proc.name)}`)}
+                    icon={<ScrollText size={14} />}
+                  />
+                  {Number(proc.port) > 0 && (
+                    <ActionButton
+                      title="Open App"
+                      variant="info"
+                      onClick={() => {
+                        try {
+                          openProcessUrl(proc.port);
+                        } catch (error) {
+                          toast.error(getErrorMessage(error, "Unable to open app URL"));
+                        }
+                      }}
+                      icon={<ExternalLink size={14} />}
+                    />
+                  )}
+                  <ActionButton
+                    title="Meta"
+                    variant="secondary"
+                    onClick={() => openMetaModal(proc)}
+                    icon={<ListChecks size={14} />}
+                  />
+                  {dotEnvByProcess[proc.name] && (
+                    <ActionButton
+                      title="Edit .env"
+                      variant="secondary"
+                      onClick={() => openDotEnvModal(proc)}
+                      icon={<ScrollText size={14} />}
+                    />
+                  )}
+                  <ActionButton
                     title="Start"
                     variant="success"
                     disabled={proc.status === "online" || loadingAction[`${proc.name}:start`]}
@@ -665,40 +720,6 @@ export default function Dashboard() {
                     onClick={() => callAction("rollback", proc.name)}
                     icon={<Undo2 size={14} />}
                   />
-                  <ActionButton
-                    title="Logs"
-                    variant="secondary"
-                    onClick={() => navigate(`/dashboard/logs?process=${encodeURIComponent(proc.name)}`)}
-                    icon={<ScrollText size={14} />}
-                  />
-                  <ActionButton
-                    title="Meta"
-                    variant="secondary"
-                    onClick={() => openMetaModal(proc)}
-                    icon={<ListChecks size={14} />}
-                  />
-                  {dotEnvByProcess[proc.name] && (
-                    <ActionButton
-                      title="Edit .env"
-                      variant="secondary"
-                      onClick={() => openDotEnvModal(proc)}
-                      icon={<ScrollText size={14} />}
-                    />
-                  )}
-                  {Number(proc.port) > 0 && (
-                    <ActionButton
-                      title="Open App"
-                      variant="info"
-                      onClick={() => {
-                        try {
-                          openProcessUrl(proc.port);
-                        } catch (error) {
-                          toast.error(getErrorMessage(error, "Unable to open app URL"));
-                        }
-                      }}
-                      icon={<ExternalLink size={14} />}
-                    />
-                  )}
                 </div>
               </article>
             );
@@ -774,6 +795,40 @@ export default function Dashboard() {
                     <td className="px-2 py-3">
                       <div className="flex flex-wrap gap-1">
                         <ActionButton
+                          title="Logs"
+                          variant="secondary"
+                          onClick={() => navigate(`/dashboard/logs?process=${encodeURIComponent(proc.name)}`)}
+                          icon={<ScrollText size={14} />}
+                        />
+                        {Number(proc.port) > 0 && (
+                          <ActionButton
+                            title="Open App"
+                            variant="info"
+                            onClick={() => {
+                              try {
+                                openProcessUrl(proc.port);
+                              } catch (error) {
+                                toast.error(getErrorMessage(error, "Unable to open app URL"));
+                              }
+                            }}
+                            icon={<ExternalLink size={14} />}
+                          />
+                        )}
+                        <ActionButton
+                          title="Edit Meta"
+                          variant="secondary"
+                          onClick={() => openMetaModal(proc)}
+                          icon={<ListChecks size={14} />}
+                        />
+                        {dotEnvByProcess[proc.name] && (
+                          <ActionButton
+                            title="Edit .env"
+                            variant="secondary"
+                            onClick={() => openDotEnvModal(proc)}
+                            icon={<ScrollText size={14} />}
+                          />
+                        )}
+                        <ActionButton
                           title="Start"
                           variant="success"
                           disabled={proc.status === "online" || loadingAction[`${proc.name}:start`]}
@@ -801,40 +856,6 @@ export default function Dashboard() {
                           onClick={() => callAction("reload", proc.name)}
                           icon={<RotateCcw size={14} />}
                         />
-                        <ActionButton
-                          title="Logs"
-                          variant="secondary"
-                          onClick={() => navigate(`/dashboard/logs?process=${encodeURIComponent(proc.name)}`)}
-                          icon={<ScrollText size={14} />}
-                        />
-                        <ActionButton
-                          title="Edit Meta"
-                          variant="secondary"
-                          onClick={() => openMetaModal(proc)}
-                          icon={<ListChecks size={14} />}
-                        />
-                        {dotEnvByProcess[proc.name] && (
-                          <ActionButton
-                            title="Edit .env"
-                            variant="secondary"
-                            onClick={() => openDotEnvModal(proc)}
-                            icon={<ScrollText size={14} />}
-                          />
-                        )}
-                        {Number(proc.port) > 0 && (
-                          <ActionButton
-                            title="Open App"
-                            variant="info"
-                            onClick={() => {
-                              try {
-                                openProcessUrl(proc.port);
-                              } catch (error) {
-                                toast.error(getErrorMessage(error, "Unable to open app URL"));
-                              }
-                            }}
-                            icon={<ExternalLink size={14} />}
-                          />
-                        )}
                         <ActionButton
                           title="NPM Install"
                           variant="secondary"
@@ -1041,8 +1062,24 @@ function StatCard({ label, value, tone }) {
 }
 
 function ActionButton({ title, icon, variant, onClick, disabled }) {
+  const outlineClass = {
+    success: "border border-success-400/60 bg-transparent text-success-300 hover:bg-success-500/10",
+    danger: "border border-danger-400/60 bg-transparent text-danger-300 hover:bg-danger-500/10",
+    warning: "border border-warning-400/60 bg-transparent text-warning-300 hover:bg-warning-500/10",
+    info: "border border-info-400/60 bg-transparent text-info-300 hover:bg-info-500/10",
+    secondary: "border border-border bg-transparent text-text-2 hover:bg-surface-2"
+  }[variant] || "border border-border bg-transparent text-text-2 hover:bg-surface-2";
+
   return (
-    <Button type="button" title={title} size="sm-icon" variant={variant} disabled={disabled} onClick={onClick}>
+    <Button
+      type="button"
+      title={title}
+      size="sm-icon"
+      variant="secondary"
+      className={outlineClass}
+      disabled={disabled}
+      onClick={onClick}
+    >
       {icon}
     </Button>
   );
