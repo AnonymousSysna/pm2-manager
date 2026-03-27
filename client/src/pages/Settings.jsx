@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import toast from "react-hot-toast";
+import toast, { getErrorMessage } from "../lib/toast";
 import { auth, pm2Admin } from "../api";
 
 export default function Settings() {
@@ -29,13 +29,21 @@ export default function Settings() {
     }
 
     try {
-      const result = await fn();
-      if (!result.success) {
-        throw new Error(result.error || `${label} failed`);
-      }
-      toast.success(`${label} completed`);
-    } catch (error) {
-      toast.error(error?.response?.data?.error || error.message || `${label} failed`);
+      await toast.promise(
+        fn().then((result) => {
+          if (!result.success) {
+            throw new Error(result.error || `${label} failed`);
+          }
+          return result;
+        }),
+        {
+          loading: `${label} in progress...`,
+          success: `${label} completed`,
+          error: (error) => getErrorMessage(error, `${label} failed`)
+        }
+      );
+    } catch (_error) {
+      // Toast is handled by toast.promise.
     }
   };
 
@@ -52,16 +60,24 @@ export default function Settings() {
     }
 
     try {
-      const result = await auth.changePassword(currentPassword, newPassword);
-      if (!result.success) {
-        throw new Error(result.error || "Password update failed");
-      }
-      toast.success("Password updated");
+      await toast.promise(
+        auth.changePassword(currentPassword, newPassword).then((result) => {
+          if (!result.success) {
+            throw new Error(result.error || "Password update failed");
+          }
+          return result;
+        }),
+        {
+          loading: "Updating password...",
+          success: "Password updated",
+          error: (error) => getErrorMessage(error, "Password update failed")
+        }
+      );
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-    } catch (error) {
-      toast.error(error?.response?.data?.error || error.message || "Password update failed");
+    } catch (_error) {
+      // Toast is handled by toast.promise.
     }
   };
 

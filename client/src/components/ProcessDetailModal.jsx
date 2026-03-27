@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { X, Copy, Play, Square, RefreshCw, RotateCcw, Trash2, Download, Hammer } from "lucide-react";
-import toast from "react-hot-toast";
+import toast from "../lib/toast";
 
 const tabs = ["Overview", "Environment", "Resource Graph", "Quick Actions"];
 

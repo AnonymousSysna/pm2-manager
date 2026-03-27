@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Play, Square, RefreshCw, RotateCcw, ScrollText, Trash2, Download, Hammer } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import toast from "react-hot-toast";
+import toast, { getErrorMessage } from "../lib/toast";
 import { processes as processApi } from "../api";
 import { useSocket } from "../hooks/useSocket";
 import ProcessDetailModal from "../components/ProcessDetailModal";
@@ -99,13 +99,31 @@ export default function Dashboard() {
         npmBuild: processApi.npmBuild,
         delete: processApi.delete
       };
-      const result = await handlers[action](name);
-      if (!result.success) {
-        throw new Error(result.error || `Failed to ${action}`);
-      }
-      toast.success(`${action} succeeded for ${name}`);
-    } catch (error) {
-      toast.error(error?.response?.data?.error || error.message || `Failed to ${action}`);
+      const actionLabel = {
+        start: "Start",
+        stop: "Stop",
+        restart: "Restart",
+        reload: "Reload",
+        npmInstall: "NPM install",
+        npmBuild: "NPM build",
+        delete: "Delete"
+      }[action] || action;
+
+      await toast.promise(
+        handlers[action](name).then((result) => {
+          if (!result.success) {
+            throw new Error(result.error || `Failed to ${action}`);
+          }
+          return result;
+        }),
+        {
+          loading: `${actionLabel} in progress...`,
+          success: `${actionLabel} completed for ${name}`,
+          error: (error) => getErrorMessage(error, `Failed to ${action}`)
+        }
+      );
+    } catch (_error) {
+      // Toast is handled by toast.promise.
     } finally {
       setLoadingAction((prev) => ({ ...prev, [`${name}:${action}`]: false }));
     }

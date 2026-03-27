@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import toast from "react-hot-toast";
+import toast, { getErrorMessage } from "../lib/toast";
 import { auth } from "../api";
 
 export default function Login() {
@@ -14,14 +14,23 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const result = await auth.login(username, password);
-      if (!result.success) {
-        throw new Error(result.error || "Login failed");
-      }
+      await toast.promise(
+        auth.login(username, password).then((result) => {
+          if (!result.success) {
+            throw new Error(result.error || "Login failed");
+          }
+          return result;
+        }),
+        {
+          loading: "Signing in...",
+          success: "Signed in",
+          error: (error) => getErrorMessage(error, "Login failed")
+        }
+      );
 
       navigate("/dashboard", { replace: true });
-    } catch (error) {
-      toast.error(error?.response?.data?.error || error.message || "Login failed");
+    } catch (_error) {
+      // Toast is handled by toast.promise.
     } finally {
       setLoading(false);
     }

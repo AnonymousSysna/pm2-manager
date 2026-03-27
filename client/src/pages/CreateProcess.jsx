@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import toast from "react-hot-toast";
+import toast, { getErrorMessage } from "../lib/toast";
 import { processes } from "../api";
 
 const defaultEnvRow = { key: "", value: "" };
@@ -85,16 +85,23 @@ export default function CreateProcess() {
     };
 
     try {
-      const result = await processes.create(payload);
-      if (!result.success) {
-        throw new Error(result.error || "Unable to create process");
-      }
-      toast.success("Process launched");
+      await toast.promise(
+        processes.create(payload).then((result) => {
+          if (!result.success) {
+            throw new Error(result.error || "Unable to create process");
+          }
+          return result;
+        }),
+        {
+          loading: "Launching process...",
+          success: "Process launched",
+          error: (error) => getErrorMessage(error, "Failed to launch process")
+        }
+      );
       navigate("/dashboard");
     } catch (err) {
-      const message = err?.response?.data?.error || err.message || "Failed to launch process";
+      const message = getErrorMessage(err, "Failed to launch process");
       setError(message);
-      toast.error(message);
     }
   };
 

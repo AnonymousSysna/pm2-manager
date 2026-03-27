@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Terminal } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
-import toast from "react-hot-toast";
+import toast, { getErrorMessage } from "../lib/toast";
 import { processes as processApi } from "../api";
 import { useSocket } from "../hooks/useSocket";
 
@@ -92,14 +92,22 @@ export default function Logs() {
       return;
     }
     try {
-      const result = await processApi.flush(selected);
-      if (!result.success) {
-        throw new Error(result.error || "Failed to flush logs");
-      }
-      toast.success("Logs flushed");
+      await toast.promise(
+        processApi.flush(selected).then((result) => {
+          if (!result.success) {
+            throw new Error(result.error || "Failed to flush logs");
+          }
+          return result;
+        }),
+        {
+          loading: `Flushing logs for ${selected}...`,
+          success: "Logs flushed",
+          error: (error) => getErrorMessage(error, "Failed to flush logs")
+        }
+      );
       setEntries([]);
-    } catch (error) {
-      toast.error(error?.response?.data?.error || error.message || "Failed to flush logs");
+    } catch (_error) {
+      // Toast is handled by toast.promise.
     }
   };
 
