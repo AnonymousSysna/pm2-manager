@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast, { getErrorMessage } from "../lib/toast";
 import { processes } from "../api";
@@ -7,16 +7,47 @@ import Input from "../components/ui/Input";
 import Select from "../components/ui/Select";
 
 const defaultEnvRow = { key: "", value: "" };
+const TEMPLATE_STORAGE_KEY = "pm2_process_templates_v1";
+const DEFAULT_PROJECTS_ROOT = "/root/pm2-manager/apps/";
+
+function parseTemplateStore(raw) {
+  if (!raw) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed;
+    }
+  } catch (_error) {
+    // Ignore invalid local storage payload.
+  }
+  return {};
+}
+
+function inferRepoName(gitUrl) {
+  const cleaned = String(gitUrl || "")
+    .trim()
+    .replace(/\/+$/, "")
+    .replace(/\.git$/i, "");
+  const parts = cleaned.split("/");
+  return (parts[parts.length - 1] || "app").replace(/[^A-Za-z0-9._-]/g, "-");
+}
 
 export default function CreateProcess() {
   const navigate = useNavigate();
   const [tab, setTab] = useState("simple");
   const [mode, setMode] = useState("script");
+  const [templates, setTemplates] = useState({});
+  const [selectedTemplate, setSelectedTemplate] = useState("");
   const [error, setError] = useState("");
   const [form, setForm] = useState({
     name: "",
     script: "",
     project_path: "",
+    git_clone_url: "",
+    git_branch: "",
+    env_file_content: "",
     start_script: "start",
     install_dependencies: true,
     run_build: false,
@@ -35,10 +66,85 @@ export default function CreateProcess() {
 
   const update = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
+  const updateCloneUrl = (value) => {
+    const gitUrl = String(value || "");
+    const inferred = inferRepoName(gitUrl);
+    setForm((prev) => {
+      const next = { ...prev, git_clone_url: gitUrl };
+      if (!String(prev.project_path || "").trim()) {
+        next.project_path = `${DEFAULT_PROJECTS_ROOT}${inferred}`;
+      }
+      if (!String(prev.name || "").trim()) {
+        next.name = inferred;
+      }
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    setTemplates(parseTemplateStore(localStorage.getItem(TEMPLATE_STORAGE_KEY)));
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(templates));
+  }, [templates]);
+
+  const templateNames = useMemo(() => Object.keys(templates).sort(), [templates]);
+
   const updateEnvRow = (index, key, value) => {
     const next = [...form.envRows];
     next[index] = { ...next[index], [key]: value };
     update("envRows", next);
+  };
+
+  const saveTemplate = () => {
+    const templateName = (window.prompt("Template name", selectedTemplate || form.name || "") || "").trim();
+    if (!templateName) {
+      return;
+    }
+    const templatePayload = {
+      mode,
+      tab,
+      form
+    };
+    setTemplates((prev) => ({ ...prev, [templateName]: templatePayload }));
+    setSelectedTemplate(templateName);
+    toast.success(`Saved template: ${templateName}`);
+  };
+
+  const loadTemplate = (templateName) => {
+    const item = templates[templateName];
+    if (!item) {
+      return;
+    }
+    setMode(item.mode || "script");
+    setTab(item.tab || "simple");
+    setForm((prev) => ({
+      ...prev,
+      ...item.form,
+      envRows: Array.isArray(item.form?.envRows) && item.form.envRows.length > 0
+        ? item.form.envRows
+        : [{ ...defaultEnvRow }]
+    }));
+    setSelectedTemplate(templateName);
+    toast.success(`Loaded template: ${templateName}`);
+  };
+
+  const deleteTemplate = () => {
+    if (!selectedTemplate) {
+      toast.error("Select a template to delete");
+      return;
+    }
+    if (!window.confirm(`Delete template "${selectedTemplate}"?`)) {
+      return;
+    }
+    setTemplates((prev) => {
+      const next = { ...prev };
+      delete next[selectedTemplate];
+      return next;
+    });
+    setSelectedTemplate("");
+    toast.success("Template deleted");
   };
 
   const submit = async (event) => {
@@ -60,6 +166,16 @@ export default function CreateProcess() {
       return;
     }
 
+    if (mode === "git" && !form.git_clone_url.trim()) {
+      setError("Git clone URL is required in Git Clone Mode.");
+      return;
+    }
+
+    if (mode === "git" && !form.project_path.trim()) {
+      setError("Project Directory is required in Git Clone Mode.");
+      return;
+    }
+
     const env = {};
     form.envRows.forEach((row) => {
       if (row.key.trim()) {
@@ -70,10 +186,13 @@ export default function CreateProcess() {
     const payload = {
       name: form.name,
       script: mode === "script" ? form.script : undefined,
-      project_path: mode === "project" ? form.project_path : undefined,
-      start_script: mode === "project" ? form.start_script || "start" : undefined,
-      install_dependencies: mode === "project" ? Boolean(form.install_dependencies) : undefined,
-      run_build: mode === "project" ? Boolean(form.run_build) : undefined,
+      project_path: mode === "project" || mode === "git" ? form.project_path : undefined,
+      git_clone_url: mode === "git" ? form.git_clone_url : undefined,
+      git_branch: mode === "git" ? form.git_branch || undefined : undefined,
+      env_file_content: mode === "git" ? form.env_file_content : undefined,
+      start_script: mode === "project" || mode === "git" ? form.start_script || "start" : undefined,
+      install_dependencies: mode === "project" || mode === "git" ? Boolean(form.install_dependencies) : undefined,
+      run_build: mode === "project" || mode === "git" ? Boolean(form.run_build) : undefined,
       args: mode === "script" ? form.args || undefined : undefined,
       port: form.port || undefined,
       cwd: mode === "script" ? form.cwd || undefined : undefined,
@@ -111,9 +230,28 @@ export default function CreateProcess() {
   return (
     <section className="mx-auto max-w-3xl space-y-4">
       <div className="page-panel">
+        <div className="mb-4 grid gap-2 rounded border border-border bg-surface-2 p-3 md:grid-cols-[1fr,auto,auto,auto]">
+          <Select value={selectedTemplate} onChange={(e) => {
+            const value = e.target.value;
+            setSelectedTemplate(value);
+            if (value) {
+              loadTemplate(value);
+            }
+          }}>
+            <option value="">Select process template</option>
+            {templateNames.map((name) => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </Select>
+          <Button type="button" variant="secondary" onClick={saveTemplate}>Save Template</Button>
+          <Button type="button" variant="danger" onClick={deleteTemplate} disabled={!selectedTemplate}>Delete Template</Button>
+          <Button type="button" variant="info" onClick={() => setMode("git")}>Git Clone Mode</Button>
+        </div>
+
         <div className="mb-4 flex flex-wrap gap-2">
           <ModeButton active={mode === "script"} onClick={() => setMode("script")}>Script Mode</ModeButton>
           <ModeButton active={mode === "project"} onClick={() => setMode("project")}>Project Directory Mode</ModeButton>
+          <ModeButton active={mode === "git"} onClick={() => setMode("git")}>Git Clone Mode</ModeButton>
         </div>
 
         <div className="mb-4 flex flex-wrap gap-2">
@@ -182,6 +320,71 @@ export default function CreateProcess() {
                   onChange={(e) => update("run_build", e.target.checked)}
                 />
                 Run npm run build before start
+              </label>
+            </>
+          )}
+
+          {mode === "git" && (
+            <>
+              <Field label="Git Clone URL" required>
+                <Input
+                  value={form.git_clone_url}
+                  onChange={(e) => updateCloneUrl(e.target.value)}
+                  placeholder="https://github.com/org/repo.git"
+                />
+              </Field>
+
+              <Field label="Git Branch (Optional)">
+                <Input
+                  value={form.git_branch}
+                  onChange={(e) => update("git_branch", e.target.value)}
+                  placeholder="main"
+                />
+              </Field>
+
+              <Field label="Project Directory" required>
+                <Input
+                  value={form.project_path}
+                  onChange={(e) => update("project_path", e.target.value)}
+                  placeholder="/root/pm2-manager/apps/my-app"
+                />
+              </Field>
+
+              <Field label=".env File Content (Optional)">
+                <textarea
+                  value={form.env_file_content}
+                  onChange={(e) => update("env_file_content", e.target.value)}
+                  placeholder={"NODE_ENV=production\nAPI_KEY=replace_me"}
+                  className="min-h-32 w-full rounded-md border border-border bg-surface-2 px-3 py-2 text-sm text-text-1 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/30"
+                />
+              </Field>
+
+              <Field label="Start Script">
+                <Input
+                  value={form.start_script}
+                  onChange={(e) => update("start_script", e.target.value)}
+                  placeholder="start"
+                />
+              </Field>
+
+              <label className="flex items-center gap-3 text-sm text-text-2">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-brand-500"
+                  checked={form.install_dependencies}
+                  onChange={(e) => update("install_dependencies", e.target.checked)}
+                />
+                Run npm install after clone
+              </label>
+
+              <label className="flex items-center gap-3 text-sm text-text-2">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-brand-500"
+                  checked={form.run_build}
+                  onChange={(e) => update("run_build", e.target.checked)}
+                />
+                Run npm run build after clone
               </label>
             </>
           )}

@@ -10,7 +10,8 @@ import {
   Download,
   Hammer,
   AlertTriangle,
-  Rocket
+  Rocket,
+  ListChecks
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import toast, { getErrorMessage } from "../lib/toast";
@@ -49,6 +50,26 @@ function durationLabel(ms) {
     return `${hours}h ${minutes}m`;
   }
   return `${minutes}m`;
+}
+
+function parseEnvLines(text = "") {
+  const env = {};
+  const lines = String(text || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !line.startsWith("#"));
+
+  for (const line of lines) {
+    const separatorIndex = line.indexOf("=");
+    if (separatorIndex <= 0) {
+      throw new Error(`Invalid env line: ${line}`);
+    }
+    const key = line.slice(0, separatorIndex).trim();
+    const value = line.slice(separatorIndex + 1);
+    env[key] = value;
+  }
+  return env;
 }
 
 function toPath(points, width, height, accessor) {
@@ -93,6 +114,7 @@ export default function Dashboard() {
   const [chartProcess, setChartProcess] = useState("");
   const [historyPoints, setHistoryPoints] = useState([]);
   const [monitoringSummary, setMonitoringSummary] = useState({});
+  const [selectedNames, setSelectedNames] = useState({});
 
   const refreshCatalog = async () => {
     try {
@@ -173,6 +195,19 @@ export default function Dashboard() {
     });
   }, [processes, selectedProcess?.name]);
 
+  useEffect(() => {
+    const known = new Set(processes.map((proc) => proc.name));
+    setSelectedNames((prev) => {
+      const next = {};
+      Object.entries(prev).forEach(([name, isSelected]) => {
+        if (isSelected && known.has(name)) {
+          next[name] = true;
+        }
+      });
+      return next;
+    });
+  }, [processes]);
+
   const openDetails = async (proc) => {
     try {
       const result = await processApi.get(proc.name);
@@ -205,6 +240,11 @@ export default function Dashboard() {
     const errored = processes.filter((p) => p.status === "errored").length;
     return { total: processes.length, online, stopped, errored };
   }, [processes]);
+
+  const selectedCount = useMemo(
+    () => Object.values(selectedNames).filter(Boolean).length,
+    [selectedNames]
+  );
 
   const callAction = async (action, name) => {
     const confirmed = action !== "delete" || window.confirm(`Delete process ${name}?`);
@@ -276,6 +316,107 @@ export default function Dashboard() {
       // Toast handled by toast.promise.
     } finally {
       setLoadingAction((prev) => ({ ...prev, [`${name}:${action}`]: false }));
+    }
+  };
+
+  const toggleSelected = (name, checked) => {
+    setSelectedNames((prev) => {
+      if (checked) {
+        return { ...prev, [name]: true };
+      }
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
+  };
+
+  const toggleSelectAllFiltered = (checked) => {
+    if (!checked) {
+      setSelectedNames({});
+      return;
+    }
+    const next = {};
+    filtered.forEach((proc) => {
+      next[proc.name] = true;
+    });
+    setSelectedNames(next);
+  };
+
+  const runBulkAction = async (action) => {
+    const names = filtered.filter((proc) => selectedNames[proc.name]).map((proc) => proc.name);
+    if (names.length === 0) {
+      toast.error("Select at least one process");
+      return;
+    }
+
+    const actionLabel = {
+      start: "Start",
+      stop: "Stop",
+      restart: "Restart"
+    }[action] || action;
+
+    try {
+      const result = await toast.promise(
+        processApi.bulkAction(action, names).then((response) => {
+          if (!response.success) {
+            throw new Error(response.error || `Failed to ${action} selected processes`);
+          }
+          return response;
+        }),
+        {
+          loading: `${actionLabel} ${names.length} process(es)...`,
+          success: `${actionLabel} completed for ${names.length} process(es)`,
+          error: (error) => getErrorMessage(error, `Failed to ${action} selected processes`)
+        }
+      );
+
+      const failed = result?.data?.results?.filter((item) => !item.success) || [];
+      if (failed.length > 0) {
+        toast.error(`Failed: ${failed.map((item) => item.name).join(", ")}`);
+      }
+      refreshCatalog();
+    } catch (_error) {
+      // Toast handled above.
+    }
+  };
+
+  const editEnvInline = async (proc) => {
+    try {
+      const result = await processApi.get(proc.name);
+      if (!result.success) {
+        throw new Error(result.error || "Unable to load current env");
+      }
+      const currentEnv = result?.data?.pm2_env?.env || {};
+      const editableKeys = Object.keys(currentEnv)
+        .filter((key) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key))
+        .sort();
+      const defaultText = editableKeys.map((key) => `${key}=${String(currentEnv[key] ?? "")}`).join("\n");
+
+      const input = window.prompt(
+        `Edit environment for ${proc.name}.\nUse KEY=VALUE per line. Lines starting with # are ignored.`,
+        defaultText
+      );
+      if (input === null) {
+        return;
+      }
+
+      const nextEnv = parseEnvLines(input);
+      await toast.promise(
+        processApi.updateEnv(proc.name, nextEnv, true).then((response) => {
+          if (!response.success) {
+            throw new Error(response.error || "Unable to update environment");
+          }
+          return response;
+        }),
+        {
+          loading: `Updating env for ${proc.name}...`,
+          success: `Env updated for ${proc.name}`,
+          error: (error) => getErrorMessage(error, "Failed to update environment")
+        }
+      );
+      refreshCatalog();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Failed to update environment"));
     }
   };
 
@@ -389,6 +530,26 @@ export default function Dashboard() {
           />
         </div>
 
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded border border-border bg-surface-2 p-2 text-xs text-text-2">
+          <ListChecks size={14} />
+          <span>{selectedCount} selected</span>
+          <Button type="button" size="sm" variant="secondary" onClick={() => toggleSelectAllFiltered(true)}>
+            Select filtered
+          </Button>
+          <Button type="button" size="sm" variant="secondary" onClick={() => toggleSelectAllFiltered(false)}>
+            Clear
+          </Button>
+          <Button type="button" size="sm" variant="success" onClick={() => runBulkAction("start")} disabled={selectedCount === 0}>
+            Start selected
+          </Button>
+          <Button type="button" size="sm" variant="danger" onClick={() => runBulkAction("stop")} disabled={selectedCount === 0}>
+            Stop selected
+          </Button>
+          <Button type="button" size="sm" variant="info" onClick={() => runBulkAction("restart")} disabled={selectedCount === 0}>
+            Restart selected
+          </Button>
+        </div>
+
         <div className="space-y-3 md:hidden">
           {filtered.map((proc) => {
             const meta = processMeta[proc.name] || {};
@@ -398,13 +559,21 @@ export default function Dashboard() {
             return (
               <article key={proc.name} className="rounded-lg border border-border bg-surface-2 p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    className="text-left font-semibold text-info-300 underline-offset-2 hover:underline"
-                    onClick={() => openDetails(proc)}
-                  >
-                    {proc.name}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-brand-500"
+                      checked={Boolean(selectedNames[proc.name])}
+                      onChange={(e) => toggleSelected(proc.name, e.target.checked)}
+                    />
+                    <button
+                      type="button"
+                      className="text-left font-semibold text-info-300 underline-offset-2 hover:underline"
+                      onClick={() => openDetails(proc)}
+                    >
+                      {proc.name}
+                    </button>
+                  </div>
                   <StatusBadge status={proc.status} />
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs text-text-3">
@@ -452,6 +621,12 @@ export default function Dashboard() {
                     onClick={() => navigate(`/dashboard/logs?process=${encodeURIComponent(proc.name)}`)}
                     icon={<ScrollText size={14} />}
                   />
+                  <ActionButton
+                    title="Env"
+                    variant="secondary"
+                    onClick={() => editEnvInline(proc)}
+                    icon={<AlertTriangle size={14} />}
+                  />
                 </div>
               </article>
             );
@@ -463,6 +638,14 @@ export default function Dashboard() {
           <table className="min-w-full text-sm">
             <thead className="text-left text-text-3">
               <tr>
+                <th className="px-2 py-2">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-brand-500"
+                    checked={filtered.length > 0 && filtered.every((proc) => Boolean(selectedNames[proc.name]))}
+                    onChange={(e) => toggleSelectAllFiltered(e.target.checked)}
+                  />
+                </th>
                 <th className="px-2 py-2">ID</th>
                 <th className="px-2 py-2">Name</th>
                 <th className="px-2 py-2">Status</th>
@@ -484,6 +667,14 @@ export default function Dashboard() {
 
                 return (
                   <tr key={proc.name} className="border-t border-border">
+                    <td className="px-2 py-3">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-brand-500"
+                        checked={Boolean(selectedNames[proc.name])}
+                        onChange={(e) => toggleSelected(proc.name, e.target.checked)}
+                      />
+                    </td>
                     <td className="px-2 py-3">{proc.id ?? "-"}</td>
                     <td className="px-2 py-3">
                       <button
@@ -556,6 +747,12 @@ export default function Dashboard() {
                           icon={<AlertTriangle size={14} />}
                         />
                         <ActionButton
+                          title="Edit Env"
+                          variant="secondary"
+                          onClick={() => editEnvInline(proc)}
+                          icon={<AlertTriangle size={14} />}
+                        />
+                        <ActionButton
                           title="NPM Install"
                           variant="secondary"
                           disabled={loadingAction[`${proc.name}:npmInstall`]}
@@ -597,7 +794,7 @@ export default function Dashboard() {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td className="px-2 py-8 text-center text-text-3" colSpan={11}>
+                  <td className="px-2 py-8 text-center text-text-3" colSpan={12}>
                     No processes found.
                   </td>
                 </tr>

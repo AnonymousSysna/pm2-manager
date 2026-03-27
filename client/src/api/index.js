@@ -86,10 +86,13 @@ export const processes = {
     api.get(`/api/v1/processes/${encodeURIComponent(name)}/git/commits?limit=${encodeURIComponent(limit)}`).then(unwrap),
   get: (name) => api.get(`/api/v1/processes/${encodeURIComponent(name)}`).then(unwrap),
   create: (config) => api.post("/api/v1/processes/create", config).then(unwrap),
+  bulkAction: (action, names = []) => api.post("/api/v1/processes/bulk-action", { action, names }).then(unwrap),
   start: (name) => api.post(`/api/v1/processes/${encodeURIComponent(name)}/start`).then(unwrap),
   stop: (name) => api.post(`/api/v1/processes/${encodeURIComponent(name)}/stop`).then(unwrap),
   restart: (name) => api.post(`/api/v1/processes/${encodeURIComponent(name)}/restart`).then(unwrap),
   reload: (name) => api.post(`/api/v1/processes/${encodeURIComponent(name)}/reload`).then(unwrap),
+  updateEnv: (name, env, replace = false) =>
+    api.patch(`/api/v1/processes/${encodeURIComponent(name)}/env`, { env, replace }).then(unwrap),
   npmInstall: (name) => api.post(`/api/v1/processes/${encodeURIComponent(name)}/npm-install`).then(unwrap),
   npmBuild: (name) => api.post(`/api/v1/processes/${encodeURIComponent(name)}/npm-build`).then(unwrap),
   deploy: (name, payload = {}) => api.post(`/api/v1/processes/${encodeURIComponent(name)}/deploy`, payload).then(unwrap),

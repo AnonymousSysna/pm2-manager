@@ -43,7 +43,7 @@ COOKIE_SECURE=
 CORS_ALLOWED_ORIGINS=http://localhost:5173
 
 # Runtime
-PROJECTS_ROOT=/user/pm2-manager/apps/
+PROJECTS_ROOT=/root/pm2-manager/apps/
 COMMAND_TIMEOUT_MS=300000
 LOG_TAIL_MAX_BYTES=1048576
 
@@ -192,10 +192,12 @@ Processes:
 - `PATCH /api/v1/processes/:name/meta` (group/tags/dependencies/alert thresholds)
 - `DELETE /api/v1/processes/:name/meta`
 - `POST /api/v1/processes/create`
+- `POST /api/v1/processes/bulk-action` (batch `start` / `stop` / `restart`)
 - `POST /api/v1/processes/:name/start`
 - `POST /api/v1/processes/:name/stop`
 - `POST /api/v1/processes/:name/restart`
 - `POST /api/v1/processes/:name/reload`
+- `PATCH /api/v1/processes/:name/env` (inline env update + restart with `updateEnv`)
 - `POST /api/v1/processes/:name/deploy` (git pull + optional npm install/build + restart/reload)
 - `POST /api/v1/processes/:name/npm-install`
 - `POST /api/v1/processes/:name/npm-build`
@@ -225,4 +227,4 @@ Public:
 
 - In production, `server/index.js` serves `client/dist` and handles SPA routing.
 - Set strong values for `PM2_USER`, `PM2_PASS_HASH`, `JWT_SECRET`, and `METRICS_TOKEN` before deploying.
-- New dashboard features include: process tags/dependencies, metrics history charts, threshold alerts, restart anomaly flags, combined searchable logs with TXT/CSV export, theme toggle, keyboard shortcuts, process config import/export, one-click deploy, deployment history, and external alert channels (webhook/Slack webhook).
+- New dashboard features include: bulk actions (select multiple processes and start/stop/restart at once), process templates for reusable create configs, inline environment variable editing for running processes, Git Clone create mode (clone from URL with optional `.env` write + optional npm install/build before start), process tags/dependencies, metrics history charts, threshold alerts, restart anomaly flags, combined searchable logs with TXT/CSV export, theme toggle, keyboard shortcuts, process config import/export, one-click deploy, deployment history, and external alert channels (webhook/Slack webhook).

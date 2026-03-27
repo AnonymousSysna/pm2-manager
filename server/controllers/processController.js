@@ -193,6 +193,15 @@ function runCommand(command, args, cwd) {
   });
 }
 
+async function directoryIsEmpty(targetPath) {
+  try {
+    const entries = await fs.promises.readdir(targetPath);
+    return entries.length === 0;
+  } catch (_error) {
+    return false;
+  }
+}
+
 function compactOutput(output = "") {
   return String(output || "")
     .split(/\r?\n/)
@@ -385,6 +394,112 @@ async function restartProcess(name) {
   return result;
 }
 
+async function runBulkAction(action, names = []) {
+  const safeAction = String(action || "").trim().toLowerCase();
+  const allowed = new Set(["start", "stop", "restart"]);
+  if (!allowed.has(safeAction)) {
+    return {
+      success: false,
+      data: null,
+      error: `Unsupported bulk action: ${safeAction}`
+    };
+  }
+
+  if (!Array.isArray(names) || names.length === 0) {
+    return {
+      success: false,
+      data: null,
+      error: "names must be a non-empty array"
+    };
+  }
+
+  const uniqueNames = [...new Set(names.map((name) => sanitizeProcessName(name, "process name")))];
+  const handler = {
+    start: startProcess,
+    stop: stopProcess,
+    restart: restartProcess
+  }[safeAction];
+
+  const results = [];
+  for (const processName of uniqueNames) {
+    const result = await handler(processName);
+    results.push({
+      name: processName,
+      success: Boolean(result?.success),
+      error: result?.success ? null : result?.error || `Failed to ${safeAction}`
+    });
+  }
+
+  const successCount = results.filter((item) => item.success).length;
+  const failedCount = results.length - successCount;
+  return {
+    success: failedCount === 0,
+    data: {
+      action: safeAction,
+      total: results.length,
+      successCount,
+      failedCount,
+      results
+    },
+    error: failedCount === 0 ? null : `${failedCount} process action(s) failed`
+  };
+}
+
+async function updateProcessEnv(name, envPatch = {}, options = {}) {
+  const processName = sanitizeProcessName(name, "process name");
+  const replace = Boolean(options?.replace);
+  const safePatch = sanitizeEnvObject(envPatch || {});
+
+  const result = await withPM2(async () => {
+    const proc = await describeProcess(processName);
+    if (!proc) {
+      throw new Error(`Process not found: ${processName}`);
+    }
+
+    const currentEnv = sanitizeEnvObject(proc.pm2_env?.env || {});
+    const nextEnv = replace ? safePatch : { ...currentEnv, ...safePatch };
+
+    await new Promise((resolve, reject) => {
+      pm2.restart(
+        {
+          name: processName,
+          updateEnv: true,
+          env: nextEnv
+        },
+        (error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        }
+      );
+    });
+
+    return {
+      name: processName,
+      replace,
+      keys: Object.keys(safePatch),
+      env: nextEnv
+    };
+  });
+
+  trackPm2Operation("processes.env.update", result.success);
+  if (result.success) {
+    await recordOperationNotification({
+      category: "operation",
+      title: `${processName} env updated`,
+      message: `Environment variables updated and process restarted`,
+      processName,
+      details: {
+        updatedKeys: result.data.keys,
+        replace
+      }
+    });
+  }
+  return result;
+}
+
 async function deleteProcess(name) {
   const processName = sanitizeProcessName(name, "process name");
   const result = await withPM2(
@@ -429,6 +544,9 @@ async function createProcess(config) {
       interpreter,
       log_date_format,
       project_path,
+      git_clone_url,
+      git_branch,
+      env_file_content,
       install_dependencies,
       run_build,
       start_script
@@ -456,6 +574,8 @@ async function createProcess(config) {
     if (projectPathInput) {
       const projectDir = resolveSafePath(projectPathInput, PROJECTS_ROOT, "project_path");
       const packageJsonPath = path.join(projectDir, "package.json");
+      const cloneUrl = String(git_clone_url || "").trim();
+      const cloneBranch = String(git_branch || "").trim();
 
       let projectStat;
       try {
@@ -464,8 +584,42 @@ async function createProcess(config) {
         projectStat = null;
       }
 
+      if (cloneUrl) {
+        const gitUrl = sanitizeOptionalString(cloneUrl, "git_clone_url", 2048);
+        if (!gitUrl) {
+          throw new Error("git_clone_url is required when provided");
+        }
+
+        if (!projectStat) {
+          await fs.promises.mkdir(projectDir, { recursive: true });
+          projectStat = await fs.promises.stat(projectDir);
+        }
+
+        if (!projectStat.isDirectory()) {
+          throw new Error(`Project path is not a directory: ${projectDir}`);
+        }
+
+        if (!(await directoryIsEmpty(projectDir))) {
+          throw new Error(`Project path must be empty before git clone: ${projectDir}`);
+        }
+
+        const cloneArgs = ["clone"];
+        if (cloneBranch) {
+          cloneArgs.push("--branch", cloneBranch, "--single-branch");
+        }
+        cloneArgs.push(gitUrl, projectDir);
+        await runCommand("git", cloneArgs, PROJECTS_ROOT);
+
+        projectStat = await fs.promises.stat(projectDir);
+      }
+
       if (!projectStat || !projectStat.isDirectory()) {
         throw new Error(`Project path does not exist or is not a directory: ${projectDir}`);
+      }
+
+      if (env_file_content !== undefined && env_file_content !== null) {
+        const envFile = String(env_file_content);
+        await fs.promises.writeFile(path.join(projectDir, ".env"), envFile, "utf8");
       }
 
       try {
@@ -1170,6 +1324,8 @@ module.exports = {
   startProcess,
   stopProcess,
   restartProcess,
+  runBulkAction,
+  updateProcessEnv,
   deleteProcess,
   createProcess,
   getProcessLogs,

@@ -5,6 +5,8 @@ const {
   startProcess,
   stopProcess,
   restartProcess,
+  runBulkAction,
+  updateProcessEnv,
   deleteProcess,
   createProcess,
   getProcessLogs,
@@ -112,6 +114,16 @@ router.post("/create", writeLimiter, asyncHandler(async (req, res) => {
   res.status(status).json(result);
 }));
 
+router.post("/bulk-action", writeLimiter, asyncHandler(async (req, res) => {
+  const result = await runBulkAction(req.body?.action, req.body?.names);
+  const status = result.success
+    ? 200
+    : /must|required|invalid|unsupported|non-empty array/i.test(result.error || "")
+      ? 400
+      : 500;
+  res.status(status).json(result);
+}));
+
 router.post("/:name/start", writeLimiter, validateProcessParam, asyncHandler(async (req, res) => {
   const result = await startProcess(req.params.name);
   res.status(result.success ? 200 : 500).json(result);
@@ -130,6 +142,12 @@ router.post("/:name/restart", writeLimiter, validateProcessParam, asyncHandler(a
 router.post("/:name/reload", writeLimiter, validateProcessParam, asyncHandler(async (req, res) => {
   const result = await reloadProcess(req.params.name);
   res.status(result.success ? 200 : 500).json(result);
+}));
+
+router.patch("/:name/env", writeLimiter, validateProcessParam, asyncHandler(async (req, res) => {
+  const result = await updateProcessEnv(req.params.name, req.body?.env || {}, { replace: Boolean(req.body?.replace) });
+  const status = result.success ? 200 : /must|required|invalid|env/i.test(result.error || "") ? 400 : 500;
+  res.status(status).json(result);
 }));
 
 router.delete("/:name", criticalWriteLimiter, validateProcessParam, asyncHandler(async (req, res) => {
