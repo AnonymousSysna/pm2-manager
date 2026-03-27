@@ -14,6 +14,7 @@ export default function Login() {
   const handleSubmit = async (event) => {
     event.preventDefault();
     setLoading(true);
+    let authenticated = false;
 
     try {
       await toast.promise(
@@ -21,6 +22,7 @@ export default function Login() {
           if (!result.success) {
             throw new Error(result.error || "Login failed");
           }
+          authenticated = true;
           return result;
         }),
         {
@@ -30,7 +32,9 @@ export default function Login() {
         }
       );
 
-      navigate("/dashboard", { replace: true });
+      if (authenticated) {
+        navigate("/dashboard", { replace: true });
+      }
     } catch (_error) {
       // Toast is handled by toast.promise.
     } finally {
