@@ -1412,8 +1412,8 @@ async function gitPullProcess(name) {
     if (!gitStatus.upstream) {
       throw new Error(`No upstream tracking branch configured for ${processName}`);
     }
-    if (!gitStatus.cleanWorkingTree) {
-      throw new Error(`Working tree has uncommitted changes for ${processName}`);
+    if (Number(gitStatus.behind || 0) <= 0) {
+      throw new Error(`No new remote commits to pull for ${processName}`);
     }
 
     await runCommand("git", ["fetch", "--prune"], gitStatus.cwd);

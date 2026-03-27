@@ -114,7 +114,6 @@ export default function ProcessDetailModal({ process, onClose, onAction }) {
   const canGitPull = Boolean(
     gitStatus?.isGitRepo &&
     gitStatus?.upstream &&
-    gitStatus?.cleanWorkingTree &&
     Number(gitStatus?.behind || 0) > 0
   );
 

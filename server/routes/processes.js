@@ -231,7 +231,7 @@ router.post("/:name/git/pull", criticalWriteLimiter, validateProcessParam, async
   const result = await gitPullProcess(req.params.name);
   const status = result.success
     ? 200
-    : /not in a git repository|no upstream|uncommitted changes|not found|working directory/i.test(result.error || "")
+    : /not in a git repository|no upstream|no new remote commits|not found|working directory/i.test(result.error || "")
       ? 400
       : 500;
   res.status(status).json(result);
