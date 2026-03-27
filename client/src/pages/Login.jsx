@@ -55,10 +55,6 @@ export default function Login() {
         }
       );
 
-      const me = await auth.me();
-      if (!me?.success) {
-        throw new Error("Session validation failed after login");
-      }
       navigate("/dashboard", { replace: true });
     } catch (_error) {
       // Toast is handled by toast.promise.
