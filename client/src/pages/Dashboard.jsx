@@ -11,7 +11,8 @@ import {
   Hammer,
   AlertTriangle,
   Rocket,
-  ListChecks
+  ListChecks,
+  X
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import toast, { getErrorMessage } from "../lib/toast";
@@ -115,6 +116,18 @@ export default function Dashboard() {
   const [historyPoints, setHistoryPoints] = useState([]);
   const [monitoringSummary, setMonitoringSummary] = useState({});
   const [selectedNames, setSelectedNames] = useState({});
+  const [editingMetaProcess, setEditingMetaProcess] = useState(null);
+  const [metaForm, setMetaForm] = useState({
+    tags: "",
+    dependencies: "",
+    cpuThreshold: "",
+    memoryThreshold: ""
+  });
+  const [metaSaving, setMetaSaving] = useState(false);
+  const [editingEnvProcess, setEditingEnvProcess] = useState(null);
+  const [envText, setEnvText] = useState("");
+  const [envLoading, setEnvLoading] = useState(false);
+  const [envSaving, setEnvSaving] = useState(false);
 
   const refreshCatalog = async () => {
     try {
@@ -380,7 +393,10 @@ export default function Dashboard() {
     }
   };
 
-  const editEnvInline = async (proc) => {
+  const openEnvModal = async (proc) => {
+    setEditingEnvProcess(proc);
+    setEnvLoading(true);
+    setEnvText("");
     try {
       const result = await processApi.get(proc.name);
       if (!result.success) {
@@ -391,73 +407,109 @@ export default function Dashboard() {
         .filter((key) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key))
         .sort();
       const defaultText = editableKeys.map((key) => `${key}=${String(currentEnv[key] ?? "")}`).join("\n");
+      setEnvText(defaultText);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Failed to update environment"));
+      setEditingEnvProcess(null);
+    } finally {
+      setEnvLoading(false);
+    }
+  };
 
-      const input = window.prompt(
-        `Edit environment for ${proc.name}.\nUse KEY=VALUE per line. Lines starting with # are ignored.`,
-        defaultText
-      );
-      if (input === null) {
-        return;
-      }
+  const submitEnvModal = async () => {
+    if (!editingEnvProcess?.name) {
+      return;
+    }
 
-      const nextEnv = parseEnvLines(input);
+    try {
+      setEnvSaving(true);
+      const nextEnv = parseEnvLines(envText);
       await toast.promise(
-        processApi.updateEnv(proc.name, nextEnv, true).then((response) => {
+        processApi.updateEnv(editingEnvProcess.name, nextEnv, true).then((response) => {
           if (!response.success) {
             throw new Error(response.error || "Unable to update environment");
           }
           return response;
         }),
         {
-          loading: `Updating env for ${proc.name}...`,
-          success: `Env updated for ${proc.name}`,
+          loading: `Updating env for ${editingEnvProcess.name}...`,
+          success: `Env updated for ${editingEnvProcess.name}`,
           error: (error) => getErrorMessage(error, "Failed to update environment")
         }
       );
+      setEditingEnvProcess(null);
+      setEnvText("");
       refreshCatalog();
     } catch (error) {
       toast.error(getErrorMessage(error, "Failed to update environment"));
+    } finally {
+      setEnvSaving(false);
     }
   };
 
-  const editMeta = async (proc) => {
+  const openMetaModal = (proc) => {
     const current = processMeta[proc.name] || {};
-    const tagsRaw =
-      window.prompt("Tags (comma-separated)", Array.isArray(current.tags) ? current.tags.join(",") : "") ?? "";
-    const dependenciesRaw =
-      window.prompt(
-        "Dependencies start first (comma-separated process names)",
-        Array.isArray(current.dependencies) ? current.dependencies.join(",") : ""
-      ) ?? "";
-    const cpuThreshold =
-      window.prompt("CPU alert threshold (%)", current.alertThresholds?.cpu ?? "") ?? "";
-    const memoryThreshold =
-      window.prompt("Memory alert threshold (MB)", current.alertThresholds?.memoryMB ?? "") ?? "";
+    setEditingMetaProcess(proc);
+    setMetaForm({
+      tags: Array.isArray(current.tags) ? current.tags.join(", ") : "",
+      dependencies: Array.isArray(current.dependencies) ? current.dependencies.join(", ") : "",
+      cpuThreshold:
+        current.alertThresholds?.cpu === null || current.alertThresholds?.cpu === undefined
+          ? ""
+          : String(current.alertThresholds.cpu),
+      memoryThreshold:
+        current.alertThresholds?.memoryMB === null || current.alertThresholds?.memoryMB === undefined
+          ? ""
+          : String(current.alertThresholds.memoryMB)
+    });
+  };
+
+  const submitMetaModal = async () => {
+    if (!editingMetaProcess?.name) {
+      return;
+    }
+
+    const cpuThresholdValue = metaForm.cpuThreshold.trim();
+    const memoryThresholdValue = metaForm.memoryThreshold.trim();
+
+    if (cpuThresholdValue !== "" && Number.isNaN(Number(cpuThresholdValue))) {
+      toast.error("CPU threshold must be a number");
+      return;
+    }
+
+    if (memoryThresholdValue !== "" && Number.isNaN(Number(memoryThresholdValue))) {
+      toast.error("Memory threshold must be a number");
+      return;
+    }
 
     const payload = {
-      tags: tagsRaw
+      tags: metaForm.tags
         .split(",")
         .map((item) => item.trim().toLowerCase())
         .filter(Boolean),
-      dependencies: dependenciesRaw
+      dependencies: metaForm.dependencies
         .split(",")
         .map((item) => item.trim())
         .filter(Boolean),
       alertThresholds: {
-        cpu: cpuThreshold === "" ? null : Number(cpuThreshold),
-        memoryMB: memoryThreshold === "" ? null : Number(memoryThreshold)
+        cpu: cpuThresholdValue === "" ? null : Number(cpuThresholdValue),
+        memoryMB: memoryThresholdValue === "" ? null : Number(memoryThresholdValue)
       }
     };
 
     try {
-      const result = await processApi.setMeta(proc.name, payload);
+      setMetaSaving(true);
+      const result = await processApi.setMeta(editingMetaProcess.name, payload);
       if (!result.success) {
         throw new Error(result.error || "Unable to update process metadata");
       }
-      toast.success(`Updated metadata for ${proc.name}`);
+      toast.success(`Updated metadata for ${editingMetaProcess.name}`);
+      setEditingMetaProcess(null);
       refreshCatalog();
     } catch (error) {
       toast.error(getErrorMessage(error, "Unable to update process metadata"));
+    } finally {
+      setMetaSaving(false);
     }
   };
 
@@ -622,10 +674,16 @@ export default function Dashboard() {
                     icon={<ScrollText size={14} />}
                   />
                   <ActionButton
+                    title="Meta"
+                    variant="secondary"
+                    onClick={() => openMetaModal(proc)}
+                    icon={<ListChecks size={14} />}
+                  />
+                  <ActionButton
                     title="Env"
                     variant="secondary"
-                    onClick={() => editEnvInline(proc)}
-                    icon={<AlertTriangle size={14} />}
+                    onClick={() => openEnvModal(proc)}
+                    icon={<ScrollText size={14} />}
                   />
                 </div>
               </article>
@@ -743,14 +801,14 @@ export default function Dashboard() {
                         <ActionButton
                           title="Edit Meta"
                           variant="secondary"
-                          onClick={() => editMeta(proc)}
-                          icon={<AlertTriangle size={14} />}
+                          onClick={() => openMetaModal(proc)}
+                          icon={<ListChecks size={14} />}
                         />
                         <ActionButton
                           title="Edit Env"
                           variant="secondary"
-                          onClick={() => editEnvInline(proc)}
-                          icon={<AlertTriangle size={14} />}
+                          onClick={() => openEnvModal(proc)}
+                          icon={<ScrollText size={14} />}
                         />
                         <ActionButton
                           title="NPM Install"
@@ -806,6 +864,117 @@ export default function Dashboard() {
 
       {selectedProcess && (
         <ProcessDetailModal process={selectedProcess} onClose={() => setSelectedProcess(null)} onAction={callAction} />
+      )}
+
+      {editingMetaProcess && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/60"
+            aria-label="Close metadata editor"
+            onClick={() => setEditingMetaProcess(null)}
+          />
+          <div className="relative z-10 w-full max-w-2xl rounded-lg border border-border bg-surface p-4 shadow-xl">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-text-1">Edit Metadata: {editingMetaProcess.name}</h3>
+              <Button type="button" variant="ghost" size="icon" onClick={() => setEditingMetaProcess(null)}>
+                <X size={18} />
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <label className="space-y-1">
+                <span className="text-xs text-text-3">Tags (comma-separated)</span>
+                <Input
+                  value={metaForm.tags}
+                  onChange={(e) => setMetaForm((prev) => ({ ...prev, tags: e.target.value }))}
+                  placeholder="api,critical,batch"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs text-text-3">Dependencies (comma-separated)</span>
+                <Input
+                  value={metaForm.dependencies}
+                  onChange={(e) => setMetaForm((prev) => ({ ...prev, dependencies: e.target.value }))}
+                  placeholder="redis-worker,db-sync"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs text-text-3">CPU alert threshold (%)</span>
+                <Input
+                  value={metaForm.cpuThreshold}
+                  onChange={(e) => setMetaForm((prev) => ({ ...prev, cpuThreshold: e.target.value }))}
+                  placeholder="80"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs text-text-3">Memory alert threshold (MB)</span>
+                <Input
+                  value={metaForm.memoryThreshold}
+                  onChange={(e) => setMetaForm((prev) => ({ ...prev, memoryThreshold: e.target.value }))}
+                  placeholder="512"
+                />
+              </label>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setEditingMetaProcess(null)}>
+                Cancel
+              </Button>
+              <Button type="button" variant="success" disabled={metaSaving} onClick={submitMetaModal}>
+                Save Metadata
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editingEnvProcess && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/60"
+            aria-label="Close environment editor"
+            onClick={() => {
+              if (!envSaving) {
+                setEditingEnvProcess(null);
+              }
+            }}
+          />
+          <div className="relative z-10 w-full max-w-3xl rounded-lg border border-border bg-surface p-4 shadow-xl">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-text-1">Edit Environment: {editingEnvProcess.name}</h3>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                disabled={envSaving}
+                onClick={() => setEditingEnvProcess(null)}
+              >
+                <X size={18} />
+              </Button>
+            </div>
+            <p className="mb-2 text-xs text-text-3">Use one `KEY=VALUE` pair per line. Lines starting with `#` are ignored.</p>
+            <textarea
+              value={envText}
+              onChange={(e) => setEnvText(e.target.value)}
+              disabled={envLoading || envSaving}
+              className="h-72 w-full rounded-md border border-border bg-surface-2 p-3 font-mono text-xs text-text-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+              placeholder={envLoading ? "Loading environment..." : "NODE_ENV=production"}
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <Button type="button" variant="secondary" disabled={envSaving} onClick={() => setEditingEnvProcess(null)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="success"
+                disabled={envLoading || envSaving}
+                onClick={submitEnvModal}
+              >
+                Save Environment
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
