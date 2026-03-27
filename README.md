@@ -183,13 +183,13 @@ CSRF:
 
 Processes:
 - `GET /api/v1/processes`
-- `GET /api/v1/processes/catalog` (live processes + tags/dependencies metadata)
+- `GET /api/v1/processes/catalog` (live processes + metadata + `.env` file availability)
 - `GET /api/v1/processes/monitoring/summary` (uptime/downtime + restart anomaly summary)
 - `GET /api/v1/processes/history/restarts?limit=200`
 - `GET /api/v1/processes/history/deployments?limit=100&process=<name>`
 - `GET /api/v1/processes/:name`
 - `GET /api/v1/processes/:name/metrics?limit=120`
-- `PATCH /api/v1/processes/:name/meta` (group/tags/dependencies/alert thresholds)
+- `PATCH /api/v1/processes/:name/meta` (group/dependencies/alert thresholds)
 - `DELETE /api/v1/processes/:name/meta`
 - `POST /api/v1/processes/create`
 - `POST /api/v1/processes/bulk-action` (batch `start` / `stop` / `restart`)
@@ -198,6 +198,8 @@ Processes:
 - `POST /api/v1/processes/:name/restart`
 - `POST /api/v1/processes/:name/reload`
 - `PATCH /api/v1/processes/:name/env` (inline env update + restart with `updateEnv`)
+- `GET /api/v1/processes/:name/dotenv` (read app `.env` from process working directory)
+- `PATCH /api/v1/processes/:name/dotenv` (update existing keys in app `.env`)
 - `POST /api/v1/processes/:name/deploy` (git pull + optional npm install/build + restart/reload)
 - `POST /api/v1/processes/:name/npm-install`
 - `POST /api/v1/processes/:name/npm-build`
@@ -227,4 +229,4 @@ Public:
 
 - In production, `server/index.js` serves `client/dist` and handles SPA routing.
 - Set strong values for `PM2_USER`, `PM2_PASS_HASH`, `JWT_SECRET`, and `METRICS_TOKEN` before deploying.
-- New dashboard features include: bulk actions (select multiple processes and start/stop/restart at once), process templates for reusable create configs, inline environment variable editing for running processes, Git Clone create mode (clone from URL with optional `.env` write + optional npm install/build before start), process tags/dependencies, metrics history charts, threshold alerts, restart anomaly flags, combined searchable logs with TXT/CSV export, theme toggle, keyboard shortcuts, process config import/export, one-click deploy, deployment history, and external alert channels (webhook/Slack webhook).
+- New dashboard features include: bulk actions (select multiple processes and start/stop/restart at once), process templates for reusable create configs, app `.env` editing from popup modal (only shown when `.env` exists, with typed controls for boolean/number/text values), Git Clone create mode (clone from URL with optional `.env` write + optional npm install/build before start), process dependencies, metrics history charts, threshold alerts, restart anomaly flags, combined searchable logs with TXT/CSV export, theme toggle, keyboard shortcuts, process config import/export, one-click deploy, deployment history, and external alert channels (webhook/Slack webhook).

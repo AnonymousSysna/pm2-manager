@@ -346,7 +346,7 @@ export default function CreateProcess() {
                 <Input
                   value={form.project_path}
                   onChange={(e) => update("project_path", e.target.value)}
-                  placeholder="/root/pm2-manager/apps/my-app"
+                  placeholder="/root/pm2-manager/apps/{auto-inferred-from-repo-name}"
                 />
               </Field>
 

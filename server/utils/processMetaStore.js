@@ -25,16 +25,6 @@ function normalizeDependencies(dependencies) {
   return Array.from(new Set(cleaned));
 }
 
-function normalizeTags(tags) {
-  if (!Array.isArray(tags)) {
-    return [];
-  }
-  const cleaned = tags
-    .map((item) => String(item || "").trim().toLowerCase())
-    .filter((item) => /^[a-z0-9:_-]{1,32}$/.test(item));
-  return Array.from(new Set(cleaned));
-}
-
 function normalizeThresholds(input) {
   const source = input && typeof input === "object" ? input : {};
   const cpu = Number(source.cpu);
@@ -51,7 +41,6 @@ function normalizeProcessMeta(name, meta = {}) {
   const group = String(meta.group || "").trim().slice(0, 64);
   return {
     group,
-    tags: normalizeTags(meta.tags),
     dependencies: normalizeDependencies(meta.dependencies).filter((item) => item !== processName),
     alertThresholds: normalizeThresholds(meta.alertThresholds)
   };

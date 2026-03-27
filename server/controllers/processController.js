@@ -4,6 +4,7 @@ const { spawn } = require("child_process");
 const pm2 = require("pm2");
 const { withPM2 } = require("../utils/pm2Client");
 const {
+  ENV_KEY_PATTERN,
   sanitizeProcessName,
   sanitizeScriptPath,
   sanitizeEnvObject,
@@ -247,6 +248,27 @@ function describeProcess(name) {
   });
 }
 
+async function resolveProcessWorkingDirectory(processName) {
+  const proc = await describeProcess(processName);
+  if (!proc) {
+    throw new Error(`Process not found: ${processName}`);
+  }
+
+  const cwd = proc.pm2_env?.pm_cwd;
+  let cwdStat;
+  try {
+    cwdStat = await fs.promises.stat(cwd);
+  } catch (_error) {
+    cwdStat = null;
+  }
+
+  if (!cwd || !cwdStat || !cwdStat.isDirectory()) {
+    throw new Error(`Cannot resolve process working directory for: ${processName}`);
+  }
+
+  return { proc, cwd: path.resolve(cwd) };
+}
+
 function findPort(env = {}) {
   return env.PORT || env.port || env.PM2_PORT || null;
 }
@@ -270,6 +292,7 @@ function formatProcess(proc) {
   return {
     id: proc.pm_id,
     name: proc.name,
+    cwd: pm2Env.pm_cwd || "",
     pid: proc.pid,
     status: pm2Env.status || "unknown",
     cpu: monit.cpu || 0,
@@ -445,6 +468,53 @@ async function runBulkAction(action, names = []) {
   };
 }
 
+function inferDotEnvValueType(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "true" || normalized === "false") {
+    return "boolean";
+  }
+  if (/^[+-]?\d+$/.test(String(value ?? "").trim())) {
+    return "integer";
+  }
+  if (/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(String(value ?? "").trim())) {
+    return "number";
+  }
+  return "string";
+}
+
+function parseDotEnvContent(content = "") {
+  const raw = String(content ?? "");
+  const lines = raw.split(/\r?\n/);
+  const parsedLines = [];
+  const entries = [];
+
+  lines.forEach((line, index) => {
+    const pairMatch = line.match(/^\s*(export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/);
+    if (!pairMatch) {
+      parsedLines.push({ type: "raw", line });
+      return;
+    }
+
+    const exportedPrefix = pairMatch[1] ? "export " : "";
+    const key = pairMatch[2];
+    const value = pairMatch[3] ?? "";
+    parsedLines.push({
+      type: "pair",
+      key,
+      value,
+      exportedPrefix
+    });
+    entries.push({
+      index,
+      key,
+      value,
+      valueType: inferDotEnvValueType(value)
+    });
+  });
+
+  return { lines: parsedLines, entries };
+}
+
 async function updateProcessEnv(name, envPatch = {}, options = {}) {
   const processName = sanitizeProcessName(name, "process name");
   const replace = Boolean(options?.replace);
@@ -494,6 +564,115 @@ async function updateProcessEnv(name, envPatch = {}, options = {}) {
       details: {
         updatedKeys: result.data.keys,
         replace
+      }
+    });
+  }
+  return result;
+}
+
+async function readProcessDotEnv(name) {
+  const processName = sanitizeProcessName(name, "process name");
+  const result = await withPM2(async () => {
+    const { cwd } = await resolveProcessWorkingDirectory(processName);
+    const envPath = path.join(cwd, ".env");
+
+    let hasEnvFile = false;
+    try {
+      await fs.promises.access(envPath, fs.constants.R_OK);
+      hasEnvFile = true;
+    } catch (_error) {
+      hasEnvFile = false;
+    }
+
+    if (!hasEnvFile) {
+      return {
+        processName,
+        cwd,
+        envPath,
+        hasEnvFile: false,
+        entries: []
+      };
+    }
+
+    const content = await fs.promises.readFile(envPath, "utf8");
+    const parsed = parseDotEnvContent(content);
+    return {
+      processName,
+      cwd,
+      envPath,
+      hasEnvFile: true,
+      entries: parsed.entries
+    };
+  });
+  trackPm2Operation("processes.dotenv.read", result.success);
+  return result;
+}
+
+async function updateProcessDotEnv(name, payload = {}) {
+  const processName = sanitizeProcessName(name, "process name");
+  const valuesRaw = payload?.values || {};
+  if (!valuesRaw || typeof valuesRaw !== "object" || Array.isArray(valuesRaw)) {
+    return { success: false, data: null, error: "values must be an object" };
+  }
+
+  const values = {};
+  for (const [rawKey, rawValue] of Object.entries(valuesRaw)) {
+    const key = String(rawKey || "").trim();
+    if (!ENV_KEY_PATTERN.test(key)) {
+      return { success: false, data: null, error: `Invalid environment variable name: ${rawKey}` };
+    }
+    values[key] = String(rawValue ?? "");
+  }
+
+  const result = await withPM2(async () => {
+    const { cwd } = await resolveProcessWorkingDirectory(processName);
+    const envPath = path.join(cwd, ".env");
+
+    try {
+      await fs.promises.access(envPath, fs.constants.R_OK | fs.constants.W_OK);
+    } catch (_error) {
+      throw new Error(`.env file not found or not writable for ${processName}`);
+    }
+
+    const content = await fs.promises.readFile(envPath, "utf8");
+    const parsed = parseDotEnvContent(content);
+
+    let updatedCount = 0;
+    const nextLines = parsed.lines.map((line) => {
+      if (line.type !== "pair") {
+        return line.line;
+      }
+      if (!Object.prototype.hasOwnProperty.call(values, line.key)) {
+        return `${line.exportedPrefix}${line.key}=${line.value}`;
+      }
+      updatedCount += 1;
+      return `${line.exportedPrefix}${line.key}=${values[line.key]}`;
+    });
+
+    const eol = content.includes("\r\n") ? "\r\n" : "\n";
+    await fs.promises.writeFile(envPath, nextLines.join(eol), "utf8");
+
+    const nextParsed = parseDotEnvContent(nextLines.join(eol));
+    return {
+      processName,
+      cwd,
+      envPath,
+      hasEnvFile: true,
+      updatedCount,
+      entries: nextParsed.entries
+    };
+  });
+
+  trackPm2Operation("processes.dotenv.update", result.success);
+  if (result.success) {
+    await recordOperationNotification({
+      category: "operation",
+      title: `${processName} .env updated`,
+      message: `.env file updated for ${processName}`,
+      processName,
+      details: {
+        updatedKeys: Object.keys(values),
+        updatedCount: result.data.updatedCount
       }
     });
   }
@@ -1256,19 +1435,21 @@ async function getProcessCatalog() {
     return live;
   }
 
-  const withMeta = live.data.map((proc) => {
+  const withMeta = await Promise.all(live.data.map(async (proc) => {
     const meta = processMeta[proc.name] || {
       group: "",
-      tags: [],
       dependencies: [],
       alertThresholds: { cpu: null, memoryMB: null }
     };
+    const cwd = String(proc?.cwd || "").trim();
+    const hasDotEnvFile = cwd ? await pathIsReadableFile(path.join(cwd, ".env")) : false;
 
     return {
       ...proc,
-      meta
+      meta,
+      hasDotEnvFile
     };
-  });
+  }));
 
   return {
     success: true,
@@ -1343,5 +1524,7 @@ module.exports = {
   deployProcess,
   getDeploymentHistory,
   getGitCommitsForProcess,
-  rollbackProcess
+  rollbackProcess,
+  readProcessDotEnv,
+  updateProcessDotEnv
 };

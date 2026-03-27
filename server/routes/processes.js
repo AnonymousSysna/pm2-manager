@@ -24,7 +24,9 @@ const {
   deployProcess,
   getDeploymentHistory,
   getGitCommitsForProcess,
-  rollbackProcess
+  rollbackProcess,
+  readProcessDotEnv,
+  updateProcessDotEnv
 } = require("../controllers/processController");
 const { verifyToken } = require("../middleware/auth");
 const { validateProcessParam } = require("../middleware/validate");
@@ -147,6 +149,18 @@ router.post("/:name/reload", writeLimiter, validateProcessParam, asyncHandler(as
 router.patch("/:name/env", writeLimiter, validateProcessParam, asyncHandler(async (req, res) => {
   const result = await updateProcessEnv(req.params.name, req.body?.env || {}, { replace: Boolean(req.body?.replace) });
   const status = result.success ? 200 : /must|required|invalid|env/i.test(result.error || "") ? 400 : 500;
+  res.status(status).json(result);
+}));
+
+router.get("/:name/dotenv", readLimiter, validateProcessParam, asyncHandler(async (req, res) => {
+  const result = await readProcessDotEnv(req.params.name);
+  const status = result.success ? 200 : /not found|working directory|process/i.test(result.error || "") ? 404 : 500;
+  res.status(status).json(result);
+}));
+
+router.patch("/:name/dotenv", writeLimiter, validateProcessParam, asyncHandler(async (req, res) => {
+  const result = await updateProcessDotEnv(req.params.name, req.body || {});
+  const status = result.success ? 200 : /must|required|invalid|env|writable|not found/i.test(result.error || "") ? 400 : 500;
   res.status(status).json(result);
 }));
 

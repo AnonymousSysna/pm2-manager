@@ -93,6 +93,9 @@ export const processes = {
   reload: (name) => api.post(`/api/v1/processes/${encodeURIComponent(name)}/reload`).then(unwrap),
   updateEnv: (name, env, replace = false) =>
     api.patch(`/api/v1/processes/${encodeURIComponent(name)}/env`, { env, replace }).then(unwrap),
+  getDotEnv: (name) => api.get(`/api/v1/processes/${encodeURIComponent(name)}/dotenv`).then(unwrap),
+  updateDotEnv: (name, values = {}) =>
+    api.patch(`/api/v1/processes/${encodeURIComponent(name)}/dotenv`, { values }).then(unwrap),
   npmInstall: (name) => api.post(`/api/v1/processes/${encodeURIComponent(name)}/npm-install`).then(unwrap),
   npmBuild: (name) => api.post(`/api/v1/processes/${encodeURIComponent(name)}/npm-build`).then(unwrap),
   deploy: (name, payload = {}) => api.post(`/api/v1/processes/${encodeURIComponent(name)}/deploy`, payload).then(unwrap),

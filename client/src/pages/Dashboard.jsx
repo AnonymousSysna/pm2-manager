@@ -53,26 +53,6 @@ function durationLabel(ms) {
   return `${minutes}m`;
 }
 
-function parseEnvLines(text = "") {
-  const env = {};
-  const lines = String(text || "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .filter((line) => !line.startsWith("#"));
-
-  for (const line of lines) {
-    const separatorIndex = line.indexOf("=");
-    if (separatorIndex <= 0) {
-      throw new Error(`Invalid env line: ${line}`);
-    }
-    const key = line.slice(0, separatorIndex).trim();
-    const value = line.slice(separatorIndex + 1);
-    env[key] = value;
-  }
-  return env;
-}
-
 function toPath(points, width, height, accessor) {
   if (!Array.isArray(points) || points.length === 0) {
     return "";
@@ -118,16 +98,16 @@ export default function Dashboard() {
   const [selectedNames, setSelectedNames] = useState({});
   const [editingMetaProcess, setEditingMetaProcess] = useState(null);
   const [metaForm, setMetaForm] = useState({
-    tags: "",
     dependencies: "",
     cpuThreshold: "",
     memoryThreshold: ""
   });
   const [metaSaving, setMetaSaving] = useState(false);
-  const [editingEnvProcess, setEditingEnvProcess] = useState(null);
-  const [envText, setEnvText] = useState("");
-  const [envLoading, setEnvLoading] = useState(false);
-  const [envSaving, setEnvSaving] = useState(false);
+  const [dotEnvByProcess, setDotEnvByProcess] = useState({});
+  const [editingDotEnvProcess, setEditingDotEnvProcess] = useState(null);
+  const [dotEnvFields, setDotEnvFields] = useState([]);
+  const [dotEnvLoading, setDotEnvLoading] = useState(false);
+  const [dotEnvSaving, setDotEnvSaving] = useState(false);
 
   const refreshCatalog = async () => {
     try {
@@ -138,6 +118,11 @@ export default function Dashboard() {
 
       if (catalogResult.success) {
         setProcessMeta(catalogResult.data.meta || {});
+        const availability = {};
+        for (const item of catalogResult.data.processes || []) {
+          availability[item.name] = Boolean(item.hasDotEnvFile);
+        }
+        setDotEnvByProcess(availability);
       }
 
       if (summaryResult.success && Array.isArray(summaryResult.data)) {
@@ -242,10 +227,9 @@ export default function Dashboard() {
     return processes.filter(
       (item) =>
         item.name?.toLowerCase().includes(normalized) ||
-        item.status?.toLowerCase().includes(normalized) ||
-        (processMeta[item.name]?.tags || []).some((tag) => tag.includes(normalized))
+        item.status?.toLowerCase().includes(normalized)
     );
-  }, [processes, query, processMeta]);
+  }, [processes, query]);
 
   const stats = useMemo(() => {
     const online = processes.filter((p) => p.status === "online").length;
@@ -393,57 +377,71 @@ export default function Dashboard() {
     }
   };
 
-  const openEnvModal = async (proc) => {
-    setEditingEnvProcess(proc);
-    setEnvLoading(true);
-    setEnvText("");
+  const openDotEnvModal = async (proc) => {
+    if (!dotEnvByProcess[proc.name]) {
+      toast.error(`No .env file found in ${proc.name} directory`);
+      return;
+    }
+
+    setEditingDotEnvProcess(proc);
+    setDotEnvLoading(true);
+    setDotEnvFields([]);
     try {
-      const result = await processApi.get(proc.name);
+      const result = await processApi.getDotEnv(proc.name);
       if (!result.success) {
-        throw new Error(result.error || "Unable to load current env");
+        throw new Error(result.error || "Unable to load .env file");
       }
-      const currentEnv = result?.data?.pm2_env?.env || {};
-      const editableKeys = Object.keys(currentEnv)
-        .filter((key) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key))
-        .sort();
-      const defaultText = editableKeys.map((key) => `${key}=${String(currentEnv[key] ?? "")}`).join("\n");
-      setEnvText(defaultText);
+      if (!result.data?.hasEnvFile) {
+        throw new Error(".env file is missing for this process");
+      }
+      const entries = Array.isArray(result.data?.entries) ? result.data.entries : [];
+      setDotEnvFields(
+        entries.map((item) => ({
+          key: item.key,
+          value: String(item.value ?? ""),
+          valueType: item.valueType || "string"
+        }))
+      );
     } catch (error) {
-      toast.error(getErrorMessage(error, "Failed to update environment"));
-      setEditingEnvProcess(null);
+      toast.error(getErrorMessage(error, "Failed to load .env file"));
+      setEditingDotEnvProcess(null);
     } finally {
-      setEnvLoading(false);
+      setDotEnvLoading(false);
     }
   };
 
-  const submitEnvModal = async () => {
-    if (!editingEnvProcess?.name) {
+  const submitDotEnvModal = async () => {
+    if (!editingDotEnvProcess?.name) {
       return;
     }
 
     try {
-      setEnvSaving(true);
-      const nextEnv = parseEnvLines(envText);
+      setDotEnvSaving(true);
+      const values = {};
+      dotEnvFields.forEach((item) => {
+        values[item.key] = String(item.value ?? "");
+      });
+
       await toast.promise(
-        processApi.updateEnv(editingEnvProcess.name, nextEnv, true).then((response) => {
+        processApi.updateDotEnv(editingDotEnvProcess.name, values).then((response) => {
           if (!response.success) {
-            throw new Error(response.error || "Unable to update environment");
+            throw new Error(response.error || "Unable to update .env file");
           }
           return response;
         }),
         {
-          loading: `Updating env for ${editingEnvProcess.name}...`,
-          success: `Env updated for ${editingEnvProcess.name}`,
-          error: (error) => getErrorMessage(error, "Failed to update environment")
+          loading: `Updating .env for ${editingDotEnvProcess.name}...`,
+          success: `.env updated for ${editingDotEnvProcess.name}`,
+          error: (error) => getErrorMessage(error, "Failed to update .env file")
         }
       );
-      setEditingEnvProcess(null);
-      setEnvText("");
+      setEditingDotEnvProcess(null);
+      setDotEnvFields([]);
       refreshCatalog();
     } catch (error) {
-      toast.error(getErrorMessage(error, "Failed to update environment"));
+      toast.error(getErrorMessage(error, "Failed to update .env file"));
     } finally {
-      setEnvSaving(false);
+      setDotEnvSaving(false);
     }
   };
 
@@ -451,7 +449,6 @@ export default function Dashboard() {
     const current = processMeta[proc.name] || {};
     setEditingMetaProcess(proc);
     setMetaForm({
-      tags: Array.isArray(current.tags) ? current.tags.join(", ") : "",
       dependencies: Array.isArray(current.dependencies) ? current.dependencies.join(", ") : "",
       cpuThreshold:
         current.alertThresholds?.cpu === null || current.alertThresholds?.cpu === undefined
@@ -483,10 +480,6 @@ export default function Dashboard() {
     }
 
     const payload = {
-      tags: metaForm.tags
-        .split(",")
-        .map((item) => item.trim().toLowerCase())
-        .filter(Boolean),
       dependencies: metaForm.dependencies
         .split(",")
         .map((item) => item.trim())
@@ -511,6 +504,12 @@ export default function Dashboard() {
     } finally {
       setMetaSaving(false);
     }
+  };
+
+  const updateDotEnvFieldValue = (index, nextValue) => {
+    setDotEnvFields((prev) =>
+      prev.map((item, itemIndex) => (itemIndex === index ? { ...item, value: nextValue } : item))
+    );
   };
 
   return (
@@ -577,7 +576,7 @@ export default function Dashboard() {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by name, status, tag"
+            placeholder="Search by name or status"
             className="w-full md:w-80"
           />
         </div>
@@ -604,7 +603,6 @@ export default function Dashboard() {
 
         <div className="space-y-3 md:hidden">
           {filtered.map((proc) => {
-            const meta = processMeta[proc.name] || {};
             const summary = monitoringSummary[proc.name] || {};
             const anomaly = summary.anomaly || { isAnomaly: false, score: 0 };
 
@@ -633,7 +631,6 @@ export default function Dashboard() {
                   <p>Memory: {bytesToMB(proc.memory)}</p>
                   <p>Uptime: {durationLabel(summary.upMs || proc.uptime || 0)}</p>
                   <p>Restarts: {proc.restarts ?? 0}</p>
-                  <p className="col-span-2 truncate">Tags: {Array.isArray(meta.tags) && meta.tags.length > 0 ? meta.tags.join(",") : "-"}</p>
                   <p className="col-span-2">
                     Anomaly: {anomaly.isAnomaly ? `score ${anomaly.score}` : "-"}
                   </p>
@@ -679,12 +676,14 @@ export default function Dashboard() {
                     onClick={() => openMetaModal(proc)}
                     icon={<ListChecks size={14} />}
                   />
-                  <ActionButton
-                    title="Env"
-                    variant="secondary"
-                    onClick={() => openEnvModal(proc)}
-                    icon={<ScrollText size={14} />}
-                  />
+                  {dotEnvByProcess[proc.name] && (
+                    <ActionButton
+                      title="Edit .env"
+                      variant="secondary"
+                      onClick={() => openDotEnvModal(proc)}
+                      icon={<ScrollText size={14} />}
+                    />
+                  )}
                 </div>
               </article>
             );
@@ -707,7 +706,6 @@ export default function Dashboard() {
                 <th className="px-2 py-2">ID</th>
                 <th className="px-2 py-2">Name</th>
                 <th className="px-2 py-2">Status</th>
-                <th className="px-2 py-2">Tags</th>
                 <th className="px-2 py-2">CPU%</th>
                 <th className="px-2 py-2">Memory</th>
                 <th className="px-2 py-2">Uptime</th>
@@ -719,7 +717,6 @@ export default function Dashboard() {
             </thead>
             <tbody>
               {filtered.map((proc) => {
-                const meta = processMeta[proc.name] || {};
                 const summary = monitoringSummary[proc.name] || {};
                 const anomaly = summary.anomaly || { isAnomaly: false, score: 0 };
 
@@ -745,9 +742,6 @@ export default function Dashboard() {
                     </td>
                     <td className="px-2 py-3">
                       <StatusBadge status={proc.status} />
-                    </td>
-                    <td className="px-2 py-3">
-                      <p className="text-xs text-text-3">{Array.isArray(meta.tags) && meta.tags.length > 0 ? meta.tags.join(",") : "-"}</p>
                     </td>
                     <td className="px-2 py-3">
                       <div className="w-28">
@@ -804,12 +798,14 @@ export default function Dashboard() {
                           onClick={() => openMetaModal(proc)}
                           icon={<ListChecks size={14} />}
                         />
-                        <ActionButton
-                          title="Edit Env"
-                          variant="secondary"
-                          onClick={() => openEnvModal(proc)}
-                          icon={<ScrollText size={14} />}
-                        />
+                        {dotEnvByProcess[proc.name] && (
+                          <ActionButton
+                            title="Edit .env"
+                            variant="secondary"
+                            onClick={() => openDotEnvModal(proc)}
+                            icon={<ScrollText size={14} />}
+                          />
+                        )}
                         <ActionButton
                           title="NPM Install"
                           variant="secondary"
@@ -852,7 +848,7 @@ export default function Dashboard() {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td className="px-2 py-8 text-center text-text-3" colSpan={12}>
+                  <td className="px-2 py-8 text-center text-text-3" colSpan={11}>
                     No processes found.
                   </td>
                 </tr>
@@ -882,14 +878,6 @@ export default function Dashboard() {
               </Button>
             </div>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <label className="space-y-1">
-                <span className="text-xs text-text-3">Tags (comma-separated)</span>
-                <Input
-                  value={metaForm.tags}
-                  onChange={(e) => setMetaForm((prev) => ({ ...prev, tags: e.target.value }))}
-                  placeholder="api,critical,batch"
-                />
-              </label>
               <label className="space-y-1">
                 <span className="text-xs text-text-3">Dependencies (comma-separated)</span>
                 <Input
@@ -927,50 +915,68 @@ export default function Dashboard() {
         </div>
       )}
 
-      {editingEnvProcess && (
+      {editingDotEnvProcess && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <button
             type="button"
             className="absolute inset-0 bg-black/60"
-            aria-label="Close environment editor"
+            aria-label="Close .env editor"
             onClick={() => {
-              if (!envSaving) {
-                setEditingEnvProcess(null);
+              if (!dotEnvSaving) {
+                setEditingDotEnvProcess(null);
               }
             }}
           />
           <div className="relative z-10 w-full max-w-3xl rounded-lg border border-border bg-surface p-4 shadow-xl">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-text-1">Edit Environment: {editingEnvProcess.name}</h3>
+              <h3 className="text-lg font-semibold text-text-1">Edit .env: {editingDotEnvProcess.name}</h3>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                disabled={envSaving}
-                onClick={() => setEditingEnvProcess(null)}
+                disabled={dotEnvSaving}
+                onClick={() => setEditingDotEnvProcess(null)}
               >
                 <X size={18} />
               </Button>
             </div>
-            <p className="mb-2 text-xs text-text-3">Use one `KEY=VALUE` pair per line. Lines starting with `#` are ignored.</p>
-            <textarea
-              value={envText}
-              onChange={(e) => setEnvText(e.target.value)}
-              disabled={envLoading || envSaving}
-              className="h-72 w-full rounded-md border border-border bg-surface-2 p-3 font-mono text-xs text-text-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-              placeholder={envLoading ? "Loading environment..." : "NODE_ENV=production"}
-            />
+            <p className="mb-2 text-xs text-text-3">Fields are inferred from existing `.env` values.</p>
+            {dotEnvLoading ? (
+              <div className="rounded-md border border-border bg-surface-2 p-3 text-sm text-text-3">Loading .env...</div>
+            ) : (
+              <div className="max-h-80 space-y-3 overflow-y-auto rounded-md border border-border bg-surface-2 p-3">
+                {dotEnvFields.length === 0 && (
+                  <p className="text-sm text-text-3">No editable `KEY=VALUE` lines found in `.env`.</p>
+                )}
+                {dotEnvFields.map((item, index) => (
+                  <div key={`${item.key}-${index}`} className="grid grid-cols-1 gap-2 md:grid-cols-[220px,1fr] md:items-center">
+                    <label className="text-xs font-semibold text-text-2">{item.key}</label>
+                    <DotEnvValueInput
+                      valueType={item.valueType}
+                      value={item.value}
+                      disabled={dotEnvSaving}
+                      onChange={(nextValue) => updateDotEnvFieldValue(index, nextValue)}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="mt-4 flex justify-end gap-2">
-              <Button type="button" variant="secondary" disabled={envSaving} onClick={() => setEditingEnvProcess(null)}>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={dotEnvSaving}
+                onClick={() => setEditingDotEnvProcess(null)}
+              >
                 Cancel
               </Button>
               <Button
                 type="button"
                 variant="success"
-                disabled={envLoading || envSaving}
-                onClick={submitEnvModal}
+                disabled={dotEnvLoading || dotEnvSaving}
+                onClick={submitDotEnvModal}
               >
-                Save Environment
+                Save .env
               </Button>
             </div>
           </div>
@@ -1001,6 +1007,43 @@ function ActionButton({ title, icon, variant, onClick, disabled }) {
     <Button type="button" title={title} size="sm-icon" variant={variant} disabled={disabled} onClick={onClick}>
       {icon}
     </Button>
+  );
+}
+
+function DotEnvValueInput({ valueType, value, onChange, disabled }) {
+  if (valueType === "boolean") {
+    return (
+      <select
+        value={String(value).toLowerCase() === "true" ? "true" : "false"}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-text-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <option value="true">true</option>
+        <option value="false">false</option>
+      </select>
+    );
+  }
+
+  if (valueType === "integer" || valueType === "number") {
+    return (
+      <Input
+        type="number"
+        step={valueType === "integer" ? "1" : "any"}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    );
+  }
+
+  return (
+    <Input
+      type="text"
+      value={value}
+      disabled={disabled}
+      onChange={(event) => onChange(event.target.value)}
+    />
   );
 }
 
