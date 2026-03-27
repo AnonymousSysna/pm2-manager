@@ -31,6 +31,7 @@ async function copyToClipboard(text) {
 
 export default function ProcessDetailModal({ process, onClose, onAction }) {
   const [tab, setTab] = useState("Overview");
+  const [loadingAction, setLoadingAction] = useState({});
   const readingsRef = useRef([]);
 
   useEffect(() => {
@@ -78,6 +79,18 @@ export default function ProcessDetailModal({ process, onClose, onAction }) {
 
   const envVars = process?.details?.pm2_env?.env || {};
   const maxMemory = Math.max(...readingsRef.current.map((x) => x.memory || 0), 1);
+  const isOnline = process?.status === "online";
+  const isStopped = process?.status === "stopped";
+  const isCluster = process?.mode === "cluster";
+
+  const runAction = async (action, processName) => {
+    setLoadingAction((prev) => ({ ...prev, [action]: true }));
+    try {
+      await Promise.resolve(onAction(action, processName));
+    } finally {
+      setLoadingAction((prev) => ({ ...prev, [action]: false }));
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50">
@@ -163,25 +176,60 @@ export default function ProcessDetailModal({ process, onClose, onAction }) {
 
         {tab === "Quick Actions" && (
           <div className="grid grid-cols-2 gap-2">
-            <button type="button" className="rounded bg-green-600 px-3 py-2" onClick={() => onAction("start", process.name)}>
+            <button
+              type="button"
+              className="rounded bg-green-600 px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={isOnline || loadingAction.start}
+              onClick={() => runAction("start", process.name)}
+            >
               <Play className="inline" size={16} /> Start
             </button>
-            <button type="button" className="rounded bg-red-600 px-3 py-2" onClick={() => onAction("stop", process.name)}>
+            <button
+              type="button"
+              className="rounded bg-red-600 px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={isStopped || loadingAction.stop}
+              onClick={() => runAction("stop", process.name)}
+            >
               <Square className="inline" size={16} /> Stop
             </button>
-            <button type="button" className="rounded bg-blue-600 px-3 py-2" onClick={() => onAction("restart", process.name)}>
+            <button
+              type="button"
+              className="rounded bg-blue-600 px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={loadingAction.restart}
+              onClick={() => runAction("restart", process.name)}
+            >
               <RefreshCw className="inline" size={16} /> Restart
             </button>
-            <button type="button" className="rounded bg-amber-600 px-3 py-2" onClick={() => onAction("reload", process.name)}>
+            <button
+              type="button"
+              className="rounded bg-amber-600 px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={!isCluster || !isOnline || loadingAction.reload}
+              onClick={() => runAction("reload", process.name)}
+            >
               <RotateCcw className="inline" size={16} /> Reload
             </button>
-            <button type="button" className="rounded bg-cyan-700 px-3 py-2" onClick={() => onAction("npmInstall", process.name)}>
+            <button
+              type="button"
+              className="rounded bg-cyan-700 px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={loadingAction.npmInstall}
+              onClick={() => runAction("npmInstall", process.name)}
+            >
               <Download className="inline" size={16} /> NPM Install
             </button>
-            <button type="button" className="rounded bg-violet-700 px-3 py-2" onClick={() => onAction("npmBuild", process.name)}>
+            <button
+              type="button"
+              className="rounded bg-violet-700 px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={loadingAction.npmBuild}
+              onClick={() => runAction("npmBuild", process.name)}
+            >
               <Hammer className="inline" size={16} /> NPM Build
             </button>
-            <button type="button" className="col-span-2 rounded bg-rose-700 px-3 py-2" onClick={() => onAction("delete", process.name)}>
+            <button
+              type="button"
+              className="col-span-2 rounded bg-rose-700 px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={loadingAction.delete}
+              onClick={() => runAction("delete", process.name)}
+            >
               <Trash2 className="inline" size={16} /> Delete
             </button>
           </div>

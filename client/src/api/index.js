@@ -5,6 +5,18 @@ const api = axios.create({
   withCredentials: true
 });
 
+function isAuthEndpoint(url) {
+  const value = String(url || "");
+  return (
+    value.includes("/api/v1/auth/login") ||
+    value.includes("/api/v1/auth/me") ||
+    value.includes("/api/v1/auth/logout") ||
+    value.includes("/api/auth/login") ||
+    value.includes("/api/auth/me") ||
+    value.includes("/api/auth/logout")
+  );
+}
+
 function getCookie(name) {
   const cookie = document.cookie
     .split(";")
@@ -28,8 +40,12 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error?.response?.status === 401) {
-      if (window.location.pathname !== "/login") {
+    const status = error?.response?.status;
+    const requestUrl = error?.config?.url;
+    const onLoginRoute = window.location.pathname.startsWith("/login");
+
+    if (status === 401 && !isAuthEndpoint(requestUrl)) {
+      if (!onLoginRoute) {
         window.location.href = "/login";
       }
     }
