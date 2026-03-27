@@ -16,6 +16,7 @@ const {
 const { trackPm2Operation } = require("../middleware/metrics");
 const { appendHistoryEntry } = require("../utils/restartHistory");
 const { appendDeploymentHistory, listDeploymentHistory } = require("../utils/deploymentHistory");
+const { appendNotification } = require("../utils/notificationStore");
 const {
   listProcessMeta,
   setProcessMeta,
@@ -192,6 +193,38 @@ function runCommand(command, args, cwd) {
   });
 }
 
+function compactOutput(output = "") {
+  return String(output || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(-8)
+    .join("\n")
+    .slice(-2000);
+}
+
+async function recordOperationNotification({
+  category = "operation",
+  level = "info",
+  title = "PM2 operation",
+  message = "",
+  processName = null,
+  details = null
+}) {
+  try {
+    await appendNotification({
+      category,
+      level,
+      title,
+      message,
+      processName,
+      details
+    });
+  } catch (_error) {
+    // Best-effort notification append.
+  }
+}
+
 function describeProcess(name) {
   return new Promise((resolve, reject) => {
     pm2.describe(name, (error, description) => {
@@ -281,6 +314,12 @@ async function startProcess(name) {
     } catch (_error) {
       // Best-effort audit append: do not fail start operation.
     }
+    await recordOperationNotification({
+      category: "operation",
+      title: `${processName} started`,
+      message: `Start operation completed for ${processName}`,
+      processName
+    });
   }
   return result;
 }
@@ -300,6 +339,14 @@ async function stopProcess(name) {
       })
   );
   trackPm2Operation("processes.stop", result.success);
+  if (result.success) {
+    await recordOperationNotification({
+      category: "operation",
+      title: `${processName} stopped`,
+      message: `Stop operation completed for ${processName}`,
+      processName
+    });
+  }
   return result;
 }
 
@@ -328,6 +375,12 @@ async function restartProcess(name) {
     } catch (_error) {
       // Best-effort audit append: do not fail restart operation.
     }
+    await recordOperationNotification({
+      category: "operation",
+      title: `${processName} restarted`,
+      message: `Restart operation completed for ${processName}`,
+      processName
+    });
   }
   return result;
 }
@@ -347,6 +400,15 @@ async function deleteProcess(name) {
       })
   );
   trackPm2Operation("processes.delete", result.success);
+  if (result.success) {
+    await recordOperationNotification({
+      category: "operation",
+      level: "warning",
+      title: `${processName} deleted`,
+      message: `Delete operation completed for ${processName}`,
+      processName
+    });
+  }
   return result;
 }
 
@@ -515,6 +577,15 @@ async function createProcess(config) {
     });
   });
   trackPm2Operation("processes.create", result.success);
+  if (result.success) {
+    const processName = sanitizeProcessName(config?.name, "process name");
+    await recordOperationNotification({
+      category: "operation",
+      title: `${processName} created`,
+      message: `Create operation completed for ${processName}`,
+      processName
+    });
+  }
   return result;
 }
 
@@ -613,6 +684,12 @@ async function reloadProcess(name) {
     } catch (_error) {
       // Best-effort audit append: do not fail reload operation.
     }
+    await recordOperationNotification({
+      category: "operation",
+      title: `${processName} reloaded`,
+      message: `Reload operation completed for ${processName}`,
+      processName
+    });
   }
   return result;
 }
@@ -819,12 +896,203 @@ async function deployProcess(name, options = {}, actor = "unknown") {
     // Best-effort audit append.
   });
 
+  await recordOperationNotification({
+    category: "deployment",
+    level: result.success ? "info" : "danger",
+    title: result.success ? `${processName} deployed` : `${processName} deployment failed`,
+    message: result.success
+      ? `Deploy completed${branch ? ` on ${branch}` : ""}`
+      : `Deploy failed: ${result.error || "unknown error"}`,
+    processName,
+    details: result.success
+      ? {
+          branch: branch || null,
+          steps: result.data.steps.map((step) => ({
+            label: step.label,
+            success: step.success,
+            durationMs: step.durationMs
+          }))
+        }
+      : { error: result.error }
+  });
+
   return result;
 }
 
 async function getDeploymentHistory(limit = 100, processName = "") {
   const history = await listDeploymentHistory(limit, processName);
   return { success: true, data: history, error: null };
+}
+
+async function getGitCommitsForProcess(name, limit = 20) {
+  const processName = sanitizeProcessName(name, "process name");
+  const result = await withPM2(async () => {
+    const proc = await describeProcess(processName);
+    if (!proc) {
+      throw new Error(`Process not found: ${processName}`);
+    }
+
+    const cwd = proc.pm2_env?.pm_cwd;
+    let cwdStat;
+    try {
+      cwdStat = await fs.promises.stat(cwd);
+    } catch (_error) {
+      cwdStat = null;
+    }
+    if (!cwd || !cwdStat || !cwdStat.isDirectory()) {
+      throw new Error(`Cannot resolve process working directory for: ${processName}`);
+    }
+
+    const normalizedLimit = Math.max(1, Math.min(100, Number(limit) || 20));
+    await runCommand("git", ["rev-parse", "--is-inside-work-tree"], cwd);
+    const output = await runCommand(
+      "git",
+      ["log", `-n${normalizedLimit}`, "--date=iso-strict", "--pretty=format:%H|%h|%ad|%an|%s"],
+      cwd
+    );
+
+    const commits = String(output.stdout || "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [hash, shortHash, date, author, ...subjectParts] = line.split("|");
+        return {
+          hash,
+          shortHash,
+          date,
+          author,
+          subject: subjectParts.join("|")
+        };
+      });
+    return { processName, cwd, commits };
+  });
+
+  trackPm2Operation("processes.git.commits", result.success);
+  return result;
+}
+
+async function rollbackProcess(name, options = {}, actor = "unknown") {
+  const processName = sanitizeProcessName(name, "process name");
+  const targetCommit = String(options.targetCommit || "").trim();
+  const restartMode = String(options.restartMode || "restart").trim() === "reload" ? "reload" : "restart";
+
+  const result = await withPM2(async () => {
+    const proc = await describeProcess(processName);
+    if (!proc) {
+      throw new Error(`Process not found: ${processName}`);
+    }
+
+    const cwd = proc.pm2_env?.pm_cwd;
+    let cwdStat;
+    try {
+      cwdStat = await fs.promises.stat(cwd);
+    } catch (_error) {
+      cwdStat = null;
+    }
+    if (!cwd || !cwdStat || !cwdStat.isDirectory()) {
+      throw new Error(`Cannot resolve process working directory for: ${processName}`);
+    }
+
+    const steps = [];
+    const runStep = async (label, command, args) => {
+      const startedAt = Date.now();
+      try {
+        const output = await runCommand(command, args, cwd);
+        steps.push({
+          label,
+          success: true,
+          durationMs: Date.now() - startedAt,
+          output: compactOutput(output.stdout || output.stderr || "")
+        });
+        return output;
+      } catch (error) {
+        steps.push({
+          label,
+          success: false,
+          durationMs: Date.now() - startedAt,
+          error: error.message
+        });
+        throw error;
+      }
+    };
+
+    await runStep("git:check", "git", ["rev-parse", "--is-inside-work-tree"]);
+    const currentHead = await runStep("git:head", "git", ["rev-parse", "HEAD"]);
+
+    let resolvedTarget = targetCommit;
+    if (!resolvedTarget) {
+      const previousHead = await runStep("git:previous-head", "git", ["rev-parse", "HEAD~1"]);
+      resolvedTarget = String(previousHead.stdout || "").trim();
+    } else {
+      await runStep("git:verify-target", "git", ["rev-parse", "--verify", resolvedTarget]);
+    }
+
+    await runStep("git:reset", "git", ["reset", "--hard", resolvedTarget]);
+
+    if (restartMode === "reload") {
+      await new Promise((resolve, reject) => {
+        pm2.reload(processName, (error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      });
+      steps.push({ label: "pm2:reload", success: true, durationMs: 0, output: "Process reloaded" });
+    } else {
+      await new Promise((resolve, reject) => {
+        pm2.restart(processName, (error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      });
+      steps.push({ label: "pm2:restart", success: true, durationMs: 0, output: "Process restarted" });
+    }
+
+    return {
+      processName,
+      cwd,
+      fromCommit: String(currentHead.stdout || "").trim(),
+      toCommit: resolvedTarget,
+      restartMode,
+      steps
+    };
+  });
+
+  trackPm2Operation("processes.rollback", result.success);
+  await appendDeploymentHistory({
+    processName,
+    actor,
+    success: result.success,
+    branch: null,
+    installDependencies: false,
+    runBuild: false,
+    restartMode,
+    action: "rollback",
+    targetCommit: targetCommit || null,
+    steps: result.success ? result.data.steps : [],
+    error: result.success ? null : result.error
+  }).catch(() => {
+    // Best-effort audit append.
+  });
+
+  await recordOperationNotification({
+    category: "deployment",
+    level: result.success ? "warning" : "danger",
+    title: result.success ? `${processName} rolled back` : `${processName} rollback failed`,
+    message: result.success
+      ? `Rollback completed to ${result.data.toCommit.slice(0, 8)}`
+      : `Rollback failed: ${result.error || "unknown error"}`,
+    processName,
+    details: result.success ? result.data : { error: result.error, actor, targetCommit }
+  });
+
+  return result;
 }
 
 async function getProcessCatalog() {
@@ -917,5 +1185,7 @@ module.exports = {
   exportProcessConfig,
   importProcessConfig,
   deployProcess,
-  getDeploymentHistory
+  getDeploymentHistory,
+  getGitCommitsForProcess,
+  rollbackProcess
 };

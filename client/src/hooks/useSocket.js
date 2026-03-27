@@ -5,6 +5,7 @@ export function useSocket() {
   const [processes, setProcesses] = useState([]);
   const [logsByProcess, setLogsByProcess] = useState({});
   const [alerts, setAlerts] = useState([]);
+  const [notifications, setNotifications] = useState([]);
   const [connected, setConnected] = useState(false);
 
   const pollInterval = useMemo(() => {
@@ -64,10 +65,17 @@ export function useSocket() {
       setAlerts((prev) => [...prev, ...items].slice(-200));
     });
 
+    socket.on("notifications:new", (items) => {
+      if (!Array.isArray(items) || items.length === 0) {
+        return;
+      }
+      setNotifications((prev) => [...prev, ...items].slice(-400));
+    });
+
     return () => {
       socket.disconnect();
     };
   }, [pollInterval]);
 
-  return { processes, logsByProcess, alerts, connected };
+  return { processes, logsByProcess, alerts, notifications, connected };
 }

@@ -20,7 +20,9 @@ const {
   exportProcessConfig,
   importProcessConfig,
   deployProcess,
-  getDeploymentHistory
+  getDeploymentHistory,
+  getGitCommitsForProcess,
+  rollbackProcess
 } = require("../controllers/processController");
 const { verifyToken } = require("../middleware/auth");
 const { validateProcessParam } = require("../middleware/validate");
@@ -162,6 +164,21 @@ router.post("/:name/npm-build", criticalWriteLimiter, validateProcessParam, asyn
 router.post("/:name/deploy", criticalWriteLimiter, validateProcessParam, asyncHandler(async (req, res) => {
   const actor = req.user?.username || "unknown";
   const result = await deployProcess(req.params.name, req.body || {}, actor);
+  res.status(result.success ? 200 : 500).json(result);
+}));
+
+router.get("/:name/git/commits", readLimiter, validateProcessParam, asyncHandler(async (req, res) => {
+  const requested = Number(req.query.limit || 20);
+  const limit = Number.isFinite(requested)
+    ? Math.min(100, Math.max(1, Math.floor(requested)))
+    : 20;
+  const result = await getGitCommitsForProcess(req.params.name, limit);
+  res.status(result.success ? 200 : 500).json(result);
+}));
+
+router.post("/:name/rollback", criticalWriteLimiter, validateProcessParam, asyncHandler(async (req, res) => {
+  const actor = req.user?.username || "unknown";
+  const result = await rollbackProcess(req.params.name, req.body || {}, actor);
   res.status(result.success ? 200 : 500).json(result);
 }));
 

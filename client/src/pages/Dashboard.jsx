@@ -4,6 +4,7 @@ import {
   Square,
   RefreshCw,
   RotateCcw,
+  Undo2,
   ScrollText,
   Trash2,
   Download,
@@ -220,6 +221,19 @@ export default function Dashboard() {
         const runBuild = window.confirm("Run npm run build during deploy?");
         actionPayload = { branch, installDependencies, runBuild, restartMode: "restart" };
       }
+      if (action === "rollback") {
+        const commitsResult = await processApi.gitCommits(name, 10);
+        const commits = commitsResult?.success ? commitsResult.data?.commits || [] : [];
+        const commitChoices = commits
+          .slice(0, 5)
+          .map((item) => `${item.shortHash} ${item.subject}`)
+          .join("\n");
+        const targetCommit = (window.prompt(
+          `Rollback target commit (leave blank for previous commit HEAD~1)\n${commitChoices ? `Recent commits:\n${commitChoices}` : ""}`,
+          ""
+        ) ?? "").trim();
+        actionPayload = { targetCommit, restartMode: "restart" };
+      }
 
       const handlers = {
         start: processApi.start,
@@ -229,6 +243,7 @@ export default function Dashboard() {
         npmInstall: processApi.npmInstall,
         npmBuild: processApi.npmBuild,
         deploy: (processName) => processApi.deploy(processName, actionPayload || {}),
+        rollback: (processName) => processApi.rollback(processName, actionPayload || {}),
         delete: processApi.delete
       };
       const actionLabel = {
@@ -239,6 +254,7 @@ export default function Dashboard() {
         npmInstall: "NPM install",
         npmBuild: "NPM build",
         deploy: "Deploy",
+        rollback: "Rollback",
         delete: "Delete"
       }[action] || action;
 
@@ -373,7 +389,77 @@ export default function Dashboard() {
           />
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="space-y-3 md:hidden">
+          {filtered.map((proc) => {
+            const meta = processMeta[proc.name] || {};
+            const summary = monitoringSummary[proc.name] || {};
+            const anomaly = summary.anomaly || { isAnomaly: false, score: 0 };
+
+            return (
+              <article key={proc.name} className="rounded-lg border border-border bg-surface-2 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    className="text-left font-semibold text-info-300 underline-offset-2 hover:underline"
+                    onClick={() => openDetails(proc)}
+                  >
+                    {proc.name}
+                  </button>
+                  <StatusBadge status={proc.status} />
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs text-text-3">
+                  <p>CPU: {proc.cpu}%</p>
+                  <p>Memory: {bytesToMB(proc.memory)}</p>
+                  <p>Uptime: {durationLabel(summary.upMs || proc.uptime || 0)}</p>
+                  <p>Restarts: {proc.restarts ?? 0}</p>
+                  <p className="col-span-2 truncate">Tags: {Array.isArray(meta.tags) && meta.tags.length > 0 ? meta.tags.join(",") : "-"}</p>
+                  <p className="col-span-2">
+                    Anomaly: {anomaly.isAnomaly ? `score ${anomaly.score}` : "-"}
+                  </p>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-1">
+                  <ActionButton
+                    title="Start"
+                    variant="success"
+                    disabled={proc.status === "online" || loadingAction[`${proc.name}:start`]}
+                    onClick={() => callAction("start", proc.name)}
+                    icon={<Play size={14} />}
+                  />
+                  <ActionButton
+                    title="Stop"
+                    variant="danger"
+                    disabled={proc.status === "stopped" || loadingAction[`${proc.name}:stop`]}
+                    onClick={() => callAction("stop", proc.name)}
+                    icon={<Square size={14} />}
+                  />
+                  <ActionButton
+                    title="Restart"
+                    variant="info"
+                    disabled={loadingAction[`${proc.name}:restart`]}
+                    onClick={() => callAction("restart", proc.name)}
+                    icon={<RefreshCw size={14} />}
+                  />
+                  <ActionButton
+                    title="Rollback"
+                    variant="warning"
+                    disabled={loadingAction[`${proc.name}:rollback`]}
+                    onClick={() => callAction("rollback", proc.name)}
+                    icon={<Undo2 size={14} />}
+                  />
+                  <ActionButton
+                    title="Logs"
+                    variant="secondary"
+                    onClick={() => navigate(`/dashboard/logs?process=${encodeURIComponent(proc.name)}`)}
+                    icon={<ScrollText size={14} />}
+                  />
+                </div>
+              </article>
+            );
+          })}
+          {filtered.length === 0 && <p className="text-center text-sm text-text-3">No processes found.</p>}
+        </div>
+
+        <div className="hidden overflow-x-auto md:block">
           <table className="min-w-full text-sm">
             <thead className="text-left text-text-3">
               <tr>
@@ -489,6 +575,13 @@ export default function Dashboard() {
                           disabled={loadingAction[`${proc.name}:deploy`]}
                           onClick={() => callAction("deploy", proc.name)}
                           icon={<Rocket size={14} />}
+                        />
+                        <ActionButton
+                          title="Rollback"
+                          variant="warning"
+                          disabled={loadingAction[`${proc.name}:rollback`]}
+                          onClick={() => callAction("rollback", proc.name)}
+                          icon={<Undo2 size={14} />}
                         />
                         <ActionButton
                           title="Delete"

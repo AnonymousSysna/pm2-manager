@@ -231,8 +231,8 @@ export default function Logs() {
 
   return (
     <div className="space-y-4">
-      <section className="page-panel flex flex-wrap items-center gap-2">
-        <Select value={selected} onChange={(e) => setSelected(e.target.value)} className="w-48" disabled={combinedView}>
+      <section className="page-panel grid gap-2 md:grid-cols-2 xl:grid-cols-6">
+        <Select value={selected} onChange={(e) => setSelected(e.target.value)} className="w-full" disabled={combinedView}>
           <option value="">Select process</option>
           {processOptions.map((proc) => (
             <option key={proc.name} value={proc.name}>
@@ -241,7 +241,7 @@ export default function Logs() {
           ))}
         </Select>
 
-        <Select value={lineCount} onChange={(e) => setLineCount(Number(e.target.value))} className="w-28">
+        <Select value={lineCount} onChange={(e) => setLineCount(Number(e.target.value))} className="w-full">
           {[50, 100, 200, 500].map((value) => (
             <option key={value} value={value}>
               {value}
@@ -249,9 +249,9 @@ export default function Logs() {
           ))}
         </Select>
 
-        <Input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="Search logs" className="w-48" />
+        <Input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="Search logs" className="w-full xl:col-span-2" />
 
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           {[
             ["stdout", "stdout"],
             ["stderr", "stderr"],
@@ -263,7 +263,7 @@ export default function Logs() {
           ))}
         </div>
 
-        <label className="ml-1 flex items-center gap-2 text-sm text-text-2">
+        <label className="flex items-center gap-2 text-sm text-text-2">
           <input type="checkbox" checked={combinedView} onChange={(e) => setCombinedView(e.target.checked)} className="h-4 w-4" />
           Combined view
         </label>
@@ -282,7 +282,7 @@ export default function Logs() {
         </Button>
       </section>
 
-      <section ref={containerRef} className="h-[65vh] overflow-y-auto rounded-lg border border-border bg-surface p-4 font-mono text-sm">
+      <section ref={containerRef} className="h-[68vh] overflow-y-auto rounded-lg border border-border bg-surface p-3 font-mono text-xs sm:p-4 sm:text-sm">
         {!selected && !combinedView && (
           <div className="flex h-full flex-col items-center justify-center text-text-3">
             <Terminal size={36} />

@@ -6,6 +6,7 @@ import Dashboard from "./pages/Dashboard";
 import CreateProcess from "./pages/CreateProcess";
 import Logs from "./pages/Logs";
 import Settings from "./pages/Settings";
+import Notifications from "./pages/Notifications";
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="/dashboard" element={<Layout />}>
           <Route index element={<Dashboard />} />
           <Route path="create" element={<CreateProcess />} />
+          <Route path="notifications" element={<Notifications />} />
           <Route path="logs" element={<Logs />} />
           <Route path="settings" element={<Settings />} />
         </Route>

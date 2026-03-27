@@ -15,6 +15,7 @@ const { appendHistoryEntry } = require("../utils/restartHistory");
 const { listProcessMeta } = require("../utils/processMetaStore");
 const { appendMetricsSample } = require("../utils/metricsHistoryStore");
 const { sendAlertNotifications } = require("../utils/alertNotifier");
+const { appendNotification } = require("../utils/notificationStore");
 
 let busAttached = false;
 let attachInProgress = false;
@@ -86,13 +87,28 @@ function registerPM2Monitor(io) {
       const meta = await listProcessMeta();
       const alerts = await appendMetricsSample(processes, meta);
       if (alerts.length > 0) {
+        const notificationPayload = await Promise.all(
+          alerts.map((alert) =>
+            appendNotification({
+              level: alert.severity === "danger" ? "danger" : "warning",
+              category: "alert",
+              title: `${alert.processName} threshold alert`,
+              message: `${alert.metric}=${alert.value} threshold=${alert.threshold}`,
+              processName: alert.processName,
+              details: alert
+            }).catch(() => null)
+          )
+        );
+
         sendAlertNotifications(alerts).catch(() => {
           // Best-effort external alert delivery.
         });
         if (socket) {
           socket.emit("monitor:alerts", alerts);
+          socket.emit("notifications:new", notificationPayload.filter(Boolean));
         } else {
           io.emit("monitor:alerts", alerts);
+          io.emit("notifications:new", notificationPayload.filter(Boolean));
         }
       }
     } catch (_error) {
@@ -248,6 +264,18 @@ function registerPM2Monitor(io) {
               event,
               source: "pm2-bus"
             });
+            const notification = await appendNotification({
+              level: event === "exit" ? "warning" : "info",
+              category: "lifecycle",
+              title: `${processName} ${event}`,
+              message: `PM2 reported ${event} for ${processName}`,
+              processName,
+              details: {
+                source: "pm2-bus",
+                event
+              }
+            });
+            io.emit("notifications:new", [notification]);
           } catch (_error) {
             // Best-effort history append.
           }

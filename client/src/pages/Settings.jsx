@@ -271,16 +271,6 @@ export default function Settings() {
       </section>
 
       <section className="page-panel">
-        <h2 className="section-title mb-3">Keyboard Shortcuts</h2>
-        <div className="grid gap-1 text-sm text-text-2 md:grid-cols-2">
-          <p><code>g p</code> Go to Processes</p>
-          <p><code>g l</code> Go to Logs</p>
-          <p><code>g c</code> Go to Create Process</p>
-          <p><code>g s</code> Go to Settings</p>
-        </div>
-      </section>
-
-      <section className="page-panel">
         <h2 className="section-title mb-3">Process Config Export / Import</h2>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" onClick={exportConfig}>
@@ -348,11 +338,14 @@ export default function Settings() {
             .map((item, idx) => (
               <div key={`${item.ts}-${idx}`} className="rounded border border-border p-2">
                 <p className="text-text-1">
-                  {item.processName} by {item.actor || "unknown"} {item.success ? "succeeded" : "failed"}
+                  {item.processName} {item.action === "rollback" ? "rollback" : "deployment"} by {item.actor || "unknown"} {item.success ? "succeeded" : "failed"}
                 </p>
                 <p className="text-xs text-text-3">
                   {new Date(item.ts).toLocaleString()} {item.branch ? ` branch:${item.branch}` : ""}
                 </p>
+                {item.action === "rollback" && item.targetCommit && (
+                  <p className="text-xs text-text-3">target commit: {String(item.targetCommit).slice(0, 12)}</p>
+                )}
                 {!item.success && item.error && <p className="text-xs text-danger-300">{item.error}</p>}
               </div>
             ))}

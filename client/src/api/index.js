@@ -82,6 +82,8 @@ export const processes = {
         }`
       )
       .then(unwrap),
+  gitCommits: (name, limit = 20) =>
+    api.get(`/api/v1/processes/${encodeURIComponent(name)}/git/commits?limit=${encodeURIComponent(limit)}`).then(unwrap),
   get: (name) => api.get(`/api/v1/processes/${encodeURIComponent(name)}`).then(unwrap),
   create: (config) => api.post("/api/v1/processes/create", config).then(unwrap),
   start: (name) => api.post(`/api/v1/processes/${encodeURIComponent(name)}/start`).then(unwrap),
@@ -91,6 +93,7 @@ export const processes = {
   npmInstall: (name) => api.post(`/api/v1/processes/${encodeURIComponent(name)}/npm-install`).then(unwrap),
   npmBuild: (name) => api.post(`/api/v1/processes/${encodeURIComponent(name)}/npm-build`).then(unwrap),
   deploy: (name, payload = {}) => api.post(`/api/v1/processes/${encodeURIComponent(name)}/deploy`, payload).then(unwrap),
+  rollback: (name, payload = {}) => api.post(`/api/v1/processes/${encodeURIComponent(name)}/rollback`, payload).then(unwrap),
   delete: (name) => api.delete(`/api/v1/processes/${encodeURIComponent(name)}`).then(unwrap),
   logs: (name, lines = 100) => api.get(`/api/v1/processes/${encodeURIComponent(name)}/logs?lines=${lines}`).then(unwrap),
   flush: (name) => api.post(`/api/v1/processes/${encodeURIComponent(name)}/flush`).then(unwrap)
@@ -107,7 +110,9 @@ export const alerts = {
   listChannels: () => api.get("/api/v1/alerts/channels").then(unwrap),
   saveChannel: (payload) => api.post("/api/v1/alerts/channels", payload).then(unwrap),
   deleteChannel: (id) => api.delete(`/api/v1/alerts/channels/${encodeURIComponent(id)}`).then(unwrap),
-  testChannel: (id) => api.post(`/api/v1/alerts/channels/${encodeURIComponent(id)}/test`).then(unwrap)
+  testChannel: (id) => api.post(`/api/v1/alerts/channels/${encodeURIComponent(id)}/test`).then(unwrap),
+  history: (limit = 200) => api.get(`/api/v1/alerts/history?limit=${encodeURIComponent(limit)}`).then(unwrap),
+  clearHistory: () => api.delete("/api/v1/alerts/history").then(unwrap)
 };
 
 export default api;
