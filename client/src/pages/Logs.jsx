@@ -7,6 +7,7 @@ import { useSocket } from "../hooks/useSocket";
 import Button from "../components/ui/Button";
 import Select from "../components/ui/Select";
 import Input from "../components/ui/Input";
+import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 
 function levelFromLine(line) {
   const text = String(line || "").toUpperCase();
@@ -231,6 +232,11 @@ export default function Logs() {
 
   return (
     <div className="space-y-4">
+      <PageIntro
+        title="Logs"
+        description="Stream, filter, and export process logs with consistent controls across single-process and combined views."
+      />
+
       <section className="page-panel grid gap-2 md:grid-cols-2 xl:grid-cols-6">
         <Select value={selected} onChange={(e) => setSelected(e.target.value)} className="w-full" disabled={combinedView}>
           <option value="">Select process</option>
@@ -283,6 +289,7 @@ export default function Logs() {
       </section>
 
       <section ref={containerRef} className="h-[68vh] overflow-y-auto rounded-lg border border-border bg-surface p-3 font-mono text-xs sm:p-4 sm:text-sm">
+        <PanelHeader title="Log Stream" className="mb-3 font-sans" />
         {!selected && !combinedView && (
           <div className="flex h-full flex-col items-center justify-center text-text-3">
             <Terminal size={36} />

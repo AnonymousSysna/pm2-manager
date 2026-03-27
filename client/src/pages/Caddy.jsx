@@ -3,6 +3,7 @@ import { caddy as caddyApi } from "../api";
 import toast, { getErrorMessage } from "../lib/toast";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
+import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 
 export default function Caddy() {
   const [loading, setLoading] = useState(true);
@@ -76,14 +77,13 @@ export default function Caddy() {
 
   return (
     <div className="space-y-4">
-      <section className="page-panel">
-        <h2 className="section-title mb-1">Caddy Reverse Proxy</h2>
-        <p className="text-sm text-text-3">
-          Configure domain routing in one place and push updates to Caddy.
-        </p>
-      </section>
+      <PageIntro
+        title="Caddy Reverse Proxy"
+        description="Configure domain routing in one place and push updates to Caddy."
+      />
 
       <section className="page-panel space-y-3">
+        <PanelHeader title="Caddy Service" />
         <div className="text-sm text-text-2">
           <p>
             Caddy status:{" "}
@@ -135,7 +135,7 @@ export default function Caddy() {
       </section>
 
       <section className="page-panel">
-        <h3 className="section-title mb-2">Managed Domains</h3>
+        <PanelHeader title="Managed Domains" className="mb-2" />
         {loading && <p className="text-sm text-text-3">Loading...</p>}
         {!loading && (!Array.isArray(status.managedSites) || status.managedSites.length === 0) && (
           <p className="text-sm text-text-3">No managed domains yet.</p>

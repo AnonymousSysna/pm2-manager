@@ -3,6 +3,7 @@ import { DownloadCloud, PackageCheck } from "lucide-react";
 import { caddy as caddyApi } from "../api";
 import toast, { getErrorMessage } from "../lib/toast";
 import Button from "../components/ui/Button";
+import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 
 export default function Extensions() {
   const [loading, setLoading] = useState(true);
@@ -52,12 +53,13 @@ export default function Extensions() {
 
   return (
     <div className="space-y-4">
-      <section className="page-panel">
-        <h2 className="section-title mb-1">Extensions</h2>
-        <p className="text-sm text-text-3">Install and manage optional components from this dashboard.</p>
-      </section>
+      <PageIntro
+        title="Extensions"
+        description="Install and manage optional components from this dashboard."
+      />
 
       <section className="page-panel">
+        <PanelHeader title="Available Extensions" className="mb-3" />
         <div className="flex flex-wrap items-center gap-3">
           <div className="rounded-md border border-border bg-surface-2 p-2">
             <PackageCheck className="text-brand-400" size={22} />

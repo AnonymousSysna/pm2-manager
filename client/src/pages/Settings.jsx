@@ -4,6 +4,7 @@ import { auth, pm2Admin, processes as processApi, alerts as alertsApi } from "..
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
 import Select from "../components/ui/Select";
+import { PageIntro } from "../components/ui/PageLayout";
 
 export default function Settings() {
   const [info, setInfo] = useState({ pm2Version: "-", nodeVersion: "-", pm2Home: "-" });
@@ -216,6 +217,11 @@ export default function Settings() {
 
   return (
     <div className="space-y-4">
+      <PageIntro
+        title="Settings"
+        description="Manage PM2 daemon controls, dashboard preferences, alert channels, and account security."
+      />
+
       <section className="page-panel">
         <h2 className="section-title mb-3">PM2 Daemon Controls</h2>
         <div className="flex flex-wrap gap-2">

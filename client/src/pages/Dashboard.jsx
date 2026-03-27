@@ -25,6 +25,7 @@ import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
 import ProgressBar from "../components/ui/ProgressBar";
 import Select from "../components/ui/Select";
+import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 
 function bytesToMB(value) {
   return `${(Number(value || 0) / 1024 / 1024).toFixed(1)} MB`;
@@ -555,6 +556,11 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-4">
+      <PageIntro
+        title="Operations Dashboard"
+        description="Monitor process health, inspect activity, and run lifecycle actions from a single control surface."
+      />
+
       <section className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <StatCard label="Total Processes" value={stats.total} tone="neutral" />
         <StatCard label="Online" value={stats.online} tone="success" />
@@ -564,7 +570,7 @@ export default function Dashboard() {
 
       <section>
         <div className="page-panel space-y-3">
-          <h2 className="section-title">CPU / Memory History</h2>
+          <PanelHeader title="CPU / Memory History" />
           <Select
             value={chartProcess}
             onChange={(e) => setChartProcess(e.target.value)}
@@ -592,7 +598,7 @@ export default function Dashboard() {
       </section>
 
       <section className="page-panel">
-        <h2 className="section-title mb-2">Threshold Alerts</h2>
+        <PanelHeader title="Threshold Alerts" className="mb-2" />
         {alerts.length === 0 && <p className="text-sm text-text-3">No alerts yet.</p>}
         <div className="max-h-40 space-y-1 overflow-y-auto text-sm">
           {alerts
@@ -612,7 +618,7 @@ export default function Dashboard() {
       </section>
 
       <section className="page-panel">
-        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="mb-4 panel-title-row">
           <h2 className="section-title">Process List</h2>
           <Input
             value={query}

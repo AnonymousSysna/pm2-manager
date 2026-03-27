@@ -5,6 +5,7 @@ import { processes } from "../api";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
 import Select from "../components/ui/Select";
+import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 
 const defaultEnvRow = { key: "", value: "" };
 const TEMPLATE_STORAGE_KEY = "pm2_process_templates_v1";
@@ -254,7 +255,13 @@ export default function CreateProcess() {
 
   return (
     <section className="mx-auto max-w-3xl space-y-4">
+      <PageIntro
+        title="Create Process"
+        description="Define runtime mode, startup behavior, and environment settings with one consistent workflow."
+      />
+
       <div className="page-panel">
+        <PanelHeader title="Templates & Mode" className="mb-3" />
         <div className="mb-4 grid gap-2 rounded border border-border bg-surface-2 p-3 md:grid-cols-[1fr,auto,auto,auto]">
           <Select value={selectedTemplate} onChange={(e) => {
             const value = e.target.value;

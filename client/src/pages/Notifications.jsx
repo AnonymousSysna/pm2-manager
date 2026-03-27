@@ -6,6 +6,7 @@ import { useSocket } from "../hooks/useSocket";
 import Button from "../components/ui/Button";
 import Select from "../components/ui/Select";
 import Input from "../components/ui/Input";
+import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 
 function levelIcon(level) {
   const normalized = String(level || "").toLowerCase();
@@ -96,6 +97,11 @@ export default function Notifications() {
 
   return (
     <div className="space-y-4">
+      <PageIntro
+        title="Notifications"
+        description="Review live and historical system events with level/category filters in a single timeline."
+      />
+
       <section className="page-panel">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-2">
@@ -132,6 +138,7 @@ export default function Notifications() {
       </section>
 
       <section className="page-panel">
+        <PanelHeader title="Event Timeline" className="mb-3" />
         <div className="max-h-[68vh] space-y-2 overflow-y-auto pr-1">
           {visible.length === 0 && (
             <div className="flex flex-col items-center justify-center py-12 text-text-3">
