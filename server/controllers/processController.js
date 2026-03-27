@@ -39,6 +39,19 @@ const LOG_TAIL_MAX_BYTES = Number.isFinite(Number(process.env.LOG_TAIL_MAX_BYTES
   : 1024 * 1024;
 const PROJECTS_ROOT = path.resolve(process.env.PROJECTS_ROOT || process.cwd());
 
+function getDotEnvAllowedRoot() {
+  const base = path.resolve(PROJECTS_ROOT);
+  const baseName = path.basename(base).toLowerCase();
+  return baseName === "apps" ? base : path.resolve(base, "apps");
+}
+
+function isPathInside(basePath, targetPath) {
+  const resolvedBase = path.resolve(basePath);
+  const resolvedTarget = path.resolve(targetPath);
+  const relative = path.relative(resolvedBase, resolvedTarget);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
 function extractMissingModule(message = "") {
   const match = String(message).match(/Cannot find module ['"]([^'"]+)['"]/i);
   return match ? match[1] : "";
@@ -267,6 +280,15 @@ async function resolveProcessWorkingDirectory(processName) {
   }
 
   return { proc, cwd: path.resolve(cwd) };
+}
+
+async function resolveDotEnvEditableDirectory(processName) {
+  const { proc, cwd } = await resolveProcessWorkingDirectory(processName);
+  const allowedRoot = getDotEnvAllowedRoot();
+  if (!isPathInside(allowedRoot, cwd)) {
+    throw new Error(`.env editing is restricted to ${allowedRoot}`);
+  }
+  return { proc, cwd, allowedRoot };
 }
 
 function findPort(env = {}) {
@@ -573,7 +595,7 @@ async function updateProcessEnv(name, envPatch = {}, options = {}) {
 async function readProcessDotEnv(name) {
   const processName = sanitizeProcessName(name, "process name");
   const result = await withPM2(async () => {
-    const { cwd } = await resolveProcessWorkingDirectory(processName);
+    const { cwd, allowedRoot } = await resolveDotEnvEditableDirectory(processName);
     const envPath = path.join(cwd, ".env");
 
     let hasEnvFile = false;
@@ -588,6 +610,7 @@ async function readProcessDotEnv(name) {
       return {
         processName,
         cwd,
+        allowedRoot,
         envPath,
         hasEnvFile: false,
         entries: []
@@ -599,6 +622,7 @@ async function readProcessDotEnv(name) {
     return {
       processName,
       cwd,
+      allowedRoot,
       envPath,
       hasEnvFile: true,
       entries: parsed.entries
@@ -625,7 +649,7 @@ async function updateProcessDotEnv(name, payload = {}) {
   }
 
   const result = await withPM2(async () => {
-    const { cwd } = await resolveProcessWorkingDirectory(processName);
+    const { cwd, allowedRoot } = await resolveDotEnvEditableDirectory(processName);
     const envPath = path.join(cwd, ".env");
 
     try {
@@ -656,6 +680,7 @@ async function updateProcessDotEnv(name, payload = {}) {
     return {
       processName,
       cwd,
+      allowedRoot,
       envPath,
       hasEnvFile: true,
       updatedCount,
@@ -1442,7 +1467,10 @@ async function getProcessCatalog() {
       alertThresholds: { cpu: null, memoryMB: null }
     };
     const cwd = String(proc?.cwd || "").trim();
-    const hasDotEnvFile = cwd ? await pathIsReadableFile(path.join(cwd, ".env")) : false;
+    const allowedRoot = getDotEnvAllowedRoot();
+    const hasDotEnvFile = cwd && isPathInside(allowedRoot, cwd)
+      ? await pathIsReadableFile(path.join(cwd, ".env"))
+      : false;
 
     return {
       ...proc,

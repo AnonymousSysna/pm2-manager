@@ -154,13 +154,25 @@ router.patch("/:name/env", writeLimiter, validateProcessParam, asyncHandler(asyn
 
 router.get("/:name/dotenv", readLimiter, validateProcessParam, asyncHandler(async (req, res) => {
   const result = await readProcessDotEnv(req.params.name);
-  const status = result.success ? 200 : /not found|working directory|process/i.test(result.error || "") ? 404 : 500;
+  const status = result.success
+    ? 200
+    : /restricted/i.test(result.error || "")
+      ? 403
+      : /not found|working directory|process/i.test(result.error || "")
+        ? 404
+        : 500;
   res.status(status).json(result);
 }));
 
 router.patch("/:name/dotenv", writeLimiter, validateProcessParam, asyncHandler(async (req, res) => {
   const result = await updateProcessDotEnv(req.params.name, req.body || {});
-  const status = result.success ? 200 : /must|required|invalid|env|writable|not found/i.test(result.error || "") ? 400 : 500;
+  const status = result.success
+    ? 200
+    : /restricted/i.test(result.error || "")
+      ? 403
+      : /must|required|invalid|env|writable|not found/i.test(result.error || "")
+        ? 400
+        : 500;
   res.status(status).json(result);
 }));
 
