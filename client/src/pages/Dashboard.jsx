@@ -109,6 +109,14 @@ export default function Dashboard() {
   const [dotEnvFields, setDotEnvFields] = useState([]);
   const [dotEnvLoading, setDotEnvLoading] = useState(false);
   const [dotEnvSaving, setDotEnvSaving] = useState(false);
+  const [deployingProcess, setDeployingProcess] = useState(null);
+  const [deployForm, setDeployForm] = useState({
+    branch: "",
+    installDependencies: true,
+    runBuild: true,
+    restartMode: "restart"
+  });
+  const [deploySubmitting, setDeploySubmitting] = useState(false);
 
   const refreshCatalog = async () => {
     try {
@@ -244,7 +252,7 @@ export default function Dashboard() {
     [selectedNames]
   );
 
-  const callAction = async (action, name) => {
+  const callAction = async (action, name, overridePayload) => {
     const confirmed = action !== "delete" || window.confirm(`Delete process ${name}?`);
     if (!confirmed) {
       return;
@@ -254,10 +262,7 @@ export default function Dashboard() {
     try {
       let actionPayload = undefined;
       if (action === "deploy") {
-        const branch = window.prompt("Deploy branch (leave blank for current branch)", "") ?? "";
-        const installDependencies = window.confirm("Run npm install during deploy?");
-        const runBuild = window.confirm("Run npm run build during deploy?");
-        actionPayload = { branch, installDependencies, runBuild, restartMode: "restart" };
+        actionPayload = overridePayload || {};
       }
       if (action === "rollback") {
         const commitsResult = await processApi.gitCommits(name, 10);
@@ -314,6 +319,35 @@ export default function Dashboard() {
       // Toast handled by toast.promise.
     } finally {
       setLoadingAction((prev) => ({ ...prev, [`${name}:${action}`]: false }));
+    }
+  };
+
+  const openDeployModal = (proc) => {
+    setDeployingProcess(proc);
+    setDeployForm({
+      branch: "",
+      installDependencies: true,
+      runBuild: true,
+      restartMode: "restart"
+    });
+  };
+
+  const submitDeployModal = async () => {
+    if (!deployingProcess?.name) {
+      return;
+    }
+
+    try {
+      setDeploySubmitting(true);
+      await callAction("deploy", deployingProcess.name, {
+        branch: String(deployForm.branch || "").trim(),
+        installDependencies: Boolean(deployForm.installDependencies),
+        runBuild: Boolean(deployForm.runBuild),
+        restartMode: deployForm.restartMode === "reload" ? "reload" : "restart"
+      });
+      setDeployingProcess(null);
+    } finally {
+      setDeploySubmitting(false);
     }
   };
 
@@ -714,6 +748,13 @@ export default function Dashboard() {
                     icon={<RefreshCw size={14} />}
                   />
                   <ActionButton
+                    title="Deploy"
+                    variant="info"
+                    disabled={loadingAction[`${proc.name}:deploy`]}
+                    onClick={() => openDeployModal(proc)}
+                    icon={<Rocket size={14} />}
+                  />
+                  <ActionButton
                     title="Rollback"
                     variant="warning"
                     disabled={loadingAction[`${proc.name}:rollback`]}
@@ -874,7 +915,7 @@ export default function Dashboard() {
                           title="Deploy"
                           variant="info"
                           disabled={loadingAction[`${proc.name}:deploy`]}
-                          onClick={() => callAction("deploy", proc.name)}
+                          onClick={() => openDeployModal(proc)}
                           icon={<Rocket size={14} />}
                         />
                         <ActionButton
@@ -910,6 +951,90 @@ export default function Dashboard() {
 
       {selectedProcess && (
         <ProcessDetailModal process={selectedProcess} onClose={() => setSelectedProcess(null)} onAction={callAction} />
+      )}
+
+      {deployingProcess && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/60"
+            aria-label="Close deploy editor"
+            onClick={() => {
+              if (!deploySubmitting) {
+                setDeployingProcess(null);
+              }
+            }}
+          />
+          <div className="relative z-10 w-full max-w-xl rounded-lg border border-border bg-surface p-4 shadow-xl">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-text-1">Deploy: {deployingProcess.name}</h3>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                disabled={deploySubmitting}
+                onClick={() => setDeployingProcess(null)}
+              >
+                <X size={18} />
+              </Button>
+            </div>
+            <div className="space-y-3">
+              <label className="space-y-1">
+                <span className="text-xs text-text-3">Branch (optional)</span>
+                <Input
+                  value={deployForm.branch}
+                  onChange={(e) => setDeployForm((prev) => ({ ...prev, branch: e.target.value }))}
+                  placeholder="leave blank for current branch"
+                  disabled={deploySubmitting}
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm text-text-2">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-brand-500"
+                  checked={deployForm.installDependencies}
+                  disabled={deploySubmitting}
+                  onChange={(e) => setDeployForm((prev) => ({ ...prev, installDependencies: e.target.checked }))}
+                />
+                Run npm install
+              </label>
+              <label className="flex items-center gap-2 text-sm text-text-2">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-brand-500"
+                  checked={deployForm.runBuild}
+                  disabled={deploySubmitting}
+                  onChange={(e) => setDeployForm((prev) => ({ ...prev, runBuild: e.target.checked }))}
+                />
+                Run npm run build
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs text-text-3">After deploy</span>
+                <Select
+                  value={deployForm.restartMode}
+                  onChange={(e) => setDeployForm((prev) => ({ ...prev, restartMode: e.target.value }))}
+                  disabled={deploySubmitting}
+                >
+                  <option value="restart">Restart</option>
+                  <option value="reload">Reload</option>
+                </Select>
+              </label>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button type="button" variant="secondary" disabled={deploySubmitting} onClick={() => setDeployingProcess(null)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="outlineInfo"
+                disabled={deploySubmitting || loadingAction[`${deployingProcess.name}:deploy`]}
+                onClick={submitDeployModal}
+              >
+                Deploy
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {editingMetaProcess && (
