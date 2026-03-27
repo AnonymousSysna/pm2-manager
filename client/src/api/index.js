@@ -84,6 +84,10 @@ export const processes = {
       .then(unwrap),
   gitCommits: (name, limit = 20) =>
     api.get(`/api/v1/processes/${encodeURIComponent(name)}/git/commits?limit=${encodeURIComponent(limit)}`).then(unwrap),
+  gitStatus: (name) =>
+    api.get(`/api/v1/processes/${encodeURIComponent(name)}/git/status`).then(unwrap),
+  gitPull: (name) =>
+    api.post(`/api/v1/processes/${encodeURIComponent(name)}/git/pull`).then(unwrap),
   get: (name) => api.get(`/api/v1/processes/${encodeURIComponent(name)}`).then(unwrap),
   create: (config) => api.post("/api/v1/processes/create", config).then(unwrap),
   bulkAction: (action, names = []) => api.post("/api/v1/processes/bulk-action", { action, names }).then(unwrap),

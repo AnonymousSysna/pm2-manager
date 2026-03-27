@@ -81,10 +81,17 @@ export default function ProcessDetailModal({ process, onClose, onAction }) {
   }
 
   const envVars = process?.details?.pm2_env?.env || {};
+  const gitStatus = process?.gitStatus || null;
   const maxMemory = Math.max(...readingsRef.current.map((x) => x.memory || 0), 1);
   const isOnline = process?.status === "online";
   const isStopped = process?.status === "stopped";
   const isCluster = process?.mode === "cluster";
+  const canGitPull = Boolean(
+    gitStatus?.isGitRepo &&
+    gitStatus?.upstream &&
+    gitStatus?.cleanWorkingTree &&
+    Number(gitStatus?.behind || 0) > 0
+  );
 
   const runAction = async (action, processName) => {
     setLoadingAction((prev) => ({ ...prev, [action]: true }));
@@ -115,13 +122,32 @@ export default function ProcessDetailModal({ process, onClose, onAction }) {
         </div>
 
         {tab === "Overview" && (
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            {Object.entries(details).map(([key, value]) => (
-              <div key={key} className="rounded-md border border-border bg-surface-2 p-2">
-                <p className="text-xs uppercase text-text-3">{key}</p>
-                <p className="break-all text-text-1">{String(value ?? "-")}</p>
-              </div>
-            ))}
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              {Object.entries(details).map(([key, value]) => (
+                <div key={key} className="rounded-md border border-border bg-surface-2 p-2">
+                  <p className="text-xs uppercase text-text-3">{key}</p>
+                  <p className="break-all text-text-1">{String(value ?? "-")}</p>
+                </div>
+              ))}
+            </div>
+            <div className="rounded-md border border-border bg-surface-2 p-3 text-sm">
+              <p className="mb-2 text-xs uppercase text-text-3">Git</p>
+              {!gitStatus && <p className="text-text-3">Status not loaded.</p>}
+              {gitStatus && !gitStatus.isGitRepo && <p className="text-text-3">Not a git repository.</p>}
+              {gitStatus?.isGitRepo && (
+                <div className="space-y-1 text-text-2">
+                  <p>Branch: {gitStatus.branch || "-"}</p>
+                  <p>Commit: {gitStatus.localShortCommit || "-"}</p>
+                  <p>Upstream: {gitStatus.upstream || "-"}</p>
+                  <p>
+                    Sync: behind {gitStatus.behind ?? 0}, ahead {gitStatus.ahead ?? 0}
+                    {gitStatus.upToDate ? " (up to date)" : ""}
+                  </p>
+                  <p>Working tree: {gitStatus.cleanWorkingTree ? "clean" : "has local changes"}</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -212,6 +238,13 @@ export default function ProcessDetailModal({ process, onClose, onAction }) {
               variant="secondary"
               disabled={loadingAction.npmBuild}
               onClick={() => runAction("npmBuild", process.name)}
+            />
+            <QuickAction
+              label="Git Pull"
+              icon={Download}
+              variant="secondary"
+              disabled={!canGitPull || loadingAction.gitPull}
+              onClick={() => runAction("gitPull", process.name)}
             />
             <Button
               type="button"

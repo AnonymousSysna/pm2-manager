@@ -217,10 +217,14 @@ export default function Dashboard() {
 
   const openDetails = async (proc) => {
     try {
-      const result = await processApi.get(proc.name);
+      const [result, gitStatusResult] = await Promise.all([
+        processApi.get(proc.name),
+        processApi.gitStatus(proc.name)
+      ]);
       setSelectedProcess({
         ...proc,
-        details: result.success ? result.data : null
+        details: result.success ? result.data : null,
+        gitStatus: gitStatusResult?.success ? gitStatusResult.data : null
       });
     } catch (_error) {
       setSelectedProcess(proc);
@@ -285,6 +289,7 @@ export default function Dashboard() {
         reload: processApi.reload,
         npmInstall: processApi.npmInstall,
         npmBuild: processApi.npmBuild,
+        gitPull: processApi.gitPull,
         deploy: (processName) => processApi.deploy(processName, actionPayload || {}),
         rollback: (processName) => processApi.rollback(processName, actionPayload || {}),
         delete: processApi.delete
@@ -296,6 +301,7 @@ export default function Dashboard() {
         reload: "Reload",
         npmInstall: "NPM install",
         npmBuild: "NPM build",
+        gitPull: "Git pull",
         deploy: "Deploy",
         rollback: "Rollback",
         delete: "Delete"
@@ -315,6 +321,10 @@ export default function Dashboard() {
         }
       );
       refreshCatalog();
+      if (selectedProcess?.name === name) {
+        const latest = processes.find((item) => item.name === name) || selectedProcess;
+        openDetails(latest);
+      }
     } catch (_error) {
       // Toast handled by toast.promise.
     } finally {
@@ -761,6 +771,13 @@ export default function Dashboard() {
                     onClick={() => callAction("rollback", proc.name)}
                     icon={<Undo2 size={14} />}
                   />
+                  <ActionButton
+                    title="Git Pull"
+                    variant="secondary"
+                    disabled={loadingAction[`${proc.name}:gitPull`]}
+                    onClick={() => callAction("gitPull", proc.name)}
+                    icon={<Download size={14} />}
+                  />
                 </div>
               </article>
             );
@@ -924,6 +941,13 @@ export default function Dashboard() {
                           disabled={loadingAction[`${proc.name}:rollback`]}
                           onClick={() => callAction("rollback", proc.name)}
                           icon={<Undo2 size={14} />}
+                        />
+                        <ActionButton
+                          title="Git Pull"
+                          variant="secondary"
+                          disabled={loadingAction[`${proc.name}:gitPull`]}
+                          onClick={() => callAction("gitPull", proc.name)}
+                          icon={<Download size={14} />}
                         />
                         <ActionButton
                           title="Delete"
