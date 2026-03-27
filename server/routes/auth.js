@@ -7,7 +7,7 @@ const { verifyToken } = require("../middleware/auth");
 const { isIpAllowed, getRequestIp } = require("../utils/ipAccess");
 const { AUTH_COOKIE_NAME } = require("../middleware/auth");
 const { asyncHandler } = require("../middleware/asyncHandler");
-const { setCsrfCookie, CSRF_COOKIE_NAME } = require("../middleware/csrf");
+const { setCsrfCookie, CSRF_COOKIE_NAME, shouldUseSecureCookies } = require("../middleware/csrf");
 const { logger } = require("../utils/logger");
 const { getAttempt, setAttempt, clearAttempt } = require("../utils/loginAttemptsStore");
 
@@ -123,7 +123,7 @@ router.post("/login", asyncHandler(async (req, res) => {
     { expiresIn: "24h" }
   );
 
-  const secureCookie = String(process.env.NODE_ENV || "").trim() === "production";
+  const secureCookie = shouldUseSecureCookies(req);
   res.cookie(AUTH_COOKIE_NAME, token, {
     httpOnly: true,
     secure: secureCookie,
@@ -131,7 +131,7 @@ router.post("/login", asyncHandler(async (req, res) => {
     maxAge: 24 * 60 * 60 * 1000,
     path: "/"
   });
-  setCsrfCookie(res);
+  setCsrfCookie(res, req);
   logger.info("auth_login_success", { username, ip });
 
   return res.json({ success: true, data: { authenticated: true }, error: null });
@@ -169,7 +169,7 @@ router.post("/change-password", verifyToken, asyncHandler(async (req, res) => {
 }));
 
 router.get("/me", verifyToken, asyncHandler(async (req, res) => {
-  setCsrfCookie(res);
+  setCsrfCookie(res, req);
   return res.json({
     success: true,
     data: {
@@ -183,7 +183,7 @@ router.get("/me", verifyToken, asyncHandler(async (req, res) => {
 }));
 
 router.post("/logout", verifyToken, asyncHandler(async (req, res) => {
-  const secureCookie = String(process.env.NODE_ENV || "").trim() === "production";
+  const secureCookie = shouldUseSecureCookies(req);
   res.clearCookie(AUTH_COOKIE_NAME, {
     httpOnly: true,
     secure: secureCookie,

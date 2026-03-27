@@ -36,6 +36,7 @@ JWT_SECRET=replace_with_long_random_secret
 PORT=8000
 AUTH_ALLOWED_IPS=203.0.113.10
 TRUST_PROXY=1
+COOKIE_SECURE=
 CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 PROJECTS_ROOT=D:/apps
 COMMAND_TIMEOUT_MS=300000
@@ -50,6 +51,7 @@ METRICS_TOKEN=replace_with_long_random_token
 If set, only those IPs can log in or use authenticated API/socket endpoints.
 Use `TRUST_PROXY=1` when running behind Nginx/Cloudflare so real client IP is detected.
 `CORS_ALLOWED_ORIGINS` is a comma-separated list of allowed browser origins.
+`COOKIE_SECURE` is optional: leave empty for auto-detect from request protocol, or set `true`/`false` to force.
 
 Server local dev file (`server/.env`) is already scaffolded.
 
