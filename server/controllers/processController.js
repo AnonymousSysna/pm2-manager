@@ -40,6 +40,80 @@ const LOG_TAIL_MAX_BYTES = Number.isFinite(Number(process.env.LOG_TAIL_MAX_BYTES
   : 1024 * 1024;
 const PROJECTS_ROOT = path.resolve(process.env.PROJECTS_ROOT || process.cwd());
 
+function extractMissingModule(message = "") {
+  const match = String(message).match(/Cannot find module ['"]([^'"]+)['"]/i);
+  return match ? match[1] : "";
+}
+
+async function pathIsDirectory(targetPath) {
+  try {
+    const stat = await fs.promises.stat(targetPath);
+    return stat.isDirectory();
+  } catch (_error) {
+    return false;
+  }
+}
+
+async function pathIsReadableFile(targetPath) {
+  try {
+    await fs.promises.access(targetPath, fs.constants.R_OK);
+    const stat = await fs.promises.stat(targetPath);
+    return stat.isFile();
+  } catch (_error) {
+    return false;
+  }
+}
+
+async function resolveNestedInstallDirs(projectDir, preferredAppName = "") {
+  const appRoots = [path.join(projectDir, "apps"), path.join(projectDir, "packages")];
+  const installDirs = [];
+  const seen = new Set();
+
+  for (const appRoot of appRoots) {
+    if (!(await pathIsDirectory(appRoot))) {
+      continue;
+    }
+
+    if (preferredAppName) {
+      const preferredDir = path.join(appRoot, preferredAppName);
+      const preferredPackageJson = path.join(preferredDir, "package.json");
+      const preferredLockfile = path.join(preferredDir, "package-lock.json");
+      if (
+        (await pathIsReadableFile(preferredPackageJson)) &&
+        (await pathIsReadableFile(preferredLockfile))
+      ) {
+        const resolved = path.resolve(preferredDir);
+        if (!seen.has(resolved)) {
+          seen.add(resolved);
+          installDirs.push(resolved);
+        }
+      }
+    }
+
+    const entries = await fs.promises.readdir(appRoot, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+      const candidateDir = path.join(appRoot, entry.name);
+      const packageJsonPath = path.join(candidateDir, "package.json");
+      const lockfilePath = path.join(candidateDir, "package-lock.json");
+      if (
+        (await pathIsReadableFile(packageJsonPath)) &&
+        (await pathIsReadableFile(lockfilePath))
+      ) {
+        const resolved = path.resolve(candidateDir);
+        if (!seen.has(resolved)) {
+          seen.add(resolved);
+          installDirs.push(resolved);
+        }
+      }
+    }
+  }
+
+  return installDirs;
+}
+
 function runCommand(command, args, cwd) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -324,13 +398,27 @@ async function createProcess(config) {
 
       if (install_dependencies) {
         await runCommand(npmCmd, ["install"], projectDir);
+        const nestedInstallDirs = await resolveNestedInstallDirs(projectDir, safeName);
+        for (const installDir of nestedInstallDirs) {
+          await runCommand(npmCmd, ["install"], installDir);
+        }
       }
 
       if (run_build) {
         if (!scripts.build) {
           throw new Error(`Missing "build" script in ${packageJsonPath}`);
         }
-        await runCommand(npmCmd, ["run", "build"], projectDir);
+        try {
+          await runCommand(npmCmd, ["run", "build"], projectDir);
+        } catch (error) {
+          const missingModule = extractMissingModule(error?.message || "");
+          if (missingModule) {
+            throw new Error(
+              `${error.message}\nHint: missing dependency "${missingModule}". If this is a nested app (for example apps/${safeName}), run npm install in that app directory or enable "Run npm install before start".`
+            );
+          }
+          throw error;
+        }
       }
 
       if (!scripts[startScriptName]) {
