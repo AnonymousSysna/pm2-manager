@@ -1,13 +1,40 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast, { getErrorMessage } from "../lib/toast";
 import { auth } from "../api";
 
 export default function Login() {
   const navigate = useNavigate();
+  const [checkingSession, setCheckingSession] = useState(true);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    auth
+      .me()
+      .then((result) => {
+        if (!mounted) {
+          return;
+        }
+        if (result?.success) {
+          navigate("/dashboard", { replace: true });
+          return;
+        }
+        setCheckingSession(false);
+      })
+      .catch(() => {
+        if (mounted) {
+          setCheckingSession(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [navigate]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -28,6 +55,10 @@ export default function Login() {
         }
       );
 
+      const me = await auth.me();
+      if (!me?.success) {
+        throw new Error("Session validation failed after login");
+      }
       navigate("/dashboard", { replace: true });
     } catch (_error) {
       // Toast is handled by toast.promise.
@@ -35,6 +66,10 @@ export default function Login() {
       setLoading(false);
     }
   };
+
+  if (checkingSession) {
+    return null;
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#0f172a] p-4">
