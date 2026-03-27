@@ -1,7 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { X, Copy, Play, Square, RefreshCw, RotateCcw, Trash2, Download, Hammer } from "lucide-react";
+import toast from "react-hot-toast";
 
 const tabs = ["Overview", "Environment", "Resource Graph", "Quick Actions"];
+
+async function copyToClipboard(text) {
+  const value = String(text ?? "");
+
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  const textArea = document.createElement("textarea");
+  textArea.value = value;
+  textArea.setAttribute("readonly", "");
+  textArea.style.position = "fixed";
+  textArea.style.top = "-1000px";
+  textArea.style.left = "-1000px";
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+
+  const copied = document.execCommand("copy");
+  document.body.removeChild(textArea);
+  if (!copied) {
+    throw new Error("Clipboard copy failed");
+  }
+}
 
 export default function ProcessDetailModal({ process, onClose, onAction }) {
   const [tab, setTab] = useState("Overview");
@@ -96,7 +122,14 @@ export default function ProcessDetailModal({ process, onClose, onAction }) {
                 <span className="truncate text-slate-100">{String(value)}</span>
                 <button
                   type="button"
-                  onClick={() => navigator.clipboard.writeText(String(value))}
+                  onClick={async () => {
+                    try {
+                      await copyToClipboard(value);
+                      toast.success(`Copied ${key}`);
+                    } catch (_error) {
+                      toast.error("Failed to copy");
+                    }
+                  }}
                   className="rounded bg-slate-700 p-1 hover:bg-slate-600"
                 >
                   <Copy size={14} />
