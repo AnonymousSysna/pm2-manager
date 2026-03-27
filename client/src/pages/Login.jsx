@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast, { getErrorMessage } from "../lib/toast";
 import { auth } from "../api";
@@ -11,6 +11,7 @@ export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const manualLoginAttemptRef = useRef(false);
 
   useEffect(() => {
     let mounted = true;
@@ -21,7 +22,7 @@ export default function Login() {
         if (!mounted) {
           return;
         }
-        if (result?.success) {
+        if (result?.success && !manualLoginAttemptRef.current) {
           navigate("/dashboard", { replace: true });
           return;
         }
@@ -40,6 +41,7 @@ export default function Login() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    manualLoginAttemptRef.current = true;
     setLoading(true);
 
     try {

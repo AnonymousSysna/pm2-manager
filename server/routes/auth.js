@@ -18,6 +18,22 @@ const LOGIN_BLOCK_MS = 15 * 60 * 1000;
 
 let cachedHash = String(process.env.PM2_PASS_HASH || "").trim() || null;
 
+function clearAuthCookies(res, req) {
+  const secureCookie = shouldUseSecureCookies(req);
+  res.clearCookie(AUTH_COOKIE_NAME, {
+    httpOnly: true,
+    secure: secureCookie,
+    sameSite: "lax",
+    path: "/"
+  });
+  res.clearCookie(CSRF_COOKIE_NAME, {
+    httpOnly: false,
+    secure: secureCookie,
+    sameSite: "lax",
+    path: "/"
+  });
+}
+
 function getUserConfig(username) {
   const adminUser = String(process.env.PM2_USER || "").trim();
   if (!adminUser || username !== adminUser) return null;
@@ -97,6 +113,7 @@ router.post("/login", asyncHandler(async (req, res) => {
       blockedUntil: count >= MAX_LOGIN_ATTEMPTS ? now + LOGIN_BLOCK_MS : 0
     });
     logger.warn("auth_login_failed", { reason: "missing_user_hash", username, ip });
+    clearAuthCookies(res, req);
     return res
       .status(401)
       .json({ success: false, data: null, error: "Invalid credentials" });
@@ -110,6 +127,7 @@ router.post("/login", asyncHandler(async (req, res) => {
       blockedUntil: count >= MAX_LOGIN_ATTEMPTS ? now + LOGIN_BLOCK_MS : 0
     });
     logger.warn("auth_login_failed", { reason: "bad_password", username, ip });
+    clearAuthCookies(res, req);
     return res
       .status(401)
       .json({ success: false, data: null, error: "Invalid credentials" });
