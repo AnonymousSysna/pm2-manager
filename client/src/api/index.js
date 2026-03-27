@@ -67,11 +67,6 @@ export const processes = {
   list: () => api.get("/api/v1/processes").then(unwrap),
   catalog: () => api.get("/api/v1/processes/catalog").then(unwrap),
   monitoringSummary: () => api.get("/api/v1/processes/monitoring/summary").then(unwrap),
-  groups: () => api.get("/api/v1/processes/groups").then(unwrap),
-  setGroup: (groupName, members) =>
-    api.put(`/api/v1/processes/groups/${encodeURIComponent(groupName)}`, { members }).then(unwrap),
-  groupAction: (groupName, action) =>
-    api.post(`/api/v1/processes/groups/${encodeURIComponent(groupName)}/${encodeURIComponent(action)}`).then(unwrap),
   setMeta: (name, payload) =>
     api.patch(`/api/v1/processes/${encodeURIComponent(name)}/meta`, payload).then(unwrap),
   clearMeta: (name) => api.delete(`/api/v1/processes/${encodeURIComponent(name)}/meta`).then(unwrap),

@@ -87,10 +87,7 @@ export default function Dashboard() {
   const [loadingAction, setLoadingAction] = useState({});
   const [query, setQuery] = useState("");
   const [selectedProcess, setSelectedProcess] = useState(null);
-  const [groups, setGroups] = useState({});
   const [processMeta, setProcessMeta] = useState({});
-  const [selectedGroup, setSelectedGroup] = useState("");
-  const [groupMembersInput, setGroupMembersInput] = useState("");
   const [chartProcess, setChartProcess] = useState("");
   const [historyPoints, setHistoryPoints] = useState([]);
   const [monitoringSummary, setMonitoringSummary] = useState({});
@@ -103,7 +100,6 @@ export default function Dashboard() {
       ]);
 
       if (catalogResult.success) {
-        setGroups(catalogResult.data.groups || {});
         setProcessMeta(catalogResult.data.meta || {});
       }
 
@@ -197,7 +193,6 @@ export default function Dashboard() {
       (item) =>
         item.name?.toLowerCase().includes(normalized) ||
         item.status?.toLowerCase().includes(normalized) ||
-        processMeta[item.name]?.group?.toLowerCase().includes(normalized) ||
         (processMeta[item.name]?.tags || []).some((tag) => tag.includes(normalized))
     );
   }, [processes, query, processMeta]);
@@ -269,7 +264,6 @@ export default function Dashboard() {
 
   const editMeta = async (proc) => {
     const current = processMeta[proc.name] || {};
-    const group = window.prompt("Group name", current.group || "") ?? current.group ?? "";
     const tagsRaw =
       window.prompt("Tags (comma-separated)", Array.isArray(current.tags) ? current.tags.join(",") : "") ?? "";
     const dependenciesRaw =
@@ -283,7 +277,6 @@ export default function Dashboard() {
       window.prompt("Memory alert threshold (MB)", current.alertThresholds?.memoryMB ?? "") ?? "";
 
     const payload = {
-      group,
       tags: tagsRaw
         .split(",")
         .map((item) => item.trim().toLowerCase())
@@ -310,50 +303,6 @@ export default function Dashboard() {
     }
   };
 
-  const saveGroup = async () => {
-    const name = selectedGroup.trim();
-    if (!name) {
-      toast.error("Group name is required");
-      return;
-    }
-
-    const members = groupMembersInput
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
-
-    try {
-      const result = await processApi.setGroup(name, members);
-      if (!result.success) {
-        throw new Error(result.error || "Unable to save group");
-      }
-      toast.success(`Saved group ${name}`);
-      setSelectedGroup("");
-      setGroupMembersInput("");
-      refreshCatalog();
-    } catch (error) {
-      toast.error(getErrorMessage(error, "Unable to save group"));
-    }
-  };
-
-  const runGroupAction = async (groupName, action) => {
-    try {
-      const result = await processApi.groupAction(groupName, action);
-      if (!result.success) {
-        throw new Error(result.error || `Unable to ${action} group`);
-      }
-      const failures = (result.data?.results || []).filter((item) => !item.success);
-      if (failures.length > 0) {
-        toast.error(`${action} completed with ${failures.length} failures`);
-      } else {
-        toast.success(`${action} completed for group ${groupName}`);
-      }
-      refreshCatalog();
-    } catch (error) {
-      toast.error(getErrorMessage(error, `Unable to ${action} group`));
-    }
-  };
-
   return (
     <div className="space-y-4">
       <section className="grid grid-cols-1 gap-4 md:grid-cols-4">
@@ -363,41 +312,7 @@ export default function Dashboard() {
         <StatCard label="Errored" value={stats.errored} tone="warning" />
       </section>
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <div className="page-panel space-y-3">
-          <h2 className="section-title">Groups & Bulk Actions</h2>
-          <div className="grid gap-2 md:grid-cols-2">
-            <Input value={selectedGroup} onChange={(e) => setSelectedGroup(e.target.value)} placeholder="Group name" />
-            <Input
-              value={groupMembersInput}
-              onChange={(e) => setGroupMembersInput(e.target.value)}
-              placeholder="Members (api,db,worker)"
-            />
-          </div>
-          <Button type="button" variant="secondary" onClick={saveGroup}>
-            Save Group
-          </Button>
-
-          <div className="space-y-2">
-            {Object.entries(groups).length === 0 && <p className="text-sm text-text-3">No groups configured.</p>}
-            {Object.entries(groups).map(([groupName, members]) => (
-              <div key={groupName} className="rounded border border-border p-2 text-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-medium text-text-1">
-                    {groupName} <span className="text-text-3">({members.length})</span>
-                  </p>
-                  <div className="flex gap-1">
-                    <ActionButton title="Start Group" variant="success" onClick={() => runGroupAction(groupName, "start")} icon={<Play size={14} />} />
-                    <ActionButton title="Stop Group" variant="danger" onClick={() => runGroupAction(groupName, "stop")} icon={<Square size={14} />} />
-                    <ActionButton title="Restart Group" variant="info" onClick={() => runGroupAction(groupName, "restart")} icon={<RefreshCw size={14} />} />
-                  </div>
-                </div>
-                <p className="mt-1 text-xs text-text-3">{members.join(", ")}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
+      <section>
         <div className="page-panel space-y-3">
           <h2 className="section-title">CPU / Memory History</h2>
           <select
@@ -452,7 +367,7 @@ export default function Dashboard() {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by name, status, group, tag"
+            placeholder="Search by name, status, tag"
             className="w-full md:w-80"
           />
         </div>
@@ -464,7 +379,7 @@ export default function Dashboard() {
                 <th className="px-2 py-2">ID</th>
                 <th className="px-2 py-2">Name</th>
                 <th className="px-2 py-2">Status</th>
-                <th className="px-2 py-2">Group / Tags</th>
+                <th className="px-2 py-2">Tags</th>
                 <th className="px-2 py-2">CPU%</th>
                 <th className="px-2 py-2">Memory</th>
                 <th className="px-2 py-2">Uptime</th>
@@ -496,7 +411,6 @@ export default function Dashboard() {
                       <StatusBadge status={proc.status} />
                     </td>
                     <td className="px-2 py-3">
-                      <p className="text-xs text-text-2">{meta.group || "-"}</p>
                       <p className="text-xs text-text-3">{Array.isArray(meta.tags) && meta.tags.length > 0 ? meta.tags.join(",") : "-"}</p>
                     </td>
                     <td className="px-2 py-3">

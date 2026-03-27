@@ -14,17 +14,17 @@ export default function Login() {
   const handleSubmit = async (event) => {
     event.preventDefault();
     setLoading(true);
-    let authenticated = false;
 
     try {
-      await toast.promise(
-        auth.login(username, password).then((result) => {
-          if (!result.success) {
-            throw new Error(result.error || "Login failed");
-          }
-          authenticated = true;
-          return result;
-        }),
+      const loginPromise = auth.login(username, password).then((result) => {
+        if (!result?.success) {
+          throw new Error(result?.error || "Login failed");
+        }
+        return result;
+      });
+
+      toast.promise(
+        loginPromise,
         {
           loading: "Signing in...",
           success: "Signed in",
@@ -32,9 +32,8 @@ export default function Login() {
         }
       );
 
-      if (authenticated) {
-        navigate("/dashboard", { replace: true });
-      }
+      await loginPromise;
+      navigate("/dashboard", { replace: true });
     } catch (_error) {
       // Toast is handled by toast.promise.
     } finally {
