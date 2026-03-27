@@ -3,6 +3,7 @@ import toast, { getErrorMessage } from "../lib/toast";
 import { auth, pm2Admin, processes as processApi, alerts as alertsApi } from "../api";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
+import Select from "../components/ui/Select";
 
 export default function Settings() {
   const [info, setInfo] = useState({ pm2Version: "-", nodeVersion: "-", pm2Home: "-" });
@@ -258,10 +259,10 @@ export default function Settings() {
           </label>
           <label className="flex items-center gap-2">
             <span>Theme</span>
-            <select value={theme} onChange={(e) => setTheme(e.target.value)} className="rounded-md border border-border bg-surface px-2 py-1 text-sm">
+            <Select value={theme} onChange={(e) => setTheme(e.target.value)} className="w-auto min-w-28">
               <option value="dark">Dark</option>
               <option value="light">Light</option>
-            </select>
+            </Select>
           </label>
           <Button variant="secondary" onClick={saveDashboardSettings}>
             Save Dashboard Settings
@@ -294,17 +295,22 @@ export default function Settings() {
         <div className="grid gap-2 md:grid-cols-2">
           <Input value={channelName} onChange={(e) => setChannelName(e.target.value)} placeholder="Channel name" />
           <Input value={channelUrl} onChange={(e) => setChannelUrl(e.target.value)} placeholder="https://..." />
-          <select value={channelType} onChange={(e) => setChannelType(e.target.value)} className="rounded-md border border-border bg-surface px-2 py-1 text-sm">
+          <Select value={channelType} onChange={(e) => setChannelType(e.target.value)}>
             <option value="webhook">Webhook</option>
             <option value="slack">Slack Webhook</option>
-          </select>
-          <select value={channelSeverity} onChange={(e) => setChannelSeverity(e.target.value)} className="rounded-md border border-border bg-surface px-2 py-1 text-sm">
+          </Select>
+          <Select value={channelSeverity} onChange={(e) => setChannelSeverity(e.target.value)}>
             <option value="info">info</option>
             <option value="warning">warning</option>
             <option value="danger">danger</option>
-          </select>
+          </Select>
           <label className="flex items-center gap-2 text-sm text-text-2">
-            <input type="checkbox" checked={channelEnabled} onChange={(e) => setChannelEnabled(e.target.checked)} />
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-brand-500"
+              checked={channelEnabled}
+              onChange={(e) => setChannelEnabled(e.target.checked)}
+            />
             Enabled
           </label>
         </div>

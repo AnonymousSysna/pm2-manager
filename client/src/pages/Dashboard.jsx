@@ -20,6 +20,7 @@ import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
 import ProgressBar from "../components/ui/ProgressBar";
+import Select from "../components/ui/Select";
 
 function bytesToMB(value) {
   return `${(Number(value || 0) / 1024 / 1024).toFixed(1)} MB`;
@@ -315,27 +316,27 @@ export default function Dashboard() {
       <section>
         <div className="page-panel space-y-3">
           <h2 className="section-title">CPU / Memory History</h2>
-          <select
+          <Select
             value={chartProcess}
             onChange={(e) => setChartProcess(e.target.value)}
-            className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm"
+            className="w-full"
           >
             {processes.map((proc) => (
               <option key={proc.name} value={proc.name}>
                 {proc.name}
               </option>
             ))}
-          </select>
+          </Select>
           <div>
             <p className="mb-1 text-xs text-text-3">CPU %</p>
-            <SparkLine points={historyPoints} accessor={(point) => Number(point.cpu || 0)} stroke="#22c55e" />
+            <SparkLine points={historyPoints} accessor={(point) => Number(point.cpu || 0)} stroke="rgb(var(--color-brand-500))" />
           </div>
           <div>
             <p className="mb-1 text-xs text-text-3">Memory MB</p>
             <SparkLine
               points={historyPoints}
               accessor={(point) => Number(point.memory || 0) / 1024 / 1024}
-              stroke="#3b82f6"
+              stroke="rgb(var(--color-info-500))"
             />
           </div>
         </div>
@@ -538,7 +539,7 @@ function StatCard({ label, value, tone }) {
 
 function ActionButton({ title, icon, variant, onClick, disabled }) {
   return (
-    <Button type="button" title={title} size="icon" variant={variant} disabled={disabled} onClick={onClick} className="h-7 w-7 rounded">
+    <Button type="button" title={title} size="sm-icon" variant={variant} disabled={disabled} onClick={onClick}>
       {icon}
     </Button>
   );

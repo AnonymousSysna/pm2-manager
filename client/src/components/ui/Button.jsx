@@ -14,6 +14,7 @@ const sizes = {
   sm: "px-2.5 py-1.5 text-xs",
   md: "px-3 py-2 text-sm",
   lg: "px-4 py-2.5 text-sm",
+  "sm-icon": "h-7 w-7 rounded p-0",
   icon: "h-8 w-8 p-0"
 };
 
