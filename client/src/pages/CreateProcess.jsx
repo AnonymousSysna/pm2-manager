@@ -41,6 +41,9 @@ export default function CreateProcess() {
   const [templates, setTemplates] = useState({});
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [error, setError] = useState("");
+  const [isLaunching, setIsLaunching] = useState(false);
+  const [launchStartedAt, setLaunchStartedAt] = useState(0);
+  const [launchElapsedSec, setLaunchElapsedSec] = useState(0);
   const [form, setForm] = useState({
     name: "",
     script: "",
@@ -88,6 +91,21 @@ export default function CreateProcess() {
   useEffect(() => {
     localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(templates));
   }, [templates]);
+
+  useEffect(() => {
+    if (!isLaunching || !launchStartedAt) {
+      setLaunchElapsedSec(0);
+      return undefined;
+    }
+
+    const tick = () => {
+      setLaunchElapsedSec(Math.max(0, Math.floor((Date.now() - launchStartedAt) / 1000)));
+    };
+
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [isLaunching, launchStartedAt]);
 
   const templateNames = useMemo(() => Object.keys(templates).sort(), [templates]);
 
@@ -150,6 +168,9 @@ export default function CreateProcess() {
   const submit = async (event) => {
     event.preventDefault();
     setError("");
+    if (isLaunching) {
+      return;
+    }
 
     if (!form.name.trim()) {
       setError("Process Name is required.");
@@ -207,6 +228,8 @@ export default function CreateProcess() {
     };
 
     try {
+      setIsLaunching(true);
+      setLaunchStartedAt(Date.now());
       await toast.promise(
         processes.create(payload).then((result) => {
           if (!result.success) {
@@ -220,10 +243,12 @@ export default function CreateProcess() {
           error: (error) => getErrorMessage(error, "Failed to launch process")
         }
       );
-      navigate("/dashboard");
+      navigate(`/dashboard/logs?process=${encodeURIComponent(form.name)}`);
     } catch (err) {
       const message = getErrorMessage(err, "Failed to launch process");
       setError(message);
+    } finally {
+      setIsLaunching(false);
     }
   };
 
@@ -260,6 +285,29 @@ export default function CreateProcess() {
         </div>
 
         <form onSubmit={submit} className="space-y-4">
+          {isLaunching && (
+            <div className="rounded-md border border-info-500/30 bg-info-500/10 p-3 text-sm text-info-200">
+              <p className="font-semibold">Launching process in background...</p>
+              <p className="mt-1">
+                This can take a while for clone/install/build steps. Elapsed: {launchElapsedSec}s.
+              </p>
+              <p className="mt-1">
+                You will be redirected to Logs automatically when launch completes.
+              </p>
+              <div className="mt-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => navigate(`/dashboard/logs?process=${encodeURIComponent(form.name || "")}`)}
+                  disabled={!String(form.name || "").trim()}
+                >
+                  Open Logs Now
+                </Button>
+              </div>
+            </div>
+          )}
+
           <Field label="Process Name" required>
             <Input value={form.name} onChange={(e) => update("name", e.target.value)} />
           </Field>
@@ -465,8 +513,8 @@ export default function CreateProcess() {
 
           {error && <p className="text-sm text-danger-300">{error}</p>}
 
-          <Button type="submit" variant="success" className="w-full">
-            Launch Process
+          <Button type="submit" variant="success" className="w-full" disabled={isLaunching}>
+            {isLaunching ? "Launching..." : "Launch Process"}
           </Button>
         </form>
       </div>

@@ -12,7 +12,8 @@ import {
   AlertTriangle,
   Rocket,
   ListChecks,
-  X
+  X,
+  ExternalLink
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import toast, { getErrorMessage } from "../lib/toast";
@@ -684,6 +685,20 @@ export default function Dashboard() {
                       icon={<ScrollText size={14} />}
                     />
                   )}
+                  {Number(proc.port) > 0 && (
+                    <ActionButton
+                      title="Open App"
+                      variant="info"
+                      onClick={() => {
+                        try {
+                          openProcessUrl(proc.port);
+                        } catch (error) {
+                          toast.error(getErrorMessage(error, "Unable to open app URL"));
+                        }
+                      }}
+                      icon={<ExternalLink size={14} />}
+                    />
+                  )}
                 </div>
               </article>
             );
@@ -804,6 +819,20 @@ export default function Dashboard() {
                             variant="secondary"
                             onClick={() => openDotEnvModal(proc)}
                             icon={<ScrollText size={14} />}
+                          />
+                        )}
+                        {Number(proc.port) > 0 && (
+                          <ActionButton
+                            title="Open App"
+                            variant="info"
+                            onClick={() => {
+                              try {
+                                openProcessUrl(proc.port);
+                              } catch (error) {
+                                toast.error(getErrorMessage(error, "Unable to open app URL"));
+                              }
+                            }}
+                            icon={<ExternalLink size={14} />}
                           />
                         )}
                         <ActionButton
@@ -984,6 +1013,15 @@ export default function Dashboard() {
       )}
     </div>
   );
+}
+
+function openProcessUrl(port) {
+  const value = Number(port);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error("Invalid process port");
+  }
+  const target = `${window.location.protocol}//${window.location.hostname}:${value}`;
+  window.open(target, "_blank", "noopener,noreferrer");
 }
 
 function StatCard({ label, value, tone }) {
