@@ -4,6 +4,7 @@ import { io } from "socket.io-client";
 export function useSocket() {
   const [processes, setProcesses] = useState([]);
   const [logsByProcess, setLogsByProcess] = useState({});
+  const [alerts, setAlerts] = useState([]);
   const [connected, setConnected] = useState(false);
 
   const pollInterval = useMemo(() => {
@@ -56,10 +57,17 @@ export function useSocket() {
       });
     });
 
+    socket.on("monitor:alerts", (items) => {
+      if (!Array.isArray(items) || items.length === 0) {
+        return;
+      }
+      setAlerts((prev) => [...prev, ...items].slice(-200));
+    });
+
     return () => {
       socket.disconnect();
     };
   }, [pollInterval]);
 
-  return { processes, logsByProcess, connected };
+  return { processes, logsByProcess, alerts, connected };
 }

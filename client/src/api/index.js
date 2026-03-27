@@ -65,6 +65,28 @@ export const auth = {
 
 export const processes = {
   list: () => api.get("/api/v1/processes").then(unwrap),
+  catalog: () => api.get("/api/v1/processes/catalog").then(unwrap),
+  monitoringSummary: () => api.get("/api/v1/processes/monitoring/summary").then(unwrap),
+  groups: () => api.get("/api/v1/processes/groups").then(unwrap),
+  setGroup: (groupName, members) =>
+    api.put(`/api/v1/processes/groups/${encodeURIComponent(groupName)}`, { members }).then(unwrap),
+  groupAction: (groupName, action) =>
+    api.post(`/api/v1/processes/groups/${encodeURIComponent(groupName)}/${encodeURIComponent(action)}`).then(unwrap),
+  setMeta: (name, payload) =>
+    api.patch(`/api/v1/processes/${encodeURIComponent(name)}/meta`, payload).then(unwrap),
+  clearMeta: (name) => api.delete(`/api/v1/processes/${encodeURIComponent(name)}/meta`).then(unwrap),
+  metrics: (name, limit = 120) =>
+    api.get(`/api/v1/processes/${encodeURIComponent(name)}/metrics?limit=${limit}`).then(unwrap),
+  exportConfig: () => api.get("/api/v1/processes/config/export").then(unwrap),
+  importConfig: (payload) => api.post("/api/v1/processes/config/import", payload).then(unwrap),
+  deploymentHistory: (limit = 100, processName = "") =>
+    api
+      .get(
+        `/api/v1/processes/history/deployments?limit=${encodeURIComponent(limit)}${
+          processName ? `&process=${encodeURIComponent(processName)}` : ""
+        }`
+      )
+      .then(unwrap),
   get: (name) => api.get(`/api/v1/processes/${encodeURIComponent(name)}`).then(unwrap),
   create: (config) => api.post("/api/v1/processes/create", config).then(unwrap),
   start: (name) => api.post(`/api/v1/processes/${encodeURIComponent(name)}/start`).then(unwrap),
@@ -73,6 +95,7 @@ export const processes = {
   reload: (name) => api.post(`/api/v1/processes/${encodeURIComponent(name)}/reload`).then(unwrap),
   npmInstall: (name) => api.post(`/api/v1/processes/${encodeURIComponent(name)}/npm-install`).then(unwrap),
   npmBuild: (name) => api.post(`/api/v1/processes/${encodeURIComponent(name)}/npm-build`).then(unwrap),
+  deploy: (name, payload = {}) => api.post(`/api/v1/processes/${encodeURIComponent(name)}/deploy`, payload).then(unwrap),
   delete: (name) => api.delete(`/api/v1/processes/${encodeURIComponent(name)}`).then(unwrap),
   logs: (name, lines = 100) => api.get(`/api/v1/processes/${encodeURIComponent(name)}/logs?lines=${lines}`).then(unwrap),
   flush: (name) => api.post(`/api/v1/processes/${encodeURIComponent(name)}/flush`).then(unwrap)
@@ -83,6 +106,13 @@ export const pm2Admin = {
   resurrect: () => api.post("/api/v1/pm2/resurrect").then(unwrap),
   kill: () => api.post("/api/v1/pm2/kill").then(unwrap),
   info: () => api.get("/api/v1/pm2/info").then(unwrap)
+};
+
+export const alerts = {
+  listChannels: () => api.get("/api/v1/alerts/channels").then(unwrap),
+  saveChannel: (payload) => api.post("/api/v1/alerts/channels", payload).then(unwrap),
+  deleteChannel: (id) => api.delete(`/api/v1/alerts/channels/${encodeURIComponent(id)}`).then(unwrap),
+  testChannel: (id) => api.post(`/api/v1/alerts/channels/${encodeURIComponent(id)}/test`).then(unwrap)
 };
 
 export default api;

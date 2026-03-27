@@ -12,9 +12,13 @@ const {
   trackPm2Operation
 } = require("../middleware/metrics");
 const { appendHistoryEntry } = require("../utils/restartHistory");
+const { listProcessMeta } = require("../utils/processMetaStore");
+const { appendMetricsSample } = require("../utils/metricsHistoryStore");
+const { sendAlertNotifications } = require("../utils/alertNotifier");
 
 let busAttached = false;
 let attachInProgress = false;
+let lastMetricsSampleAt = 0;
 
 function processSignature(proc) {
   return [
@@ -71,6 +75,31 @@ function getSocketToken(socket) {
 }
 
 function registerPM2Monitor(io) {
+  const sampleMetrics = async (processes, socket) => {
+    const now = Date.now();
+    if (now - lastMetricsSampleAt < 1000) {
+      return;
+    }
+    lastMetricsSampleAt = now;
+
+    try {
+      const meta = await listProcessMeta();
+      const alerts = await appendMetricsSample(processes, meta);
+      if (alerts.length > 0) {
+        sendAlertNotifications(alerts).catch(() => {
+          // Best-effort external alert delivery.
+        });
+        if (socket) {
+          socket.emit("monitor:alerts", alerts);
+        } else {
+          io.emit("monitor:alerts", alerts);
+        }
+      }
+    } catch (_error) {
+      // Best-effort metrics sampling.
+    }
+  };
+
   io.use((socket, next) => {
     const ip = getSocketIp(socket);
     if (!isIpAllowed(ip)) {
@@ -113,6 +142,7 @@ function registerPM2Monitor(io) {
       if (result.success) {
         previous = indexProcesses(result.data);
         socket.emit("processes:update", result.data);
+        await sampleMetrics(result.data, socket);
         return;
       }
       socket.emit("monitor:error", { message: result.error || "Failed to load process list" });
@@ -134,6 +164,7 @@ function registerPM2Monitor(io) {
       if (delta.upserts.length > 0 || delta.removed.length > 0) {
         socket.emit("processes:delta", delta);
       }
+      await sampleMetrics(result.data, socket);
     };
 
     await sendInitial();

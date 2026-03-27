@@ -25,11 +25,46 @@ export default function Layout() {
   const navigate = useNavigate();
   const { connected } = useSocket();
   const [now, setNow] = useState(new Date());
+  const [pendingGoKey, setPendingGoKey] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.target instanceof HTMLElement) {
+        const tag = event.target.tagName.toLowerCase();
+        if (tag === "input" || tag === "textarea" || event.target.isContentEditable) {
+          return;
+        }
+      }
+
+      const key = String(event.key || "").toLowerCase();
+      if (pendingGoKey) {
+        if (key === "p") {
+          navigate("/dashboard");
+        } else if (key === "l") {
+          navigate("/dashboard/logs");
+        } else if (key === "c") {
+          navigate("/dashboard/create");
+        } else if (key === "s") {
+          navigate("/dashboard/settings");
+        }
+        setPendingGoKey(false);
+        return;
+      }
+
+      if (key === "g") {
+        setPendingGoKey(true);
+        setTimeout(() => setPendingGoKey(false), 1200);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [navigate, pendingGoKey]);
 
   const title = useMemo(() => pageTitleMap[location.pathname] || "Dashboard", [location.pathname]);
 
@@ -83,6 +118,7 @@ export default function Layout() {
         <header className="page-panel mb-5 flex flex-wrap items-center justify-between gap-4">
           <h1 className="page-title">{title}</h1>
           <div className="flex items-center gap-4 text-sm">
+            <span className="hidden text-text-3 lg:inline">Shortcuts: g then p/l/c/s</span>
             <Badge tone={connected ? "success" : "danger"}>{connected ? "Connected" : "Disconnected"}</Badge>
             <span className="text-text-3">{now.toLocaleString()}</span>
           </div>

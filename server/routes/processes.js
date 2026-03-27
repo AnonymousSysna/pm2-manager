@@ -1,6 +1,7 @@
 const express = require("express");
 const {
   listProcesses,
+  getProcessCatalog,
   startProcess,
   stopProcess,
   restartProcess,
@@ -11,7 +12,17 @@ const {
   flushLogs,
   getProcessDetails,
   npmInstall,
-  npmBuild
+  npmBuild,
+  updateProcessMetadata,
+  removeProcessMetadata,
+  updateGroupMembers,
+  runBulkGroupAction,
+  readProcessMetrics,
+  readMonitoringSummary,
+  exportProcessConfig,
+  importProcessConfig,
+  deployProcess,
+  getDeploymentHistory
 } = require("../controllers/processController");
 const { verifyToken } = require("../middleware/auth");
 const { validateProcessParam } = require("../middleware/validate");
@@ -32,6 +43,11 @@ router.get("/", readLimiter, asyncHandler(async (_req, res) => {
   res.status(result.success ? 200 : 500).json(result);
 }));
 
+router.get("/catalog", readLimiter, asyncHandler(async (_req, res) => {
+  const result = await getProcessCatalog();
+  res.status(result.success ? 200 : 500).json(result);
+}));
+
 router.get("/history/restarts", readLimiter, asyncHandler(async (req, res) => {
   const requested = Number(req.query.limit || 200);
   const limit = Number.isFinite(requested)
@@ -41,8 +57,76 @@ router.get("/history/restarts", readLimiter, asyncHandler(async (req, res) => {
   res.json({ success: true, data: items, error: null });
 }));
 
+router.get("/history/deployments", readLimiter, asyncHandler(async (req, res) => {
+  const requested = Number(req.query.limit || 100);
+  const limit = Number.isFinite(requested)
+    ? Math.min(1000, Math.max(1, Math.floor(requested)))
+    : 100;
+  const processName = String(req.query.process || "").trim();
+  const result = await getDeploymentHistory(limit, processName);
+  res.status(result.success ? 200 : 500).json(result);
+}));
+
+router.get("/monitoring/summary", readLimiter, asyncHandler(async (_req, res) => {
+  const result = await readMonitoringSummary();
+  res.status(result.success ? 200 : 500).json(result);
+}));
+
+router.get("/groups", readLimiter, asyncHandler(async (_req, res) => {
+  const result = await getProcessCatalog();
+  if (!result.success) {
+    res.status(500).json(result);
+    return;
+  }
+  res.json({ success: true, data: result.data.groups || {}, error: null });
+}));
+
+router.put("/groups/:groupName", writeLimiter, asyncHandler(async (req, res) => {
+  const groupName = String(req.params.groupName || "").trim();
+  const members = Array.isArray(req.body?.members) ? req.body.members : [];
+  const result = await updateGroupMembers(groupName, members);
+  res.status(result.success ? 200 : 500).json(result);
+}));
+
+router.post("/groups/:groupName/:action(start|stop|restart)", writeLimiter, asyncHandler(async (req, res) => {
+  const groupName = String(req.params.groupName || "").trim();
+  const action = String(req.params.action || "").trim();
+  const result = await runBulkGroupAction(groupName, action);
+  const hasFailures = Array.isArray(result.data?.results) && result.data.results.some((item) => !item.success);
+  res.status(result.success ? 200 : hasFailures ? 207 : 500).json(result);
+}));
+
+router.get("/config/export", readLimiter, asyncHandler(async (_req, res) => {
+  const result = await exportProcessConfig();
+  res.status(result.success ? 200 : 500).json(result);
+}));
+
+router.post("/config/import", writeLimiter, asyncHandler(async (req, res) => {
+  const result = await importProcessConfig(req.body || {});
+  res.status(result.success ? 200 : 500).json(result);
+}));
+
 router.get("/:name", readLimiter, validateProcessParam, asyncHandler(async (req, res) => {
   const result = await getProcessDetails(req.params.name);
+  res.status(result.success ? 200 : 500).json(result);
+}));
+
+router.get("/:name/metrics", readLimiter, validateProcessParam, asyncHandler(async (req, res) => {
+  const requested = Number(req.query.limit || 120);
+  const limit = Number.isFinite(requested)
+    ? Math.min(2000, Math.max(10, Math.floor(requested)))
+    : 120;
+  const result = await readProcessMetrics(req.params.name, limit);
+  res.status(result.success ? 200 : 500).json(result);
+}));
+
+router.patch("/:name/meta", writeLimiter, validateProcessParam, asyncHandler(async (req, res) => {
+  const result = await updateProcessMetadata(req.params.name, req.body || {});
+  res.status(result.success ? 200 : 500).json(result);
+}));
+
+router.delete("/:name/meta", writeLimiter, validateProcessParam, asyncHandler(async (req, res) => {
+  const result = await removeProcessMetadata(req.params.name);
   res.status(result.success ? 200 : 500).json(result);
 }));
 
@@ -98,6 +182,12 @@ router.post("/:name/npm-install", criticalWriteLimiter, validateProcessParam, as
 
 router.post("/:name/npm-build", criticalWriteLimiter, validateProcessParam, asyncHandler(async (req, res) => {
   const result = await npmBuild(req.params.name);
+  res.status(result.success ? 200 : 500).json(result);
+}));
+
+router.post("/:name/deploy", criticalWriteLimiter, validateProcessParam, asyncHandler(async (req, res) => {
+  const actor = req.user?.username || "unknown";
+  const result = await deployProcess(req.params.name, req.body || {}, actor);
   res.status(result.success ? 200 : 500).json(result);
 }));
 

@@ -44,6 +44,13 @@ LOG_TAIL_MAX_BYTES=1048576
 RESTART_HISTORY_PATH=./logs/restart-history.jsonl
 RESTART_HISTORY_MAX_LINES=20000
 RESTART_HISTORY_MAX_BYTES=10485760
+DEPLOY_HISTORY_PATH=./logs/deploy-history.jsonl
+DEPLOY_HISTORY_MAX_LINES=5000
+DEPLOY_HISTORY_MAX_BYTES=5242880
+ALERT_CHANNELS_PATH=./logs/alert-channels.json
+ALERT_TIMEOUT_MS=8000
+METRICS_HISTORY_PATH=./logs/metrics-history.json
+METRICS_HISTORY_MAX_POINTS=720
 METRICS_TOKEN=replace_with_long_random_token
 ```
 
@@ -162,16 +169,34 @@ CSRF:
 
 Processes:
 - `GET /api/v1/processes`
+- `GET /api/v1/processes/catalog` (live processes + tags/groups/dependencies metadata)
+- `GET /api/v1/processes/monitoring/summary` (uptime/downtime + restart anomaly summary)
 - `GET /api/v1/processes/history/restarts?limit=200`
+- `GET /api/v1/processes/history/deployments?limit=100&process=<name>`
 - `GET /api/v1/processes/:name`
+- `GET /api/v1/processes/:name/metrics?limit=120`
+- `PATCH /api/v1/processes/:name/meta` (group/tags/dependencies/alert thresholds)
+- `DELETE /api/v1/processes/:name/meta`
 - `POST /api/v1/processes/create`
 - `POST /api/v1/processes/:name/start`
 - `POST /api/v1/processes/:name/stop`
 - `POST /api/v1/processes/:name/restart`
 - `POST /api/v1/processes/:name/reload`
+- `POST /api/v1/processes/:name/deploy` (git pull + optional npm install/build + restart/reload)
 - `DELETE /api/v1/processes/:name`
 - `GET /api/v1/processes/:name/logs?lines=100`
 - `POST /api/v1/processes/:name/flush`
+- `GET /api/v1/processes/groups`
+- `PUT /api/v1/processes/groups/:groupName` (members array)
+- `POST /api/v1/processes/groups/:groupName/:action(start|stop|restart)` (dependency-aware order)
+- `GET /api/v1/processes/config/export`
+- `POST /api/v1/processes/config/import`
+
+Alerts:
+- `GET /api/v1/alerts/channels`
+- `POST /api/v1/alerts/channels`
+- `DELETE /api/v1/alerts/channels/:id`
+- `POST /api/v1/alerts/channels/:id/test`
 
 PM2 daemon:
 - `POST /api/v1/pm2/save`
@@ -187,3 +212,4 @@ Public:
 
 - In production, `server/index.js` serves `client/dist` and handles SPA routing.
 - Set strong values for `PM2_USER`, `PM2_PASS_HASH`, `JWT_SECRET`, and `METRICS_TOKEN` before deploying.
+- New dashboard features include: process tags/groups with bulk actions, dependency-aware group start/restart, metrics history charts, threshold alerts, restart anomaly flags, combined searchable logs with TXT/CSV export, theme toggle, keyboard shortcuts, process config import/export, one-click deploy, deployment history, and external alert channels (webhook/Slack webhook).

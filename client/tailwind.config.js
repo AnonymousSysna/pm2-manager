@@ -4,38 +4,38 @@ export default {
   theme: {
     extend: {
       colors: {
-        bg: "#0b1220",
-        surface: "#111a2b",
-        "surface-2": "#16233a",
-        "surface-3": "#1f2f4d",
-        border: "#2a3a59",
-        "text-1": "#e2e8f0",
-        "text-2": "#cbd5e1",
-        "text-3": "#94a3b8",
+        bg: "rgb(var(--color-bg) / <alpha-value>)",
+        surface: "rgb(var(--color-surface) / <alpha-value>)",
+        "surface-2": "rgb(var(--color-surface-2) / <alpha-value>)",
+        "surface-3": "rgb(var(--color-surface-3) / <alpha-value>)",
+        border: "rgb(var(--color-border) / <alpha-value>)",
+        "text-1": "rgb(var(--color-text-1) / <alpha-value>)",
+        "text-2": "rgb(var(--color-text-2) / <alpha-value>)",
+        "text-3": "rgb(var(--color-text-3) / <alpha-value>)",
         brand: {
-          400: "#4ade80",
-          500: "#22c55e",
-          600: "#16a34a"
+          400: "rgb(var(--color-brand-400) / <alpha-value>)",
+          500: "rgb(var(--color-brand-500) / <alpha-value>)",
+          600: "rgb(var(--color-brand-600) / <alpha-value>)"
         },
         success: {
-          300: "#86efac",
-          500: "#22c55e",
-          600: "#16a34a"
+          300: "rgb(var(--color-success-300) / <alpha-value>)",
+          500: "rgb(var(--color-success-500) / <alpha-value>)",
+          600: "rgb(var(--color-success-600) / <alpha-value>)"
         },
         danger: {
-          300: "#fca5a5",
-          500: "#ef4444",
-          600: "#dc2626"
+          300: "rgb(var(--color-danger-300) / <alpha-value>)",
+          500: "rgb(var(--color-danger-500) / <alpha-value>)",
+          600: "rgb(var(--color-danger-600) / <alpha-value>)"
         },
         warning: {
-          300: "#fcd34d",
-          500: "#f59e0b",
-          600: "#d97706"
+          300: "rgb(var(--color-warning-300) / <alpha-value>)",
+          500: "rgb(var(--color-warning-500) / <alpha-value>)",
+          600: "rgb(var(--color-warning-600) / <alpha-value>)"
         },
         info: {
-          300: "#93c5fd",
-          500: "#3b82f6",
-          600: "#2563eb"
+          300: "rgb(var(--color-info-300) / <alpha-value>)",
+          500: "rgb(var(--color-info-500) / <alpha-value>)",
+          600: "rgb(var(--color-info-600) / <alpha-value>)"
         }
       }
     }

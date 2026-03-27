@@ -15,6 +15,21 @@ const {
 } = require("../utils/validation");
 const { trackPm2Operation } = require("../middleware/metrics");
 const { appendHistoryEntry } = require("../utils/restartHistory");
+const { appendDeploymentHistory, listDeploymentHistory } = require("../utils/deploymentHistory");
+const {
+  listProcessMeta,
+  setProcessMeta,
+  clearProcessMeta,
+  listGroups,
+  setGroup,
+  getGroupMembers,
+  exportConfig,
+  importConfig
+} = require("../utils/processMetaStore");
+const {
+  getMetricsHistory,
+  getMonitoringSummary
+} = require("../utils/metricsHistoryStore");
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
 const COMMAND_TIMEOUT_MS = Number.isFinite(Number(process.env.COMMAND_TIMEOUT_MS))
@@ -554,8 +569,289 @@ async function npmBuild(name) {
   return runNpmScriptForProcess(name, "build");
 }
 
+async function deployProcess(name, options = {}, actor = "unknown") {
+  const processName = sanitizeProcessName(name, "process name");
+  const branch = String(options.branch || "").trim();
+  const installDependencies = options.installDependencies !== false;
+  const runBuild = options.runBuild !== false;
+  const restartMode = String(options.restartMode || "restart").trim() === "reload" ? "reload" : "restart";
+  const gitRemote = String(options.gitRemote || "origin").trim() || "origin";
+
+  const result = await withPM2(async () => {
+    const proc = await describeProcess(processName);
+    if (!proc) {
+      throw new Error(`Process not found: ${processName}`);
+    }
+
+    const cwd = proc.pm2_env?.pm_cwd;
+    let cwdStat;
+    try {
+      cwdStat = await fs.promises.stat(cwd);
+    } catch (_error) {
+      cwdStat = null;
+    }
+
+    if (!cwd || !cwdStat || !cwdStat.isDirectory()) {
+      throw new Error(`Cannot resolve process working directory for: ${processName}`);
+    }
+
+    const steps = [];
+    const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+
+    const runStep = async (label, command, args) => {
+      const startedAt = Date.now();
+      try {
+        const output = await runCommand(command, args, cwd);
+        steps.push({
+          label,
+          success: true,
+          durationMs: Date.now() - startedAt,
+          output: String(output.stdout || output.stderr || "").slice(-4000)
+        });
+      } catch (error) {
+        steps.push({
+          label,
+          success: false,
+          durationMs: Date.now() - startedAt,
+          error: error.message
+        });
+        throw error;
+      }
+    };
+
+    await runStep("git:check", "git", ["rev-parse", "--is-inside-work-tree"]);
+    await runStep("git:fetch", "git", ["fetch", gitRemote, "--prune"]);
+
+    if (branch) {
+      await runStep("git:checkout", "git", ["checkout", branch]);
+      await runStep("git:pull", "git", ["pull", "--ff-only", gitRemote, branch]);
+    } else {
+      await runStep("git:pull", "git", ["pull", "--ff-only"]);
+    }
+
+    if (installDependencies) {
+      await runStep("npm:install", npmCmd, ["install"]);
+    }
+
+    if (runBuild) {
+      await runStep("npm:build", npmCmd, ["run", "build"]);
+    }
+
+    if (restartMode === "reload") {
+      await new Promise((resolve, reject) => {
+        pm2.reload(processName, (error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      });
+      steps.push({ label: "pm2:reload", success: true, durationMs: 0, output: "Process reloaded" });
+    } else {
+      await new Promise((resolve, reject) => {
+        pm2.restart(processName, (error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      });
+      steps.push({ label: "pm2:restart", success: true, durationMs: 0, output: "Process restarted" });
+    }
+
+    return {
+      processName,
+      cwd,
+      branch: branch || null,
+      installDependencies,
+      runBuild,
+      restartMode,
+      steps
+    };
+  });
+
+  trackPm2Operation("processes.deploy", result.success);
+  await appendDeploymentHistory({
+    processName,
+    actor,
+    success: result.success,
+    branch: branch || null,
+    installDependencies,
+    runBuild,
+    restartMode,
+    steps: result.success ? result.data.steps : [],
+    error: result.success ? null : result.error
+  }).catch(() => {
+    // Best-effort audit append.
+  });
+
+  return result;
+}
+
+async function getDeploymentHistory(limit = 100, processName = "") {
+  const history = await listDeploymentHistory(limit, processName);
+  return { success: true, data: history, error: null };
+}
+
+function buildDependencyOrder(targetNames, processMeta) {
+  const visiting = new Set();
+  const visited = new Set();
+  const ordered = [];
+
+  const visit = (name) => {
+    if (visited.has(name)) {
+      return;
+    }
+    if (visiting.has(name)) {
+      throw new Error(`Dependency cycle detected at process: ${name}`);
+    }
+
+    visiting.add(name);
+    const dependencies = processMeta[name]?.dependencies || [];
+    for (const dep of dependencies) {
+      visit(dep);
+    }
+    visiting.delete(name);
+    visited.add(name);
+    ordered.push(name);
+  };
+
+  for (const name of targetNames) {
+    visit(name);
+  }
+
+  return ordered;
+}
+
+async function getProcessCatalog() {
+  const [live, processMeta, groups] = await Promise.all([
+    listProcesses(),
+    listProcessMeta(),
+    listGroups()
+  ]);
+
+  if (!live.success) {
+    return live;
+  }
+
+  const withMeta = live.data.map((proc) => {
+    const meta = processMeta[proc.name] || {
+      group: "",
+      tags: [],
+      dependencies: [],
+      alertThresholds: { cpu: null, memoryMB: null }
+    };
+
+    return {
+      ...proc,
+      meta
+    };
+  });
+
+  return {
+    success: true,
+    data: {
+      processes: withMeta,
+      groups,
+      meta: processMeta
+    },
+    error: null
+  };
+}
+
+async function updateProcessMetadata(name, payload) {
+  const nextMeta = await setProcessMeta(name, payload || {});
+  return {
+    success: true,
+    data: nextMeta,
+    error: null
+  };
+}
+
+async function removeProcessMetadata(name) {
+  await clearProcessMeta(name);
+  return { success: true, data: { removed: true }, error: null };
+}
+
+async function updateGroupMembers(groupName, members) {
+  const group = await setGroup(groupName, members || []);
+  return { success: true, data: group, error: null };
+}
+
+async function runBulkGroupAction(groupName, actionName) {
+  const groupMembers = await getGroupMembers(groupName);
+  if (!Array.isArray(groupMembers) || groupMembers.length === 0) {
+    throw new Error(`Group is empty or not found: ${groupName}`);
+  }
+
+  const processMeta = await listProcessMeta();
+  const ordered = buildDependencyOrder(groupMembers, processMeta);
+  const targetList = actionName === "start" ? ordered : [...ordered].reverse();
+
+  const handlers = {
+    start: startProcess,
+    stop: stopProcess,
+    restart: restartProcess
+  };
+  const handler = handlers[actionName];
+  if (!handler) {
+    throw new Error(`Unsupported group action: ${actionName}`);
+  }
+
+  const results = [];
+  for (const processName of targetList) {
+    if (!groupMembers.includes(processName)) {
+      continue;
+    }
+    const result = await handler(processName);
+    results.push({
+      name: processName,
+      success: result.success,
+      error: result.error || null
+    });
+  }
+
+  return {
+    success: results.every((item) => item.success),
+    data: {
+      group: String(groupName || ""),
+      action: actionName,
+      order: targetList.filter((name) => groupMembers.includes(name)),
+      results
+    },
+    error: null
+  };
+}
+
+async function readProcessMetrics(name, limit) {
+  const points = await getMetricsHistory(name, limit);
+  return { success: true, data: points, error: null };
+}
+
+async function readMonitoringSummary() {
+  const live = await listProcesses();
+  if (!live.success) {
+    return live;
+  }
+  const summary = await getMonitoringSummary(live.data);
+  return { success: true, data: summary, error: null };
+}
+
+async function exportProcessConfig() {
+  const payload = await exportConfig();
+  return { success: true, data: payload, error: null };
+}
+
+async function importProcessConfig(payload) {
+  const result = await importConfig(payload || {});
+  return { success: true, data: result, error: null };
+}
+
 module.exports = {
   listProcesses,
+  getProcessCatalog,
   startProcess,
   stopProcess,
   restartProcess,
@@ -566,5 +862,15 @@ module.exports = {
   flushLogs,
   getProcessDetails,
   npmInstall,
-  npmBuild
+  npmBuild,
+  updateProcessMetadata,
+  removeProcessMetadata,
+  updateGroupMembers,
+  runBulkGroupAction,
+  readProcessMetrics,
+  readMonitoringSummary,
+  exportProcessConfig,
+  importProcessConfig,
+  deployProcess,
+  getDeploymentHistory
 };
