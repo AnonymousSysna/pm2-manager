@@ -55,6 +55,38 @@ Use `TRUST_PROXY=1` when running behind Nginx/Cloudflare so real client IP is de
 
 Server local dev file (`server/.env`) is already scaffolded.
 
+## New User: Create `bcrypt_hash` For Password
+
+Use this when setting `PM2_PASS_HASH`.
+
+1. Install dependencies (if not done yet):
+
+```bash
+npm install
+npm --prefix server install
+```
+
+2. Generate a bcrypt hash (replace `YourStrongPasswordHere`):
+
+```bash
+cd server
+node -e "const bcrypt=require('bcryptjs'); const p=process.argv[1]; if(!p){console.error('Usage: node -e \"...\" <password>'); process.exit(1);} console.log(bcrypt.hashSync(p, 10));" "YourStrongPasswordHere"
+```
+
+3. Copy the output (starts with `$2a$10$...`), then set it in `.env`:
+
+```env
+PM2_PASS_HASH=$2a$10$replace_with_generated_hash
+```
+
+4. Optional check (compare plain password vs hash):
+
+```bash
+node -e "const bcrypt=require('bcryptjs'); const p=process.argv[1]; const h=process.argv[2]; console.log(bcrypt.compareSync(p,h)?'MATCH':'NO_MATCH');" "YourStrongPasswordHere" "$2a$10$replace_with_generated_hash"
+```
+
+Do not store the plain password in `.env`; only store the hash.
+
 ## Install
 
 From repo root:
