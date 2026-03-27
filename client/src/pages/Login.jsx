@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast, { getErrorMessage } from "../lib/toast";
 import { auth } from "../api";
@@ -7,41 +7,12 @@ import Input from "../components/ui/Input";
 
 export default function Login() {
   const navigate = useNavigate();
-  const [checkingSession, setCheckingSession] = useState(true);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const manualLoginAttemptRef = useRef(false);
-
-  useEffect(() => {
-    let mounted = true;
-
-    auth
-      .me()
-      .then((result) => {
-        if (!mounted) {
-          return;
-        }
-        if (result?.success && !manualLoginAttemptRef.current) {
-          navigate("/dashboard", { replace: true });
-          return;
-        }
-        setCheckingSession(false);
-      })
-      .catch(() => {
-        if (mounted) {
-          setCheckingSession(false);
-        }
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [navigate]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    manualLoginAttemptRef.current = true;
     setLoading(true);
 
     try {
@@ -66,10 +37,6 @@ export default function Login() {
       setLoading(false);
     }
   };
-
-  if (checkingSession) {
-    return null;
-  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg p-4">
