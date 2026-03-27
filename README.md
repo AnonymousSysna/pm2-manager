@@ -30,28 +30,42 @@ Access target: `http://YOUR_VPS_IP:8000`
 Root `.env.example`:
 
 ```env
+# Auth
 PM2_USER=replace_with_admin_username
 PM2_PASS_HASH=$2a$10$replace_with_bcrypt_hash
 JWT_SECRET=replace_with_long_random_secret
+
+# Network / HTTP
 PORT=8000
-AUTH_ALLOWED_IPS=203.0.113.10
-TRUST_PROXY=1
+AUTH_ALLOWED_IPS=
+TRUST_PROXY=0
 COOKIE_SECURE=
-CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
-PROJECTS_ROOT=D:/apps
+CORS_ALLOWED_ORIGINS=http://localhost:5173
+
+# Runtime
+PROJECTS_ROOT=/user/pm2-manager/apps/
 COMMAND_TIMEOUT_MS=300000
 LOG_TAIL_MAX_BYTES=1048576
+
+# Restart history
 RESTART_HISTORY_PATH=./logs/restart-history.jsonl
 RESTART_HISTORY_MAX_LINES=20000
 RESTART_HISTORY_MAX_BYTES=10485760
+
+# Deploy history
 DEPLOY_HISTORY_PATH=./logs/deploy-history.jsonl
 DEPLOY_HISTORY_MAX_LINES=5000
 DEPLOY_HISTORY_MAX_BYTES=5242880
+
+# Alerts
 ALERT_CHANNELS_PATH=./logs/alert-channels.json
 ALERT_TIMEOUT_MS=8000
+
+# Metrics
 METRICS_HISTORY_PATH=./logs/metrics-history.json
 METRICS_HISTORY_MAX_POINTS=720
 METRICS_TOKEN=replace_with_long_random_token
+
 ```
 
 `AUTH_ALLOWED_IPS` supports a comma-separated allowlist of client IPs.
