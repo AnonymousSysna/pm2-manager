@@ -30,9 +30,9 @@ Access target: `http://YOUR_VPS_IP:8000`
 Root `.env.example`:
 
 ```env
-PM2_USER=admin
+PM2_USER=replace_with_admin_username
 PM2_PASS_HASH=$2a$10$replace_with_bcrypt_hash
-JWT_SECRET=your-secret-key-here
+JWT_SECRET=replace_with_long_random_secret
 PORT=8000
 AUTH_ALLOWED_IPS=203.0.113.10
 TRUST_PROXY=1
@@ -152,4 +152,4 @@ Public:
 ## Notes
 
 - In production, `server/index.js` serves `client/dist` and handles SPA routing.
-- Set strong values for `PM2_PASS_HASH`, `JWT_SECRET`, and `METRICS_TOKEN` before deploying.
+- Set strong values for `PM2_USER`, `PM2_PASS_HASH`, `JWT_SECRET`, and `METRICS_TOKEN` before deploying.
