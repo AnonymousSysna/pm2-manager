@@ -169,7 +169,6 @@ Base paths:
 - `POST /api/v1/processes/:name/npm-build`
 - `POST /api/v1/processes/:name/deploy`
 - `GET /api/v1/processes/:name/git/commits?limit=20`
-- `GET /api/v1/processes/:name/git/status`
 - `POST /api/v1/processes/:name/git/pull`
 - `POST /api/v1/processes/:name/rollback`
 - `DELETE /api/v1/processes/:name`

@@ -24,7 +24,6 @@ const {
   deployProcess,
   getDeploymentHistory,
   getGitCommitsForProcess,
-  getGitStatusForProcess,
   gitPullProcess,
   rollbackProcess,
   readProcessDotEnv,
@@ -222,16 +221,11 @@ router.get("/:name/git/commits", readLimiter, validateProcessParam, asyncHandler
   res.status(result.success ? 200 : 500).json(result);
 }));
 
-router.get("/:name/git/status", readLimiter, validateProcessParam, asyncHandler(async (req, res) => {
-  const result = await getGitStatusForProcess(req.params.name);
-  res.status(result.success ? 200 : 500).json(result);
-}));
-
 router.post("/:name/git/pull", criticalWriteLimiter, validateProcessParam, asyncHandler(async (req, res) => {
   const result = await gitPullProcess(req.params.name);
   const status = result.success
     ? 200
-    : /not in a git repository|no upstream|no new remote commits|not found|working directory/i.test(result.error || "")
+    : /not in a git repository|not found|working directory/i.test(result.error || "")
       ? 400
       : 500;
   res.status(status).json(result);

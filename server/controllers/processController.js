@@ -1330,100 +1330,21 @@ async function getGitCommitsForProcess(name, limit = 20) {
   return result;
 }
 
-async function readGitStatusForDirectory(processName, cwd) {
-  try {
-    await runCommand("git", ["rev-parse", "--is-inside-work-tree"], cwd);
-  } catch (_error) {
-    return {
-      processName,
-      cwd,
-      isGitRepo: false,
-      branch: null,
-      localCommit: null,
-      upstream: null,
-      upstreamCommit: null,
-      ahead: 0,
-      behind: 0,
-      upToDate: false,
-      cleanWorkingTree: null
-    };
-  }
-
-  const branchOutput = await runCommand("git", ["rev-parse", "--abbrev-ref", "HEAD"], cwd);
-  const localOutput = await runCommand("git", ["rev-parse", "HEAD"], cwd);
-  const shortLocalOutput = await runCommand("git", ["rev-parse", "--short", "HEAD"], cwd);
-  const statusOutput = await runCommand("git", ["status", "--porcelain"], cwd);
-
-  let upstream = "";
-  try {
-    const upstreamOutput = await runCommand("git", ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], cwd);
-    upstream = String(upstreamOutput.stdout || "").trim();
-  } catch (_error) {
-    upstream = "";
-  }
-
-  let ahead = 0;
-  let behind = 0;
-  let upstreamCommit = "";
-  if (upstream) {
-    await runCommand("git", ["fetch", "--prune"], cwd);
-    const countsOutput = await runCommand("git", ["rev-list", "--left-right", "--count", `HEAD...${upstream}`], cwd);
-    const [behindRaw, aheadRaw] = String(countsOutput.stdout || "").trim().split(/\s+/);
-    behind = Math.max(0, Number(behindRaw) || 0);
-    ahead = Math.max(0, Number(aheadRaw) || 0);
-    const upstreamHeadOutput = await runCommand("git", ["rev-parse", "--short", upstream], cwd);
-    upstreamCommit = String(upstreamHeadOutput.stdout || "").trim();
-  }
-
-  return {
-    processName,
-    cwd,
-    isGitRepo: true,
-    branch: String(branchOutput.stdout || "").trim() || null,
-    localCommit: String(localOutput.stdout || "").trim() || null,
-    localShortCommit: String(shortLocalOutput.stdout || "").trim() || null,
-    upstream: upstream || null,
-    upstreamCommit: upstreamCommit || null,
-    ahead,
-    behind,
-    upToDate: Boolean(upstream) && ahead === 0 && behind === 0,
-    cleanWorkingTree: String(statusOutput.stdout || "").trim().length === 0
-  };
-}
-
-async function getGitStatusForProcess(name) {
-  const processName = sanitizeProcessName(name, "process name");
-  const result = await withPM2(async () => {
-    const { cwd } = await resolveProcessWorkingDirectory(processName);
-    return readGitStatusForDirectory(processName, cwd);
-  });
-  trackPm2Operation("processes.git.status", result.success);
-  return result;
-}
-
 async function gitPullProcess(name) {
   const processName = sanitizeProcessName(name, "process name");
   const result = await withPM2(async () => {
     const { cwd } = await resolveProcessWorkingDirectory(processName);
-    const gitStatus = await readGitStatusForDirectory(processName, cwd);
-    if (!gitStatus.isGitRepo) {
-      throw new Error(`Process ${processName} is not in a Git repository`);
-    }
-    if (!gitStatus.upstream) {
-      throw new Error(`No upstream tracking branch configured for ${processName}`);
-    }
-    if (Number(gitStatus.behind || 0) <= 0) {
-      throw new Error(`No new remote commits to pull for ${processName}`);
-    }
 
-    await runCommand("git", ["fetch", "--prune"], gitStatus.cwd);
-    await runCommand("git", ["pull", "--ff-only"], gitStatus.cwd);
-
-    const afterStatusResult = await readGitStatusForDirectory(processName, gitStatus.cwd);
+    await runCommand("git", ["rev-parse", "--is-inside-work-tree"], cwd);
+    const beforeHead = await runCommand("git", ["rev-parse", "--short", "HEAD"], cwd);
+    const pull = await runCommand("git", ["pull"], cwd);
+    const afterHead = await runCommand("git", ["rev-parse", "--short", "HEAD"], cwd);
     return {
       processName,
-      statusBefore: gitStatus,
-      statusAfter: afterStatusResult
+      cwd,
+      beforeCommit: String(beforeHead.stdout || "").trim(),
+      afterCommit: String(afterHead.stdout || "").trim(),
+      output: compactOutput(`${pull.stdout || ""}\n${pull.stderr || ""}`)
     };
   });
 
@@ -1653,7 +1574,6 @@ module.exports = {
   deployProcess,
   getDeploymentHistory,
   getGitCommitsForProcess,
-  getGitStatusForProcess,
   gitPullProcess,
   rollbackProcess,
   readProcessDotEnv,
