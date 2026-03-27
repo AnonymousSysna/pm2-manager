@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { X, Copy, Play, Square, RefreshCw, RotateCcw, Trash2, Download, Hammer } from "lucide-react";
 import toast from "../lib/toast";
-import Badge from "./ui/Badge";
+import { processes as processApi } from "../api";
 import Button from "./ui/Button";
 import ProgressBar from "./ui/ProgressBar";
 
@@ -35,15 +35,8 @@ async function copyToClipboard(text) {
 export default function ProcessDetailModal({ process, onClose, onAction }) {
   const [tab, setTab] = useState("Overview");
   const [loadingAction, setLoadingAction] = useState({});
-  const readingsRef = useRef([]);
-
-  useEffect(() => {
-    if (!process) {
-      return;
-    }
-
-    readingsRef.current = [...readingsRef.current, { cpu: process.cpu || 0, memory: process.memory || 0 }].slice(-10);
-  }, [process]);
+  const [metricsPoints, setMetricsPoints] = useState([]);
+  const [metricsLoading, setMetricsLoading] = useState(false);
 
   useEffect(() => {
     const onEsc = (event) => {
@@ -54,6 +47,38 @@ export default function ProcessDetailModal({ process, onClose, onAction }) {
     window.addEventListener("keydown", onEsc);
     return () => window.removeEventListener("keydown", onEsc);
   }, [onClose]);
+
+  useEffect(() => {
+    if (!process?.name) {
+      return;
+    }
+
+    let active = true;
+    const loadMetrics = async () => {
+      try {
+        setMetricsLoading(true);
+        const result = await processApi.metrics(process.name, 120);
+        if (active && result.success && Array.isArray(result.data)) {
+          setMetricsPoints(result.data);
+        }
+      } catch (_error) {
+        if (active) {
+          setMetricsPoints([]);
+        }
+      } finally {
+        if (active) {
+          setMetricsLoading(false);
+        }
+      }
+    };
+
+    loadMetrics();
+    const timer = setInterval(loadMetrics, 10000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [process?.name]);
 
   const details = useMemo(() => {
     const data = process?.details || {};
@@ -82,7 +107,7 @@ export default function ProcessDetailModal({ process, onClose, onAction }) {
 
   const envVars = process?.details?.pm2_env?.env || {};
   const gitStatus = process?.gitStatus || null;
-  const maxMemory = Math.max(...readingsRef.current.map((x) => x.memory || 0), 1);
+  const maxMemory = Math.max(...metricsPoints.map((x) => x.memory || 0), 1);
   const isOnline = process?.status === "online";
   const isStopped = process?.status === "stopped";
   const isCluster = process?.mode === "cluster";
@@ -179,11 +204,14 @@ export default function ProcessDetailModal({ process, onClose, onAction }) {
 
         {tab === "Resource Graph" && (
           <div className="space-y-3">
-            {readingsRef.current.length === 0 && <p className="text-sm text-text-3">No readings yet.</p>}
-            {readingsRef.current.map((item, index) => (
-              <div key={`${item.cpu}-${index}`} className="space-y-1 text-xs">
+            {metricsLoading && <p className="text-sm text-text-3">Loading metrics history...</p>}
+            {!metricsLoading && metricsPoints.length === 0 && (
+              <p className="text-sm text-text-3">No metrics history yet.</p>
+            )}
+            {metricsPoints.map((item, index) => (
+              <div key={`${item.ts}-${index}`} className="space-y-1 text-xs">
                 <div className="flex justify-between text-text-2">
-                  <span>Sample {index + 1}</span>
+                  <span>{item.ts ? new Date(item.ts).toLocaleTimeString() : `Point ${index + 1}`}</span>
                   <span>
                     CPU {item.cpu}% | MEM {(item.memory / 1024 / 1024).toFixed(1)}MB
                   </span>
