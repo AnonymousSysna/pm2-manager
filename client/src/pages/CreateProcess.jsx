@@ -246,7 +246,7 @@ export default function CreateProcess() {
           error: (error) => getErrorMessage(error, "Failed to launch process")
         }
       );
-      navigate(`/dashboard/logs?process=${encodeURIComponent(form.name)}`);
+      navigate(`/dashboard/logs?process=${encodeURIComponent(form.name)}&source=create`);
     } catch (err) {
       const message = getErrorMessage(err, "Failed to launch process");
       setError(message);

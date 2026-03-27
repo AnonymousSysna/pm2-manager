@@ -57,6 +57,7 @@ function downloadBlob(fileName, content, type) {
 export default function Logs() {
   const [searchParams] = useSearchParams();
   const defaultProcess = searchParams.get("process") || "";
+  const launchSource = searchParams.get("source") || "";
   const [selected, setSelected] = useState(defaultProcess);
   const [lineCount, setLineCount] = useState(100);
   const [filter, setFilter] = useState("both");
@@ -64,6 +65,8 @@ export default function Logs() {
   const [combinedView, setCombinedView] = useState(false);
   const [processOptions, setProcessOptions] = useState([]);
   const [entries, setEntries] = useState([]);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const [showCreateHint, setShowCreateHint] = useState(launchSource === "create" && Boolean(defaultProcess));
   const { logsByProcess } = useSocket();
   const containerRef = useRef(null);
 
@@ -132,7 +135,13 @@ export default function Logs() {
     };
 
     loadLogs();
-  }, [selected, lineCount, combinedView, processOptions]);
+  }, [selected, lineCount, combinedView, processOptions, refreshNonce]);
+
+  useEffect(() => {
+    if (showCreateHint && entries.length > 0) {
+      setShowCreateHint(false);
+    }
+  }, [showCreateHint, entries.length]);
 
   useEffect(() => {
     const targetNames = combinedView
@@ -238,6 +247,15 @@ export default function Logs() {
         description="Stream, filter, and export process logs with consistent controls across single-process and combined views."
       />
 
+      {showCreateHint && (
+        <section className="rounded-md border border-info-500/40 bg-info-500/10 p-3 text-sm text-info-300">
+          <p>Process creation request was accepted for <span className="font-semibold">{selected || defaultProcess}</span>. Waiting for first logs...</p>
+          <p className="mt-1 text-xs text-text-3">
+            If this stays empty, click Refresh Logs and check process status on Dashboard.
+          </p>
+        </section>
+      )}
+
       <section className="page-panel grid gap-2 md:grid-cols-2 xl:grid-cols-6">
         <Select value={selected} onChange={(e) => setSelected(e.target.value)} className="w-full" disabled={combinedView}>
           <option value="">Select process</option>
@@ -287,6 +305,9 @@ export default function Logs() {
         <Button type="button" variant="secondary" onClick={downloadCsv}>
           Download .csv
         </Button>
+        <Button type="button" variant="secondary" onClick={() => setRefreshNonce((value) => value + 1)}>
+          Refresh Logs
+        </Button>
       </section>
 
       <section ref={containerRef} className="h-log-viewer overflow-y-auto rounded-lg border border-border bg-surface p-3 font-mono text-xs sm:p-4 sm:text-sm">
@@ -298,7 +319,11 @@ export default function Logs() {
           </div>
         )}
 
-        {(selected || combinedView) && visibleEntries.length === 0 && <p className="text-text-3">No log entries.</p>}
+        {(selected || combinedView) && visibleEntries.length === 0 && (
+          <p className="text-text-3">
+            No log entries yet. The process may still be starting, or it may not be writing to stdout/stderr.
+          </p>
+        )}
 
         {visibleEntries.map((entry, index) => {
           const levelClass = {
