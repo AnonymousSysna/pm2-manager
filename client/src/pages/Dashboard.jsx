@@ -96,6 +96,7 @@ export default function Dashboard() {
   const [chartProcess, setChartProcess] = useState("");
   const [historyPoints, setHistoryPoints] = useState([]);
   const [monitoringSummary, setMonitoringSummary] = useState({});
+  const [gitSyncByProcess, setGitSyncByProcess] = useState({});
   const [selectedNames, setSelectedNames] = useState({});
   const [editingMetaProcess, setEditingMetaProcess] = useState(null);
   const [metaForm, setMetaForm] = useState({
@@ -214,6 +215,72 @@ export default function Dashboard() {
       return next;
     });
   }, [processes]);
+
+  const processNames = useMemo(
+    () => processes.map((proc) => proc.name).filter(Boolean).sort((a, b) => a.localeCompare(b)),
+    [processes]
+  );
+  const processNamesKey = useMemo(() => processNames.join("|"), [processNames]);
+
+  useEffect(() => {
+    if (processNames.length === 0) {
+      setGitSyncByProcess({});
+      return undefined;
+    }
+
+    let active = true;
+    const refreshGitSync = async () => {
+      const names = processNames;
+      setGitSyncByProcess((prev) => {
+        const next = { ...prev };
+        names.forEach((name) => {
+          next[name] = { ...(next[name] || {}), loading: true };
+        });
+        return next;
+      });
+
+      const settled = await Promise.allSettled(
+        names.map(async (name) => {
+          const result = await processApi.gitStatus(name);
+          return { name, result };
+        })
+      );
+
+      if (!active) {
+        return;
+      }
+
+      setGitSyncByProcess((prev) => {
+        const next = { ...prev };
+        settled.forEach((entry) => {
+          if (entry.status === "fulfilled") {
+            const { name, result } = entry.value;
+            next[name] = {
+              loading: false,
+              isGitRepo: Boolean(result?.data?.isGitRepo),
+              behind: Number(result?.data?.behind || 0),
+              upToDate: Boolean(result?.data?.upToDate)
+            };
+          }
+        });
+        names.forEach((name) => {
+          if (!next[name]) {
+            next[name] = { loading: false, isGitRepo: false, behind: 0, upToDate: false };
+          } else if (next[name].loading) {
+            next[name] = { ...next[name], loading: false };
+          }
+        });
+        return next;
+      });
+    };
+
+    refreshGitSync();
+    const timer = setInterval(refreshGitSync, 60000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [processNamesKey]);
 
   const openDetails = async (proc) => {
     try {
@@ -774,7 +841,11 @@ export default function Dashboard() {
                   <ActionButton
                     title="Git Pull"
                     variant="secondary"
-                    disabled={loadingAction[`${proc.name}:gitPull`]}
+                    disabled={
+                      loadingAction[`${proc.name}:gitPull`] ||
+                      Boolean(gitSyncByProcess[proc.name]?.loading) ||
+                      Number(gitSyncByProcess[proc.name]?.behind || 0) <= 0
+                    }
                     onClick={() => callAction("gitPull", proc.name)}
                     icon={<Download size={14} />}
                   />
@@ -945,7 +1016,11 @@ export default function Dashboard() {
                         <ActionButton
                           title="Git Pull"
                           variant="secondary"
-                          disabled={loadingAction[`${proc.name}:gitPull`]}
+                          disabled={
+                            loadingAction[`${proc.name}:gitPull`] ||
+                            Boolean(gitSyncByProcess[proc.name]?.loading) ||
+                            Number(gitSyncByProcess[proc.name]?.behind || 0) <= 0
+                          }
                           onClick={() => callAction("gitPull", proc.name)}
                           icon={<Download size={14} />}
                         />
