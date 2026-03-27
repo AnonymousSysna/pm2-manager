@@ -114,6 +114,30 @@ async function resolveNestedInstallDirs(projectDir, preferredAppName = "") {
   return installDirs;
 }
 
+async function resolvePreferredNestedAppDir(projectDir, preferredAppName = "") {
+  if (!preferredAppName) {
+    return "";
+  }
+  const candidateRoots = [path.join(projectDir, "apps"), path.join(projectDir, "packages")];
+  for (const root of candidateRoots) {
+    const candidateDir = path.join(root, preferredAppName);
+    if (!(await pathIsDirectory(candidateDir))) {
+      continue;
+    }
+    if (await pathIsReadableFile(path.join(candidateDir, "package.json"))) {
+      return path.resolve(candidateDir);
+    }
+  }
+  return "";
+}
+
+function getNpmInstallArgs({ includeDev = false } = {}) {
+  if (!includeDev) {
+    return ["install"];
+  }
+  return ["install", "--include=dev"];
+}
+
 function runCommand(command, args, cwd) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -397,10 +421,11 @@ async function createProcess(config) {
       const startScriptName = String(start_script || "start").trim() || "start";
 
       if (install_dependencies) {
-        await runCommand(npmCmd, ["install"], projectDir);
+        const installArgs = getNpmInstallArgs({ includeDev: Boolean(run_build) });
+        await runCommand(npmCmd, installArgs, projectDir);
         const nestedInstallDirs = await resolveNestedInstallDirs(projectDir, safeName);
         for (const installDir of nestedInstallDirs) {
-          await runCommand(npmCmd, ["install"], installDir);
+          await runCommand(npmCmd, installArgs, installDir);
         }
       }
 
@@ -413,9 +438,27 @@ async function createProcess(config) {
         } catch (error) {
           const missingModule = extractMissingModule(error?.message || "");
           if (missingModule) {
-            throw new Error(
-              `${error.message}\nHint: missing dependency "${missingModule}". If this is a nested app (for example apps/${safeName}), run npm install in that app directory or enable "Run npm install before start".`
-            );
+            if (install_dependencies) {
+              const preferredNestedDir = await resolvePreferredNestedAppDir(projectDir, safeName);
+              const installTargetDir = preferredNestedDir || projectDir;
+              try {
+                await runCommand(
+                  npmCmd,
+                  ["install", "--include=dev", "--save-dev", missingModule],
+                  installTargetDir
+                );
+                await runCommand(npmCmd, ["run", "build"], projectDir);
+              } catch (_retryError) {
+                throw new Error(
+                  `${error.message}\nHint: missing dependency "${missingModule}". Auto-install + retry failed in ${installTargetDir}.`
+                );
+              }
+            } else {
+              throw new Error(
+                `${error.message}\nHint: missing dependency "${missingModule}". If this is a nested app (for example apps/${safeName}), run npm install in that app directory or enable "Run npm install before start".`
+              );
+            }
+            return;
           }
           throw error;
         }
@@ -632,7 +675,11 @@ async function runNpmScriptForProcess(name, scriptName, args = []) {
     const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
 
     if (scriptName === "install") {
-      const result = await runCommand(npmCmd, ["install", ...args], cwd);
+      const result = await runCommand(
+        npmCmd,
+        [...getNpmInstallArgs({ includeDev: true }), ...args],
+        cwd
+      );
       return { command: "npm install", cwd, output: result.stdout.slice(-4000) };
     }
 
@@ -718,7 +765,7 @@ async function deployProcess(name, options = {}, actor = "unknown") {
     }
 
     if (installDependencies) {
-      await runStep("npm:install", npmCmd, ["install"]);
+      await runStep("npm:install", npmCmd, getNpmInstallArgs({ includeDev: runBuild }));
     }
 
     if (runBuild) {
