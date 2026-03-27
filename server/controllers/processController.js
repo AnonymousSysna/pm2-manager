@@ -757,6 +757,28 @@ async function createProcess(config) {
     } = config;
 
     const safeName = sanitizeProcessName(name, "process name");
+    const createSteps = [];
+    const runCreateStep = async (label, command, commandArgs, commandCwd) => {
+      const startedAt = Date.now();
+      try {
+        const output = await runCommand(command, commandArgs, commandCwd);
+        createSteps.push({
+          label,
+          success: true,
+          durationMs: Date.now() - startedAt,
+          output: compactOutput(`${output.stdout || ""}\n${output.stderr || ""}`)
+        });
+        return output;
+      } catch (error) {
+        createSteps.push({
+          label,
+          success: false,
+          durationMs: Date.now() - startedAt,
+          error: error.message
+        });
+        throw error;
+      }
+    };
     const rawScript = String(script || "").trim();
     const rawCwd = String(cwd || "").trim();
     let normalizedScript = rawScript ? sanitizeScriptPath(rawScript) : "";
@@ -803,16 +825,37 @@ async function createProcess(config) {
           throw new Error(`Project path is not a directory: ${projectDir}`);
         }
 
-        if (!(await directoryIsEmpty(projectDir))) {
-          throw new Error(`Project path must be empty before git clone: ${projectDir}`);
-        }
+        if (await directoryIsEmpty(projectDir)) {
+          const cloneArgs = ["clone"];
+          if (cloneBranch) {
+            cloneArgs.push("--branch", cloneBranch, "--single-branch");
+          }
+          cloneArgs.push(gitUrl, projectDir);
+          await runCreateStep("git:clone", "git", cloneArgs, PROJECTS_ROOT);
+        } else {
+          try {
+            await runCommand("git", ["rev-parse", "--is-inside-work-tree"], projectDir);
+          } catch (_error) {
+            throw new Error(`Project path is not empty and not a git repository: ${projectDir}`);
+          }
 
-        const cloneArgs = ["clone"];
-        if (cloneBranch) {
-          cloneArgs.push("--branch", cloneBranch, "--single-branch");
+          const existingOrigin = (await runCommand("git", ["remote", "get-url", "origin"], projectDir))
+            .stdout
+            .trim();
+          if (existingOrigin && existingOrigin !== gitUrl) {
+            throw new Error(
+              `Project path already uses a different origin remote. expected=${gitUrl} actual=${existingOrigin}`
+            );
+          }
+
+          await runCreateStep("git:fetch", "git", ["fetch", "origin", "--prune"], projectDir);
+          if (cloneBranch) {
+            await runCreateStep("git:checkout", "git", ["checkout", cloneBranch], projectDir);
+            await runCreateStep("git:pull", "git", ["pull", "--ff-only", "origin", cloneBranch], projectDir);
+          } else {
+            await runCreateStep("git:pull", "git", ["pull", "--ff-only"], projectDir);
+          }
         }
-        cloneArgs.push(gitUrl, projectDir);
-        await runCommand("git", cloneArgs, PROJECTS_ROOT);
 
         projectStat = await fs.promises.stat(projectDir);
       }
@@ -839,10 +882,10 @@ async function createProcess(config) {
 
       if (install_dependencies) {
         const installArgs = getNpmInstallArgs({ includeDev: Boolean(run_build) });
-        await runCommand(npmCmd, installArgs, projectDir);
+        await runCreateStep("npm:install", npmCmd, installArgs, projectDir);
         const nestedInstallDirs = await resolveNestedInstallDirs(projectDir, safeName);
         for (const installDir of nestedInstallDirs) {
-          await runCommand(npmCmd, installArgs, installDir);
+          await runCreateStep("npm:install:nested", npmCmd, installArgs, installDir);
         }
       }
 
@@ -851,7 +894,7 @@ async function createProcess(config) {
           throw new Error(`Missing "build" script in ${packageJsonPath}`);
         }
         try {
-          await runCommand(npmCmd, ["run", "build"], projectDir);
+          await runCreateStep("npm:build", npmCmd, ["run", "build"], projectDir);
         } catch (error) {
           const missingModule = extractMissingModule(error?.message || "");
           if (missingModule) {
@@ -859,12 +902,13 @@ async function createProcess(config) {
               const preferredNestedDir = await resolvePreferredNestedAppDir(projectDir, safeName);
               const installTargetDir = preferredNestedDir || projectDir;
               try {
-                await runCommand(
+                await runCreateStep(
+                  "npm:install-missing-module",
                   npmCmd,
                   ["install", "--include=dev", "--save-dev", missingModule],
                   installTargetDir
                 );
-                await runCommand(npmCmd, ["run", "build"], projectDir);
+                await runCreateStep("npm:build:retry", npmCmd, ["run", "build"], projectDir);
               } catch (_retryError) {
                 throw new Error(
                   `${error.message}\nHint: missing dependency "${missingModule}". Auto-install + retry failed in ${installTargetDir}.`
@@ -925,12 +969,30 @@ async function createProcess(config) {
     };
 
     return new Promise((resolve, reject) => {
+      const startedAt = Date.now();
       pm2.start(processConfig, (error, proc) => {
         if (error) {
+          createSteps.push({
+            label: "pm2:start",
+            success: false,
+            durationMs: Date.now() - startedAt,
+            error: error.message
+          });
           reject(error);
           return;
         }
-        resolve(proc);
+        createSteps.push({
+          label: "pm2:start",
+          success: true,
+          durationMs: Date.now() - startedAt,
+          output: "Process started"
+        });
+        resolve({
+          processName: safeName,
+          cwd: safeCwd,
+          steps: createSteps,
+          pm2: proc
+        });
       });
     });
   });

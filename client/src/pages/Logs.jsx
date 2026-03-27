@@ -67,8 +67,28 @@ export default function Logs() {
   const [entries, setEntries] = useState([]);
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [showCreateHint, setShowCreateHint] = useState(launchSource === "create" && Boolean(defaultProcess));
-  const { logsByProcess } = useSocket();
+  const [createSummary, setCreateSummary] = useState(null);
+  const { logsByProcess, processes, connected } = useSocket();
   const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (launchSource !== "create" || !defaultProcess) {
+      return;
+    }
+    try {
+      const raw = sessionStorage.getItem("pm2_last_create");
+      if (!raw) {
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      if (!parsed || parsed.processName !== defaultProcess) {
+        return;
+      }
+      setCreateSummary(parsed);
+    } catch (_error) {
+      // Ignore parse issues.
+    }
+  }, [launchSource, defaultProcess]);
 
   useEffect(() => {
     const loadProcesses = async () => {
@@ -201,6 +221,23 @@ export default function Logs() {
     });
   }, [entries, filter, keyword]);
 
+  const selectedProcessStatus = useMemo(() => {
+    if (!selected) {
+      return null;
+    }
+    const item = processes.find((proc) => proc.name === selected);
+    if (!item) {
+      return null;
+    }
+    return {
+      status: item.status || "unknown",
+      restarts: item.restarts ?? 0,
+      pid: item.pid ?? null,
+      cpu: item.cpu ?? 0,
+      memory: item.memory ?? 0
+    };
+  }, [processes, selected]);
+
   const flush = async () => {
     if (!selected || combinedView) {
       return;
@@ -253,6 +290,41 @@ export default function Logs() {
           <p className="mt-1 text-xs text-text-3">
             If this stays empty, click Refresh Logs and check process status on Dashboard.
           </p>
+        </section>
+      )}
+
+      {launchSource === "create" && selected && (
+        <section className="rounded-md border border-border bg-surface p-3 text-sm">
+          <p className="text-text-2">
+            Socket:{" "}
+            <span className={connected ? "text-success-300" : "text-warning-300"}>
+              {connected ? "connected" : "disconnected"}
+            </span>
+            {" | "}
+            Process:{" "}
+            <span className="text-text-1">{selected}</span>
+            {" | "}
+            Status:{" "}
+            <span className="text-brand-400">{selectedProcessStatus?.status || "not found yet"}</span>
+          </p>
+          {selectedProcessStatus && (
+            <p className="mt-1 text-xs text-text-3">
+              PID: {selectedProcessStatus.pid || "-"} | Restarts: {selectedProcessStatus.restarts} | CPU: {selectedProcessStatus.cpu}% | Memory: {Math.round((selectedProcessStatus.memory || 0) / 1024 / 1024)}MB
+            </p>
+          )}
+          {Array.isArray(createSummary?.details?.steps) && createSummary.details.steps.length > 0 && (
+            <div className="mt-2 rounded border border-border bg-surface-2 p-2">
+              <p className="text-xs font-semibold text-text-2">Create Steps</p>
+              <div className="mt-1 space-y-1 text-xs text-text-3">
+                {createSummary.details.steps.map((step, idx) => (
+                  <p key={`${step.label}-${idx}`}>
+                    {step.success === false ? "x" : "ok"} {step.label}
+                    {Number.isFinite(step.durationMs) ? ` (${Math.round(step.durationMs / 1000)}s)` : ""}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
         </section>
       )}
 

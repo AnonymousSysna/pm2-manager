@@ -233,7 +233,7 @@ export default function CreateProcess() {
     try {
       setIsLaunching(true);
       setLaunchStartedAt(Date.now());
-      await toast.promise(
+      const result = await toast.promise(
         processes.create(payload).then((result) => {
           if (!result.success) {
             throw new Error(result.error || "Unable to create process");
@@ -245,6 +245,14 @@ export default function CreateProcess() {
           success: "Process launched",
           error: (error) => getErrorMessage(error, "Failed to launch process")
         }
+      );
+      sessionStorage.setItem(
+        "pm2_last_create",
+        JSON.stringify({
+          processName: form.name,
+          ts: Date.now(),
+          details: result?.data || null
+        })
       );
       navigate(`/dashboard/logs?process=${encodeURIComponent(form.name)}&source=create`);
     } catch (err) {
