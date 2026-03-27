@@ -21,7 +21,7 @@ Access target: `http://YOUR_VPS_IP:8000`
 
 ## Requirements
 
-- Node.js 18+
+- Node.js 18+ or 20+
 - npm
 - PM2 installed (`npm i -g pm2`) on the host where you deploy
 
