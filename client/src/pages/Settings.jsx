@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import toast, { getErrorMessage } from "../lib/toast";
 import { auth, pm2Admin, processes as processApi, alerts as alertsApi } from "../api";
 import Button from "../components/ui/Button";
+import Checkbox from "../components/ui/Checkbox";
 import Input from "../components/ui/Input";
 import Select from "../components/ui/Select";
 import { PageIntro } from "../components/ui/PageLayout";
@@ -260,7 +261,7 @@ export default function Settings() {
             />
           </label>
           <label className="flex items-center gap-2">
-            <input type="checkbox" className="h-4 w-4 accent-brand-500" checked={autoScroll} onChange={(e) => setAutoScroll(e.target.checked)} />
+            <Checkbox checked={autoScroll} onChange={(e) => setAutoScroll(e.target.checked)} />
             Auto-scroll logs
           </label>
           <label className="flex items-center gap-2">
@@ -301,12 +302,7 @@ export default function Settings() {
             <option value="danger">danger</option>
           </Select>
           <label className="flex items-center gap-2 text-sm text-text-2">
-            <input
-              type="checkbox"
-              className="h-4 w-4 accent-brand-500"
-              checked={channelEnabled}
-              onChange={(e) => setChannelEnabled(e.target.checked)}
-            />
+            <Checkbox checked={channelEnabled} onChange={(e) => setChannelEnabled(e.target.checked)} />
             Enabled
           </label>
         </div>
@@ -318,7 +314,7 @@ export default function Settings() {
         <div className="mt-3 space-y-2">
           {channels.length === 0 && <p className="text-sm text-text-3">No channels configured.</p>}
           {channels.map((channel) => (
-            <div key={channel.id} className="flex flex-wrap items-center gap-2 rounded border border-border p-2 text-sm">
+            <div key={channel.id} className="page-panel flex flex-wrap items-center gap-2 p-2 text-sm">
               <span className="font-medium text-text-1">{channel.name}</span>
               <span className="text-text-3">{channel.type}</span>
               <span className="text-text-3">min:{channel.minSeverity}</span>
@@ -342,7 +338,7 @@ export default function Settings() {
             .slice()
             .reverse()
             .map((item, idx) => (
-              <div key={`${item.ts}-${idx}`} className="rounded border border-border p-2">
+              <div key={`${item.ts}-${idx}`} className="page-panel p-2">
                 <p className="text-text-1">
                   {item.processName} {item.action === "rollback" ? "rollback" : "deployment"} by {item.actor || "unknown"} {item.success ? "succeeded" : "failed"}
                 </p>

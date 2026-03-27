@@ -139,7 +139,7 @@ export default function Notifications() {
 
       <section className="page-panel">
         <PanelHeader title="Event Timeline" className="mb-3" />
-        <div className="max-h-[68vh] space-y-2 overflow-y-auto pr-1">
+        <div className="max-h-log-viewer space-y-2 overflow-y-auto pr-1">
           {visible.length === 0 && (
             <div className="flex flex-col items-center justify-center py-12 text-text-3">
               <Bell size={24} />

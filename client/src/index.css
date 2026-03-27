@@ -97,4 +97,8 @@
   .panel-muted {
     @apply text-sm text-text-3;
   }
+
+  .surface-overlay {
+    @apply bg-black/60;
+  }
 }

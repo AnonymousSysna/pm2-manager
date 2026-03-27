@@ -3,6 +3,25 @@ export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
+      maxWidth: {
+        layout: "1600px"
+      },
+      spacing: {
+        header: "72px"
+      },
+      width: {
+        "nav-drawer": "85%"
+      },
+      minHeight: {
+        "route-fallback": "40vh"
+      },
+      height: {
+        "log-viewer": "68vh"
+      },
+      maxHeight: {
+        "log-viewer": "68vh",
+        "modal-content": "70vh"
+      },
       colors: {
         bg: "rgb(var(--color-bg) / <alpha-value>)",
         surface: "rgb(var(--color-surface) / <alpha-value>)",

@@ -5,6 +5,7 @@ import toast, { getErrorMessage } from "../lib/toast";
 import { processes as processApi } from "../api";
 import { useSocket } from "../hooks/useSocket";
 import Button from "../components/ui/Button";
+import Checkbox from "../components/ui/Checkbox";
 import Select from "../components/ui/Select";
 import Input from "../components/ui/Input";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
@@ -270,7 +271,7 @@ export default function Logs() {
         </div>
 
         <label className="flex items-center gap-2 text-sm text-text-2">
-          <input type="checkbox" checked={combinedView} onChange={(e) => setCombinedView(e.target.checked)} className="h-4 w-4" />
+          <Checkbox checked={combinedView} onChange={(e) => setCombinedView(e.target.checked)} />
           Combined view
         </label>
 
@@ -288,7 +289,7 @@ export default function Logs() {
         </Button>
       </section>
 
-      <section ref={containerRef} className="h-[68vh] overflow-y-auto rounded-lg border border-border bg-surface p-3 font-mono text-xs sm:p-4 sm:text-sm">
+      <section ref={containerRef} className="h-log-viewer overflow-y-auto rounded-lg border border-border bg-surface p-3 font-mono text-xs sm:p-4 sm:text-sm">
         <PanelHeader title="Log Stream" className="mb-3 font-sans" />
         {!selected && !combinedView && (
           <div className="flex h-full flex-col items-center justify-center text-text-3">

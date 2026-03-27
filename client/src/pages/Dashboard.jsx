@@ -22,6 +22,7 @@ import { useSocket } from "../hooks/useSocket";
 import ProcessDetailModal from "../components/ProcessDetailModal";
 import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
+import Checkbox from "../components/ui/Checkbox";
 import Input from "../components/ui/Input";
 import ProgressBar from "../components/ui/ProgressBar";
 import Select from "../components/ui/Select";
@@ -678,9 +679,7 @@ export default function Dashboard() {
               <article key={proc.name} className="rounded-lg border border-border bg-surface-2 p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 accent-brand-500"
+                    <Checkbox
                       checked={Boolean(selectedNames[proc.name])}
                       onChange={(e) => toggleSelected(proc.name, e.target.checked)}
                     />
@@ -792,9 +791,7 @@ export default function Dashboard() {
             <thead className="text-left text-text-3">
               <tr>
                 <th className="px-2 py-2">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 accent-brand-500"
+                  <Checkbox
                     checked={filtered.length > 0 && filtered.every((proc) => Boolean(selectedNames[proc.name]))}
                     onChange={(e) => toggleSelectAllFiltered(e.target.checked)}
                   />
@@ -819,9 +816,7 @@ export default function Dashboard() {
                 return (
                   <tr key={proc.name} className="border-t border-border">
                     <td className="px-2 py-3">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 accent-brand-500"
+                      <Checkbox
                         checked={Boolean(selectedNames[proc.name])}
                         onChange={(e) => toggleSelected(proc.name, e.target.checked)}
                       />
@@ -983,7 +978,7 @@ export default function Dashboard() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <button
             type="button"
-            className="absolute inset-0 bg-black/60"
+            className="surface-overlay absolute inset-0"
             aria-label="Close deploy editor"
             onClick={() => {
               if (!deploySubmitting) {
@@ -992,18 +987,21 @@ export default function Dashboard() {
             }}
           />
           <div className="relative z-10 w-full max-w-xl rounded-lg border border-border bg-surface p-4 shadow-xl">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-text-1">Deploy: {deployingProcess.name}</h3>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                disabled={deploySubmitting}
-                onClick={() => setDeployingProcess(null)}
-              >
-                <X size={18} />
-              </Button>
-            </div>
+            <PanelHeader
+              title={`Deploy: ${deployingProcess.name}`}
+              className="mb-3"
+              actions={(
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  disabled={deploySubmitting}
+                  onClick={() => setDeployingProcess(null)}
+                >
+                  <X size={18} />
+                </Button>
+              )}
+            />
             <div className="space-y-3">
               <label className="space-y-1">
                 <span className="text-xs text-text-3">Branch (optional)</span>
@@ -1015,9 +1013,7 @@ export default function Dashboard() {
                 />
               </label>
               <label className="flex items-center gap-2 text-sm text-text-2">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 accent-brand-500"
+                <Checkbox
                   checked={deployForm.installDependencies}
                   disabled={deploySubmitting}
                   onChange={(e) => setDeployForm((prev) => ({ ...prev, installDependencies: e.target.checked }))}
@@ -1025,9 +1021,7 @@ export default function Dashboard() {
                 Run npm install
               </label>
               <label className="flex items-center gap-2 text-sm text-text-2">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 accent-brand-500"
+                <Checkbox
                   checked={deployForm.runBuild}
                   disabled={deploySubmitting}
                   onChange={(e) => setDeployForm((prev) => ({ ...prev, runBuild: e.target.checked }))}
@@ -1067,17 +1061,20 @@ export default function Dashboard() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <button
             type="button"
-            className="absolute inset-0 bg-black/60"
+            className="surface-overlay absolute inset-0"
             aria-label="Close metadata editor"
             onClick={() => setEditingMetaProcess(null)}
           />
           <div className="relative z-10 w-full max-w-2xl rounded-lg border border-border bg-surface p-4 shadow-xl">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-text-1">Edit Metadata: {editingMetaProcess.name}</h3>
-              <Button type="button" variant="ghost" size="icon" onClick={() => setEditingMetaProcess(null)}>
-                <X size={18} />
-              </Button>
-            </div>
+            <PanelHeader
+              title={`Edit Metadata: ${editingMetaProcess.name}`}
+              className="mb-3"
+              actions={(
+                <Button type="button" variant="ghost" size="icon" onClick={() => setEditingMetaProcess(null)}>
+                  <X size={18} />
+                </Button>
+              )}
+            />
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <label className="space-y-1">
                 <span className="text-xs text-text-3">Dependencies (comma-separated)</span>
@@ -1120,7 +1117,7 @@ export default function Dashboard() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <button
             type="button"
-            className="absolute inset-0 bg-black/60"
+            className="surface-overlay absolute inset-0"
             aria-label="Close .env editor"
             onClick={() => {
               if (!dotEnvSaving) {
@@ -1129,18 +1126,21 @@ export default function Dashboard() {
             }}
           />
           <div className="relative z-10 w-full max-w-3xl rounded-lg border border-border bg-surface p-4 shadow-xl">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-text-1">Edit .env: {editingDotEnvProcess.name}</h3>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                disabled={dotEnvSaving}
-                onClick={() => setEditingDotEnvProcess(null)}
-              >
-                <X size={18} />
-              </Button>
-            </div>
+            <PanelHeader
+              title={`Edit .env: ${editingDotEnvProcess.name}`}
+              className="mb-3"
+              actions={(
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  disabled={dotEnvSaving}
+                  onClick={() => setEditingDotEnvProcess(null)}
+                >
+                  <X size={18} />
+                </Button>
+              )}
+            />
             <p className="mb-2 text-xs text-text-3">Fields are inferred from existing `.env` values.</p>
             {dotEnvLoading ? (
               <div className="rounded-md border border-border bg-surface-2 p-3 text-sm text-text-3">Loading .env...</div>
@@ -1239,15 +1239,14 @@ function ActionButton({ title, icon, variant, onClick, disabled }) {
 function DotEnvValueInput({ valueType, value, onChange, disabled }) {
   if (valueType === "boolean") {
     return (
-      <select
+      <Select
         value={String(value).toLowerCase() === "true" ? "true" : "false"}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-text-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <option value="true">true</option>
         <option value="false">false</option>
-      </select>
+      </Select>
     );
   }
 

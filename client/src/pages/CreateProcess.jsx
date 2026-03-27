@@ -3,8 +3,10 @@ import { useNavigate } from "react-router-dom";
 import toast, { getErrorMessage } from "../lib/toast";
 import { processes } from "../api";
 import Button from "../components/ui/Button";
+import Checkbox from "../components/ui/Checkbox";
 import Input from "../components/ui/Input";
 import Select from "../components/ui/Select";
+import Textarea from "../components/ui/Textarea";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 
 const defaultEnvRow = { key: "", value: "" };
@@ -335,9 +337,7 @@ export default function CreateProcess() {
               </Field>
 
               <label className="flex items-center gap-3 text-sm text-text-2">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 accent-brand-500"
+                <Checkbox
                   checked={form.install_dependencies}
                   onChange={(e) => update("install_dependencies", e.target.checked)}
                 />
@@ -345,9 +345,7 @@ export default function CreateProcess() {
               </label>
 
               <label className="flex items-center gap-3 text-sm text-text-2">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 accent-brand-500"
+                <Checkbox
                   checked={form.run_build}
                   onChange={(e) => update("run_build", e.target.checked)}
                 />
@@ -383,11 +381,11 @@ export default function CreateProcess() {
               </Field>
 
               <Field label=".env File Content (Optional)">
-                <textarea
+                <Textarea
                   value={form.env_file_content}
                   onChange={(e) => update("env_file_content", e.target.value)}
                   placeholder={"NODE_ENV=production\nAPI_KEY=replace_me"}
-                  className="min-h-32 w-full rounded-md border border-border bg-surface-2 px-3 py-2 text-sm text-text-1 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/30"
+                  className="min-h-32"
                 />
               </Field>
 
@@ -400,9 +398,7 @@ export default function CreateProcess() {
               </Field>
 
               <label className="flex items-center gap-3 text-sm text-text-2">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 accent-brand-500"
+                <Checkbox
                   checked={form.install_dependencies}
                   onChange={(e) => update("install_dependencies", e.target.checked)}
                 />
@@ -410,9 +406,7 @@ export default function CreateProcess() {
               </label>
 
               <label className="flex items-center gap-3 text-sm text-text-2">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 accent-brand-500"
+                <Checkbox
                   checked={form.run_build}
                   onChange={(e) => update("run_build", e.target.checked)}
                 />
@@ -426,7 +420,7 @@ export default function CreateProcess() {
           </Field>
 
           <label className="flex items-center gap-3 text-sm text-text-2">
-            <input type="checkbox" className="h-4 w-4 accent-brand-500" checked={form.watch} onChange={(e) => update("watch", e.target.checked)} />
+            <Checkbox checked={form.watch} onChange={(e) => update("watch", e.target.checked)} />
             Watch Mode
           </label>
 
@@ -504,7 +498,7 @@ export default function CreateProcess() {
       </div>
 
       {isLaunching && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+        <div className="surface-overlay fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="w-full max-w-md rounded-lg border border-border bg-surface p-5 text-center shadow-xl">
             <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-border border-t-brand-500" />
             <p className="mt-3 text-base font-semibold text-text-1">This may take a moment</p>
@@ -536,7 +530,6 @@ function ModeButton({ active, onClick, children }) {
       type="button"
       variant={active ? "success" : "secondary"}
       onClick={onClick}
-      className={active ? "shadow-sm shadow-success-500/30" : ""}
     >
       {children}
     </Button>

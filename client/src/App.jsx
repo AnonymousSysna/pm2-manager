@@ -14,7 +14,7 @@ const Caddy = lazy(() => import("./pages/Caddy"));
 
 function RouteFallback() {
   return (
-    <div className="flex min-h-[40vh] items-center justify-center text-sm text-text-3">
+    <div className="flex min-h-route-fallback items-center justify-center text-sm text-text-3">
       Loading...
     </div>
   );

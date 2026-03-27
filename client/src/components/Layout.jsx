@@ -101,7 +101,7 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-bg text-text-1">
       <header className="sticky top-0 z-30 border-b border-border bg-surface/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-4 py-3 md:px-6">
+        <div className="mx-auto flex max-w-layout items-center justify-between px-4 py-3 md:px-6">
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -114,15 +114,15 @@ export default function Layout() {
             <div className="hidden h-9 w-9 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-bg md:flex">PM2</div>
             <div>
               <p className="text-xs uppercase tracking-wide text-text-3">PM2 Manager</p>
-              <h1 className="text-lg font-semibold text-text-1">{title}</h1>
+              <h1 className="page-title">{title}</h1>
             </div>
           </div>
           <Badge tone={connected ? "success" : "danger"}>{connected ? "Connected" : "Disconnected"}</Badge>
         </div>
       </header>
 
-      <div className="mx-auto flex w-full max-w-[1600px] gap-4 px-4 py-4 md:px-6 md:py-6">
-        <aside className="sticky top-[72px] hidden h-[calc(100vh-96px)] w-64 shrink-0 rounded-xl border border-border bg-surface p-4 md:flex md:flex-col">
+      <div className="mx-auto flex w-full max-w-layout gap-4 px-4 py-4 md:px-6 md:py-6">
+        <aside className="sticky top-header hidden h-[calc(100vh-theme(spacing.header)-theme(spacing.6))] w-64 shrink-0 rounded-xl border border-border bg-surface p-4 md:flex md:flex-col">
           <div className="mb-4 flex items-center gap-2 border-b border-border pb-3 text-sm text-text-3">
             <span className="h-2 w-2 rounded-full bg-brand-500" />
             Navigation
@@ -141,8 +141,8 @@ export default function Layout() {
 
       {mobileOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
-          <button type="button" className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} aria-label="Close navigation" />
-          <aside className="relative h-full w-[85%] max-w-xs border-r border-border bg-surface p-4">
+          <button type="button" className="surface-overlay absolute inset-0" onClick={() => setMobileOpen(false)} aria-label="Close navigation" />
+          <aside className="relative h-full w-nav-drawer max-w-xs border-r border-border bg-surface p-4">
             <div className="mb-4 flex items-center justify-between border-b border-border pb-3">
               <p className="font-semibold text-text-1">Menu</p>
               <button

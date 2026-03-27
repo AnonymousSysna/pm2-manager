@@ -143,7 +143,7 @@ export default function Caddy() {
         {Array.isArray(status.managedSites) && status.managedSites.length > 0 && (
           <div className="space-y-2">
             {status.managedSites.map((item) => (
-              <div key={item.domain} className="rounded border border-border p-2 text-sm">
+              <div key={item.domain} className="page-panel p-2 text-sm">
                 <p className="font-medium text-text-1">{item.domain}</p>
                 <p className="text-text-3">reverse_proxy {item.upstream}</p>
               </div>

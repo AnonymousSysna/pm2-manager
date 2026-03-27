@@ -122,7 +122,7 @@ export default function ProcessDetailModal({ process, onClose, onAction }) {
 
   return (
     <div className="fixed inset-0 z-50">
-      <button type="button" className="absolute inset-0 bg-black/60" aria-label="Close panel" onClick={onClose} />
+      <button type="button" className="surface-overlay absolute inset-0" aria-label="Close panel" onClick={onClose} />
       <aside className="absolute right-0 top-0 h-full w-full max-w-xl border-l border-border bg-surface p-6 text-text-1 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="section-title">{process.name}</h2>
@@ -153,7 +153,7 @@ export default function ProcessDetailModal({ process, onClose, onAction }) {
         )}
 
         {tab === "Environment" && (
-          <div className="max-h-[70vh] overflow-y-auto rounded-md border border-border">
+          <div className="max-h-modal-content overflow-y-auto rounded-md border border-border">
             {Object.entries(envVars).map(([key, value]) => (
               <div key={key} className="grid grid-cols-[1fr,1fr,40px] items-center gap-2 border-b border-border p-2 text-xs">
                 <span className="text-text-2">{key}</span>

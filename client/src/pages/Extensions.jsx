@@ -65,7 +65,7 @@ export default function Extensions() {
             <PackageCheck className="text-brand-400" size={22} />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold text-text-1">Caddy</h3>
+            <h3 className="section-title">Caddy</h3>
             <p className="text-sm text-text-3">
               Platform: <span className="text-text-2">{status.platform || "unknown"}</span>
             </p>
