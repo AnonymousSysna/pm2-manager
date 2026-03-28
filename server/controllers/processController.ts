@@ -1,0 +1,2143 @@
+// @ts-nocheck
+const fs = require("fs");
+const net = require("net");
+const path = require("path");
+const { spawn } = require("child_process");
+const pm2 = require("pm2");
+const { withPM2 } = require("../utils/pm2Client");
+const {
+  ENV_KEY_PATTERN,
+  sanitizeProcessName,
+  sanitizeScriptPath,
+  sanitizeEnvObject,
+  resolveSafePath,
+  sanitizeOptionalString,
+  sanitizeNodeArgs,
+  sanitizeMaxMemoryRestart,
+  sanitizeInterpreter
+} = require("../utils/validation");
+const { trackPm2Operation } = require("../middleware/metrics");
+const { appendHistoryEntry } = require("../utils/restartHistory");
+const {
+  appendDeploymentHistory,
+  listDeploymentHistory,
+  listDeploymentHistoryPage
+} = require("../utils/deploymentHistory");
+const { appendNotification } = require("../utils/notificationStore");
+const {
+  listProcessMeta,
+  setProcessMeta,
+  clearProcessMeta,
+  exportConfig,
+  importConfig
+} = require("../utils/processMetaStore");
+const {
+  getMetricsHistory,
+  getMonitoringSummary
+} = require("../utils/metricsHistoryStore");
+const { appendAuditEntry } = require("../utils/auditTrail");
+
+const DEFAULT_COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
+const COMMAND_TIMEOUT_MS = Number.isFinite(Number(process.env.COMMAND_TIMEOUT_MS))
+  ? Math.max(5000, Math.floor(Number(process.env.COMMAND_TIMEOUT_MS)))
+  : DEFAULT_COMMAND_TIMEOUT_MS;
+const LOG_TAIL_MAX_BYTES = Number.isFinite(Number(process.env.LOG_TAIL_MAX_BYTES))
+  ? Math.max(64 * 1024, Math.floor(Number(process.env.LOG_TAIL_MAX_BYTES)))
+  : 1024 * 1024;
+const PROJECTS_ROOT = path.resolve(process.env.PROJECTS_ROOT || process.cwd());
+const START_HEALTHCHECK_TIMEOUT_MS = Number.isFinite(Number(process.env.START_HEALTHCHECK_TIMEOUT_MS))
+  ? Math.max(4000, Math.floor(Number(process.env.START_HEALTHCHECK_TIMEOUT_MS)))
+  : 12 * 1000;
+const START_HEALTHCHECK_STABILITY_MS = Number.isFinite(Number(process.env.START_HEALTHCHECK_STABILITY_MS))
+  ? Math.max(1500, Math.floor(Number(process.env.START_HEALTHCHECK_STABILITY_MS)))
+  : 3000;
+
+/**
+ * @typedef {Object} CreateProcessConfig
+ * @property {string} name
+ * @property {string} [script]
+ * @property {number|string} [port]
+ * @property {number} [instances]
+ * @property {string} [exec_mode]
+ * @property {Record<string, string>} [env]
+ * @property {string} [cwd]
+ * @property {boolean} [watch]
+ * @property {string} [args]
+ * @property {string} [max_memory_restart]
+ * @property {string} [node_args]
+ * @property {string} [interpreter]
+ * @property {string} [log_date_format]
+ * @property {string} [project_path]
+ * @property {string} [git_clone_url]
+ * @property {string} [git_branch]
+ * @property {string} [env_file_content]
+ * @property {boolean} [install_dependencies]
+ * @property {boolean} [run_build]
+ * @property {string} [start_script]
+ */
+
+/**
+ * @typedef {Object} CommandStep
+ * @property {string} label
+ * @property {boolean} success
+ * @property {number} durationMs
+ * @property {string} [output]
+ * @property {string} [error]
+ */
+
+function normalizeActorContext(actorOrContext = "unknown") {
+  if (actorOrContext && typeof actorOrContext === "object") {
+    return {
+      actor: String(actorOrContext.actor || "unknown").trim() || "unknown",
+      ip: String(actorOrContext.ip || "unknown").trim() || "unknown"
+    };
+  }
+
+  return {
+    actor: String(actorOrContext || "unknown").trim() || "unknown",
+    ip: "unknown"
+  };
+}
+
+async function writeAudit(action, actorOrContext, payload = {}) {
+  const { actor, ip } = normalizeActorContext(actorOrContext);
+  try {
+    await appendAuditEntry({
+      action: String(action || "unknown").trim() || "unknown",
+      actor,
+      ip,
+      ...payload
+    });
+  } catch (_error) {
+    // Best-effort audit append.
+  }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function readRestartCount(proc) {
+  return Number(proc?.pm2_env?.restart_time || 0);
+}
+
+async function waitForHealthyStart(processName, baselineRestarts = 0) {
+  const timeoutMs = START_HEALTHCHECK_TIMEOUT_MS;
+  const stableForMs = START_HEALTHCHECK_STABILITY_MS;
+  const startedAt = Date.now();
+  let onlineSince = 0;
+  let lastStatus = "unknown";
+  let lastRestarts = Number(baselineRestarts || 0);
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const proc = await describeProcess(processName);
+    if (!proc) {
+      lastStatus = "missing";
+      onlineSince = 0;
+      await sleep(500);
+      continue;
+    }
+
+    const status = String(proc?.pm2_env?.status || "unknown");
+    const pid = Number(proc?.pid || 0);
+    const restarts = readRestartCount(proc);
+    lastStatus = status;
+    lastRestarts = restarts;
+
+    if (restarts > baselineRestarts) {
+      return {
+        ok: false,
+        reason: `${processName} restarted during startup (restart count increased from ${baselineRestarts} to ${restarts})`,
+        status,
+        restarts
+      };
+    }
+
+    if (status === "online" && pid > 0) {
+      if (!onlineSince) {
+        onlineSince = Date.now();
+      }
+      if (Date.now() - onlineSince >= stableForMs) {
+        return { ok: true, status, pid, restarts };
+      }
+    } else {
+      onlineSince = 0;
+    }
+
+    await sleep(500);
+  }
+
+  return {
+    ok: false,
+    reason: `${processName} did not become healthy within ${timeoutMs}ms (last status: ${lastStatus})`,
+    status: lastStatus,
+    restarts: lastRestarts
+  };
+}
+
+function checkPortBinding(port) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.unref();
+
+    const finalize = (payload) => {
+      try {
+        server.close(() => resolve(payload));
+      } catch (_error) {
+        resolve(payload);
+      }
+    };
+
+    server.once("error", (error) => {
+      resolve({
+        available: false,
+        code: error?.code || "UNKNOWN"
+      });
+    });
+
+    server.once("listening", () => {
+      finalize({ available: true, code: null });
+    });
+
+    server.listen({
+      port,
+      host: "0.0.0.0",
+      exclusive: true
+    });
+  });
+}
+
+function getDotEnvAllowedRoot() {
+  const base = path.resolve(PROJECTS_ROOT);
+  const baseName = path.basename(base).toLowerCase();
+  return baseName === "apps" ? base : path.resolve(base, "apps");
+}
+
+function isPathInside(basePath, targetPath) {
+  const resolvedBase = path.resolve(basePath);
+  const resolvedTarget = path.resolve(targetPath);
+  const relative = path.relative(resolvedBase, resolvedTarget);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function extractMissingModule(message = "") {
+  const match = String(message).match(/Cannot find module ['"]([^'"]+)['"]/i);
+  return match ? match[1] : "";
+}
+
+async function pathIsDirectory(targetPath) {
+  try {
+    const stat = await fs.promises.stat(targetPath);
+    return stat.isDirectory();
+  } catch (_error) {
+    return false;
+  }
+}
+
+async function pathIsReadableFile(targetPath) {
+  try {
+    await fs.promises.access(targetPath, fs.constants.R_OK);
+    const stat = await fs.promises.stat(targetPath);
+    return stat.isFile();
+  } catch (_error) {
+    return false;
+  }
+}
+
+async function readNpmCapabilities(cwd) {
+  const base = String(cwd || "").trim();
+  if (!base) {
+    return {
+      hasPackageJson: false,
+      hasBuildScript: false,
+      hasStartScript: false
+    };
+  }
+
+  const packageJsonPath = path.join(base, "package.json");
+  if (!(await pathIsReadableFile(packageJsonPath))) {
+    return {
+      hasPackageJson: false,
+      hasBuildScript: false,
+      hasStartScript: false
+    };
+  }
+
+  try {
+    const packageJson = JSON.parse(await fs.promises.readFile(packageJsonPath, "utf8"));
+    const scripts = packageJson && typeof packageJson.scripts === "object" ? packageJson.scripts : {};
+    return {
+      hasPackageJson: true,
+      hasBuildScript: Boolean(scripts.build),
+      hasStartScript: Boolean(scripts.start)
+    };
+  } catch (_error) {
+    return {
+      hasPackageJson: true,
+      hasBuildScript: false,
+      hasStartScript: false
+    };
+  }
+}
+
+async function resolveNestedInstallDirs(projectDir, preferredAppName = "") {
+  const appRoots = [path.join(projectDir, "apps"), path.join(projectDir, "packages")];
+  const installDirs = [];
+  const seen = new Set();
+
+  for (const appRoot of appRoots) {
+    if (!(await pathIsDirectory(appRoot))) {
+      continue;
+    }
+
+    if (preferredAppName) {
+      const preferredDir = path.join(appRoot, preferredAppName);
+      const preferredPackageJson = path.join(preferredDir, "package.json");
+      const preferredLockfile = path.join(preferredDir, "package-lock.json");
+      if (
+        (await pathIsReadableFile(preferredPackageJson)) &&
+        (await pathIsReadableFile(preferredLockfile))
+      ) {
+        const resolved = path.resolve(preferredDir);
+        if (!seen.has(resolved)) {
+          seen.add(resolved);
+          installDirs.push(resolved);
+        }
+      }
+    }
+
+    const entries = await fs.promises.readdir(appRoot, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+      const candidateDir = path.join(appRoot, entry.name);
+      const packageJsonPath = path.join(candidateDir, "package.json");
+      const lockfilePath = path.join(candidateDir, "package-lock.json");
+      if (
+        (await pathIsReadableFile(packageJsonPath)) &&
+        (await pathIsReadableFile(lockfilePath))
+      ) {
+        const resolved = path.resolve(candidateDir);
+        if (!seen.has(resolved)) {
+          seen.add(resolved);
+          installDirs.push(resolved);
+        }
+      }
+    }
+  }
+
+  return installDirs;
+}
+
+async function resolvePreferredNestedAppDir(projectDir, preferredAppName = "") {
+  if (!preferredAppName) {
+    return "";
+  }
+  const candidateRoots = [path.join(projectDir, "apps"), path.join(projectDir, "packages")];
+  for (const root of candidateRoots) {
+    const candidateDir = path.join(root, preferredAppName);
+    if (!(await pathIsDirectory(candidateDir))) {
+      continue;
+    }
+    if (await pathIsReadableFile(path.join(candidateDir, "package.json"))) {
+      return path.resolve(candidateDir);
+    }
+  }
+  return "";
+}
+
+function getNpmInstallArgs({ includeDev = false } = {}) {
+  if (!includeDev) {
+    return ["install"];
+  }
+  return ["install", "--include=dev"];
+}
+
+function runCommand(command, args, cwd) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+      setTimeout(() => child.kill("SIGKILL"), 3000).unref();
+    }, COMMAND_TIMEOUT_MS);
+
+    child.stdout.on("data", (data) => {
+      stdout += data.toString();
+    });
+
+    child.stderr.on("data", (data) => {
+      stderr += data.toString();
+    });
+
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+
+    child.on("close", (code) => {
+      clearTimeout(timeout);
+
+      if (timedOut) {
+        reject(
+          new Error(
+            `Command timed out after ${COMMAND_TIMEOUT_MS}ms (${command} ${args.join(" ")})`
+          )
+        );
+        return;
+      }
+
+      if (code === 0) {
+        resolve({ code, stdout, stderr });
+        return;
+      }
+      reject(
+        new Error(
+          `Command failed (${command} ${args.join(" ")}), exit code ${code}${
+            stderr ? `: ${stderr.trim()}` : ""
+          }`
+        )
+      );
+    });
+  });
+}
+
+async function directoryIsEmpty(targetPath) {
+  try {
+    const entries = await fs.promises.readdir(targetPath);
+    return entries.length === 0;
+  } catch (_error) {
+    return false;
+  }
+}
+
+function compactOutput(output = "") {
+  return String(output || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(-8)
+    .join("\n")
+    .slice(-2000);
+}
+
+function buildStepFailureMessage(prefix, steps = [], fallbackError = "") {
+  const failed = [...steps].reverse().find((step) => step && step.success === false);
+  if (!failed) {
+    return `${prefix}: ${fallbackError || "unknown error"}`;
+  }
+  const base = `${prefix} at ${failed.label}: ${failed.error || fallbackError || "unknown error"}`;
+  return compactOutput(base);
+}
+
+async function recordOperationNotification({
+  category = "operation",
+  level = "info",
+  title = "PM2 operation",
+  message = "",
+  processName = null,
+  details = null
+}) {
+  try {
+    await appendNotification({
+      category,
+      level,
+      title,
+      message,
+      processName,
+      details
+    });
+  } catch (_error) {
+    // Best-effort notification append.
+  }
+}
+
+function describeProcess(name) {
+  return new Promise((resolve, reject) => {
+    pm2.describe(name, (error, description) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      const proc = Array.isArray(description) ? description[0] : null;
+      resolve(proc || null);
+    });
+  });
+}
+
+async function resolveProcessWorkingDirectory(processName) {
+  const proc = await describeProcess(processName);
+  if (!proc) {
+    throw new Error(`Process not found: ${processName}`);
+  }
+
+  const cwd = proc.pm2_env?.pm_cwd;
+  let cwdStat;
+  try {
+    cwdStat = await fs.promises.stat(cwd);
+  } catch (_error) {
+    cwdStat = null;
+  }
+
+  if (!cwd || !cwdStat || !cwdStat.isDirectory()) {
+    throw new Error(`Cannot resolve process working directory for: ${processName}`);
+  }
+
+  return { proc, cwd: path.resolve(cwd) };
+}
+
+async function resolveDotEnvEditableDirectory(processName) {
+  const { proc, cwd } = await resolveProcessWorkingDirectory(processName);
+  const allowedRoot = getDotEnvAllowedRoot();
+  if (!isPathInside(allowedRoot, cwd)) {
+    throw new Error(`.env editing is restricted to ${allowedRoot}`);
+  }
+  return { proc, cwd, allowedRoot };
+}
+
+function findPort(env = {}) {
+  return env.PORT || env.port || env.PM2_PORT || null;
+}
+
+function parsePortValue(portValue) {
+  if (portValue === undefined || portValue === null || portValue === "") {
+    return null;
+  }
+  const parsed = Number(portValue);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+    throw new Error("port must be an integer");
+  }
+  if (parsed < 1 || parsed > 65535) {
+    throw new Error("port must be between 1 and 65535");
+  }
+  return parsed;
+}
+
+async function findProcessByPort(port) {
+  if (!Number.isInteger(port) || port <= 0) {
+    return null;
+  }
+
+  const processes = await new Promise((resolve, reject) => {
+    pm2.list((error, list) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(Array.isArray(list) ? list : []);
+    });
+  });
+
+  for (const proc of processes) {
+    const env = proc?.pm2_env?.env || {};
+    let processPort = null;
+    try {
+      processPort = parsePortValue(findPort(env));
+    } catch (_error) {
+      processPort = null;
+    }
+    if (processPort === port) {
+      return proc;
+    }
+  }
+
+  return null;
+}
+
+function formatUptime(proc) {
+  const pm2Env = proc.pm2_env || {};
+  if (!pm2Env.pm_uptime) {
+    return 0;
+  }
+  return Date.now() - pm2Env.pm_uptime;
+}
+
+function formatProcess(proc) {
+  const monit = proc.monit || {};
+  const pm2Env = proc.pm2_env || {};
+  const env = pm2Env.env || {};
+
+  const rawMode = pm2Env.exec_mode || "fork";
+  const mode = rawMode.includes("cluster") ? "cluster" : "fork";
+
+  return {
+    id: proc.pm_id,
+    name: proc.name,
+    cwd: pm2Env.pm_cwd || "",
+    pid: proc.pid,
+    status: pm2Env.status || "unknown",
+    cpu: monit.cpu || 0,
+    memory: monit.memory || 0,
+    uptime: formatUptime(proc),
+    restarts: pm2Env.restart_time || 0,
+    port: findPort(env),
+    mode
+  };
+}
+
+async function listProcesses() {
+  const result = await withPM2(
+    () =>
+      new Promise((resolve, reject) => {
+        pm2.list((error, processes) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve(processes.map(formatProcess));
+        });
+      })
+  );
+  trackPm2Operation("processes.list", result.success);
+  return result;
+}
+
+async function startProcess(name, actorContext = "unknown") {
+  const processName = sanitizeProcessName(name, "process name");
+  const { actor, ip } = normalizeActorContext(actorContext);
+  const result = await withPM2(async () => {
+    const before = await describeProcess(processName).catch(() => null);
+    const baselineRestarts = before ? readRestartCount(before) : 0;
+
+    await new Promise((resolve, reject) => {
+      pm2.start(processName, (error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
+
+    const health = await waitForHealthyStart(processName, baselineRestarts);
+    if (!health.ok) {
+      throw new Error(health.reason || `${processName} failed startup validation`);
+    }
+
+    return {
+      processName,
+      health
+    };
+  });
+  trackPm2Operation("processes.start", result.success);
+  if (result.success) {
+    try {
+      await appendHistoryEntry({
+        processName,
+        event: "start",
+        source: "api",
+        actor
+      });
+    } catch (_error) {
+      // Best-effort audit append: do not fail start operation.
+    }
+    await recordOperationNotification({
+      category: "operation",
+      title: `${processName} started`,
+      message: `Start operation completed for ${processName}`,
+      processName
+    });
+  }
+  await writeAudit("process.start", { actor, ip }, {
+    processName,
+    success: result.success,
+    details: result.success ? result.data?.health || null : null,
+    error: result.success ? null : result.error || "start failed"
+  });
+  return result;
+}
+
+async function stopProcess(name, actorContext = "unknown") {
+  const processName = sanitizeProcessName(name, "process name");
+  const { actor, ip } = normalizeActorContext(actorContext);
+  const result = await withPM2(
+    () =>
+      new Promise((resolve, reject) => {
+        pm2.stop(processName, (error, proc) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve(proc);
+        });
+      })
+  );
+  trackPm2Operation("processes.stop", result.success);
+  if (result.success) {
+    try {
+      await appendHistoryEntry({
+        processName,
+        event: "stop",
+        source: "api",
+        actor
+      });
+    } catch (_error) {
+      // Best-effort audit append: do not fail stop operation.
+    }
+    await recordOperationNotification({
+      category: "operation",
+      title: `${processName} stopped`,
+      message: `Stop operation completed for ${processName}`,
+      processName
+    });
+  }
+  await writeAudit("process.stop", { actor, ip }, {
+    processName,
+    success: result.success,
+    error: result.success ? null : result.error || "stop failed"
+  });
+  return result;
+}
+
+async function restartProcess(name, actorContext = "unknown") {
+  const processName = sanitizeProcessName(name, "process name");
+  const { actor, ip } = normalizeActorContext(actorContext);
+  const result = await withPM2(
+    () =>
+      new Promise((resolve, reject) => {
+        pm2.restart(processName, (error, proc) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve(proc);
+        });
+      })
+  );
+  trackPm2Operation("processes.restart", result.success);
+  if (result.success) {
+    try {
+      await appendHistoryEntry({
+        processName,
+        event: "restart",
+        source: "api",
+        actor
+      });
+    } catch (_error) {
+      // Best-effort audit append: do not fail restart operation.
+    }
+    await recordOperationNotification({
+      category: "operation",
+      title: `${processName} restarted`,
+      message: `Restart operation completed for ${processName}`,
+      processName
+    });
+  }
+  await writeAudit("process.restart", { actor, ip }, {
+    processName,
+    success: result.success,
+    error: result.success ? null : result.error || "restart failed"
+  });
+  return result;
+}
+
+async function runBulkAction(action, names = [], actorContext = "unknown") {
+  const safeAction = String(action || "").trim().toLowerCase();
+  const allowed = new Set(["start", "stop", "restart"]);
+  if (!allowed.has(safeAction)) {
+    return {
+      success: false,
+      data: null,
+      error: `Unsupported bulk action: ${safeAction}`
+    };
+  }
+
+  if (!Array.isArray(names) || names.length === 0) {
+    return {
+      success: false,
+      data: null,
+      error: "names must be a non-empty array"
+    };
+  }
+
+  const uniqueNames = [...new Set(names.map((name) => sanitizeProcessName(name, "process name")))];
+  const handler = {
+    start: startProcess,
+    stop: stopProcess,
+    restart: restartProcess
+  }[safeAction];
+
+  const results = [];
+  for (const processName of uniqueNames) {
+    const result = await handler(processName, actorContext);
+    results.push({
+      name: processName,
+      success: Boolean(result?.success),
+      error: result?.success ? null : result?.error || `Failed to ${safeAction}`
+    });
+  }
+
+  const successCount = results.filter((item) => item.success).length;
+  const failedCount = results.length - successCount;
+  return {
+    success: failedCount === 0,
+    data: {
+      action: safeAction,
+      total: results.length,
+      successCount,
+      failedCount,
+      results
+    },
+    error: failedCount === 0 ? null : `${failedCount} process action(s) failed`
+  };
+}
+
+function inferDotEnvValueType(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "true" || normalized === "false") {
+    return "boolean";
+  }
+  if (/^[+-]?\d+$/.test(String(value ?? "").trim())) {
+    return "integer";
+  }
+  if (/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(String(value ?? "").trim())) {
+    return "number";
+  }
+  return "string";
+}
+
+function parseDotEnvContent(content = "") {
+  const raw = String(content ?? "");
+  const lines = raw.split(/\r?\n/);
+  const parsedLines = [];
+  const entries = [];
+
+  lines.forEach((line, index) => {
+    const pairMatch = line.match(/^\s*(export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/);
+    if (!pairMatch) {
+      parsedLines.push({ type: "raw", line });
+      return;
+    }
+
+    const exportedPrefix = pairMatch[1] ? "export " : "";
+    const key = pairMatch[2];
+    const value = pairMatch[3] ?? "";
+    parsedLines.push({
+      type: "pair",
+      key,
+      value,
+      exportedPrefix
+    });
+    entries.push({
+      index,
+      key,
+      value,
+      valueType: inferDotEnvValueType(value)
+    });
+  });
+
+  return { lines: parsedLines, entries };
+}
+
+async function updateProcessEnv(name, envPatch = {}, options = {}, actorContext = "unknown") {
+  const processName = sanitizeProcessName(name, "process name");
+  const { actor, ip } = normalizeActorContext(actorContext);
+  const replace = Boolean(options?.replace);
+  const safePatch = sanitizeEnvObject(envPatch || {});
+
+  const result = await withPM2(async () => {
+    const proc = await describeProcess(processName);
+    if (!proc) {
+      throw new Error(`Process not found: ${processName}`);
+    }
+
+    const currentEnv = sanitizeEnvObject(proc.pm2_env?.env || {});
+    const nextEnv = replace ? safePatch : { ...currentEnv, ...safePatch };
+
+    await new Promise((resolve, reject) => {
+      pm2.restart(
+        {
+          name: processName,
+          updateEnv: true,
+          env: nextEnv
+        },
+        (error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        }
+      );
+    });
+
+    return {
+      name: processName,
+      replace,
+      keys: Object.keys(safePatch),
+      env: nextEnv
+    };
+  });
+
+  trackPm2Operation("processes.env.update", result.success);
+  if (result.success) {
+    await recordOperationNotification({
+      category: "operation",
+      title: `${processName} env updated`,
+      message: `Environment variables updated and process restarted`,
+      processName,
+      details: {
+        updatedKeys: result.data.keys,
+        replace
+      }
+    });
+  }
+  await writeAudit("process.env.update", { actor, ip }, {
+    processName,
+    success: result.success,
+    details: result.success
+      ? {
+          replace,
+          keys: result.data?.keys || []
+        }
+      : null,
+    error: result.success ? null : result.error || "env update failed"
+  });
+  return result;
+}
+
+async function readProcessDotEnv(name) {
+  const processName = sanitizeProcessName(name, "process name");
+  const result = await withPM2(async () => {
+    const { cwd, allowedRoot } = await resolveDotEnvEditableDirectory(processName);
+    const envPath = path.join(cwd, ".env");
+
+    let hasEnvFile = false;
+    try {
+      await fs.promises.access(envPath, fs.constants.R_OK);
+      hasEnvFile = true;
+    } catch (_error) {
+      hasEnvFile = false;
+    }
+
+    if (!hasEnvFile) {
+      return {
+        processName,
+        cwd,
+        allowedRoot,
+        envPath,
+        hasEnvFile: false,
+        entries: []
+      };
+    }
+
+    const content = await fs.promises.readFile(envPath, "utf8");
+    const parsed = parseDotEnvContent(content);
+    return {
+      processName,
+      cwd,
+      allowedRoot,
+      envPath,
+      hasEnvFile: true,
+      entries: parsed.entries
+    };
+  });
+  trackPm2Operation("processes.dotenv.read", result.success);
+  return result;
+}
+
+async function updateProcessDotEnv(name, payload = {}, actorContext = "unknown") {
+  const processName = sanitizeProcessName(name, "process name");
+  const { actor, ip } = normalizeActorContext(actorContext);
+  const valuesRaw = payload?.values || {};
+  if (!valuesRaw || typeof valuesRaw !== "object" || Array.isArray(valuesRaw)) {
+    return { success: false, data: null, error: "values must be an object" };
+  }
+
+  const values = {};
+  for (const [rawKey, rawValue] of Object.entries(valuesRaw)) {
+    const key = String(rawKey || "").trim();
+    if (!ENV_KEY_PATTERN.test(key)) {
+      return { success: false, data: null, error: `Invalid environment variable name: ${rawKey}` };
+    }
+    values[key] = String(rawValue ?? "");
+  }
+
+  const result = await withPM2(async () => {
+    const { cwd, allowedRoot } = await resolveDotEnvEditableDirectory(processName);
+    const envPath = path.join(cwd, ".env");
+
+    try {
+      await fs.promises.access(envPath, fs.constants.R_OK | fs.constants.W_OK);
+    } catch (_error) {
+      throw new Error(`.env file not found or not writable for ${processName}`);
+    }
+
+    const content = await fs.promises.readFile(envPath, "utf8");
+    const parsed = parseDotEnvContent(content);
+
+    let updatedCount = 0;
+    const nextLines = parsed.lines.map((line) => {
+      if (line.type !== "pair") {
+        return line.line;
+      }
+      if (!Object.prototype.hasOwnProperty.call(values, line.key)) {
+        return `${line.exportedPrefix}${line.key}=${line.value}`;
+      }
+      updatedCount += 1;
+      return `${line.exportedPrefix}${line.key}=${values[line.key]}`;
+    });
+
+    const eol = content.includes("\r\n") ? "\r\n" : "\n";
+    await fs.promises.writeFile(envPath, nextLines.join(eol), "utf8");
+
+    const nextParsed = parseDotEnvContent(nextLines.join(eol));
+    return {
+      processName,
+      cwd,
+      allowedRoot,
+      envPath,
+      hasEnvFile: true,
+      updatedCount,
+      entries: nextParsed.entries
+    };
+  });
+
+  trackPm2Operation("processes.dotenv.update", result.success);
+  if (result.success) {
+    await recordOperationNotification({
+      category: "operation",
+      title: `${processName} .env updated`,
+      message: `.env file updated for ${processName}`,
+      processName,
+      details: {
+        updatedKeys: Object.keys(values),
+        updatedCount: result.data.updatedCount
+      }
+    });
+  }
+  await writeAudit("process.dotenv.update", { actor, ip }, {
+    processName,
+    success: result.success,
+    details: result.success
+      ? {
+          updatedKeys: Object.keys(values),
+          updatedCount: result.data?.updatedCount || 0
+        }
+      : null,
+    error: result.success ? null : result.error || "dotenv update failed"
+  });
+  return result;
+}
+
+async function deleteProcess(name) {
+  const processName = sanitizeProcessName(name, "process name");
+  const result = await withPM2(
+    () =>
+      new Promise((resolve, reject) => {
+        pm2.delete(processName, (error, proc) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve(proc);
+        });
+      })
+  );
+  trackPm2Operation("processes.delete", result.success);
+  if (result.success) {
+    await recordOperationNotification({
+      category: "operation",
+      level: "warning",
+      title: `${processName} deleted`,
+      message: `Delete operation completed for ${processName}`,
+      processName
+    });
+  }
+  return result;
+}
+
+/**
+ * @param {CreateProcessConfig} config
+ */
+async function createProcess(config, actorContext = "unknown") {
+  const { actor, ip } = normalizeActorContext(actorContext);
+  const io = actorContext && typeof actorContext === "object" ? actorContext.io : null;
+  const createOperationId = actorContext && typeof actorContext === "object"
+    ? String(actorContext.createOperationId || config?.create_operation_id || "").trim()
+    : String(config?.create_operation_id || "").trim();
+  let processNameForAudit = String(config?.name || "").trim();
+  const result = await withPM2(async () => {
+    const {
+      name,
+      script,
+      port,
+      instances,
+      exec_mode,
+      env,
+      cwd,
+      watch,
+      args,
+      max_memory_restart,
+      node_args,
+      interpreter,
+      log_date_format,
+      project_path,
+      git_clone_url,
+      git_branch,
+      env_file_content,
+      install_dependencies,
+      run_build,
+      start_script
+    } = config;
+
+    const safeName = sanitizeProcessName(name, "process name");
+    processNameForAudit = safeName;
+    const normalizedPort = parsePortValue(port);
+    let createStepCounter = 0;
+    const emitCreateStep = (payload = {}) => {
+      if (!io || typeof io.emit !== "function" || !createOperationId) {
+        return;
+      }
+      io.emit("process:create:step", {
+        operationId: createOperationId,
+        processName: safeName,
+        timestamp: Date.now(),
+        ...payload
+      });
+    };
+    /** @type {CommandStep[]} */
+    const createSteps = [];
+    const runCreateStep = async (label, command, commandArgs, commandCwd) => {
+      const stepId = `${label}#${++createStepCounter}`;
+      const startedAt = Date.now();
+      emitCreateStep({ stepId, label, status: "started" });
+      try {
+        const output = await runCommand(command, commandArgs, commandCwd);
+        const durationMs = Date.now() - startedAt;
+        createSteps.push({
+          label,
+          success: true,
+          durationMs,
+          output: compactOutput(`${output.stdout || ""}\n${output.stderr || ""}`)
+        });
+        emitCreateStep({ stepId, label, status: "success", durationMs });
+        return output;
+      } catch (error) {
+        const durationMs = Date.now() - startedAt;
+        createSteps.push({
+          label,
+          success: false,
+          durationMs,
+          error: error.message
+        });
+        emitCreateStep({
+          stepId,
+          label,
+          status: "error",
+          durationMs,
+          error: error?.message || "Step failed"
+        });
+        throw error;
+      }
+    };
+    const rawScript = String(script || "").trim();
+    const rawCwd = String(cwd || "").trim();
+    let normalizedScript = rawScript ? sanitizeScriptPath(rawScript) : "";
+    let normalizedCwd = rawCwd ? path.resolve(rawCwd) : process.cwd();
+
+    // Allow users to paste a full absolute path and infer cwd automatically.
+    if (normalizedScript && path.isAbsolute(normalizedScript)) {
+      normalizedScript = path.basename(normalizedScript);
+      if (!cwd) {
+        normalizedCwd = path.dirname(path.resolve(rawScript));
+      }
+    }
+
+    let finalScript = normalizedScript;
+    let finalArgs = args;
+    let finalCwd = normalizedCwd;
+
+    const projectPathInput = String(project_path || "").trim();
+    if (projectPathInput) {
+      const projectDir = resolveSafePath(projectPathInput, PROJECTS_ROOT, "project_path");
+      const packageJsonPath = path.join(projectDir, "package.json");
+      const cloneUrl = String(git_clone_url || "").trim();
+      const cloneBranch = String(git_branch || "").trim();
+
+      let projectStat;
+      try {
+        projectStat = await fs.promises.stat(projectDir);
+      } catch (_error) {
+        projectStat = null;
+      }
+
+      if (cloneUrl) {
+        const gitUrl = sanitizeOptionalString(cloneUrl, "git_clone_url", 2048);
+        if (!gitUrl) {
+          throw new Error("git_clone_url is required when provided");
+        }
+
+        if (!projectStat) {
+          await fs.promises.mkdir(projectDir, { recursive: true });
+          projectStat = await fs.promises.stat(projectDir);
+        }
+
+        if (!projectStat.isDirectory()) {
+          throw new Error(`Project path is not a directory: ${projectDir}`);
+        }
+
+        if (await directoryIsEmpty(projectDir)) {
+          const cloneArgs = ["clone"];
+          if (cloneBranch) {
+            cloneArgs.push("--branch", cloneBranch, "--single-branch");
+          }
+          cloneArgs.push(gitUrl, projectDir);
+          await runCreateStep("git:clone", "git", cloneArgs, PROJECTS_ROOT);
+        } else {
+          try {
+            await runCommand("git", ["rev-parse", "--is-inside-work-tree"], projectDir);
+          } catch (_error) {
+            throw new Error(`Project path is not empty and not a git repository: ${projectDir}`);
+          }
+
+          const existingOrigin = (await runCommand("git", ["remote", "get-url", "origin"], projectDir))
+            .stdout
+            .trim();
+          if (existingOrigin && existingOrigin !== gitUrl) {
+            throw new Error(
+              `Project path already uses a different origin remote. expected=${gitUrl} actual=${existingOrigin}`
+            );
+          }
+
+          await runCreateStep("git:fetch", "git", ["fetch", "origin", "--prune"], projectDir);
+          if (cloneBranch) {
+            await runCreateStep("git:checkout", "git", ["checkout", cloneBranch], projectDir);
+            await runCreateStep("git:pull", "git", ["pull", "--ff-only", "origin", cloneBranch], projectDir);
+          } else {
+            await runCreateStep("git:pull", "git", ["pull", "--ff-only"], projectDir);
+          }
+        }
+
+        projectStat = await fs.promises.stat(projectDir);
+      }
+
+      if (!projectStat || !projectStat.isDirectory()) {
+        throw new Error(`Project path does not exist or is not a directory: ${projectDir}`);
+      }
+
+      if (env_file_content !== undefined && env_file_content !== null) {
+        const envFile = String(env_file_content);
+        await fs.promises.writeFile(path.join(projectDir, ".env"), envFile, "utf8");
+      }
+
+      try {
+        await fs.promises.access(packageJsonPath, fs.constants.R_OK);
+      } catch (_error) {
+        throw new Error(`package.json not found at: ${packageJsonPath}`);
+      }
+
+      const packageJson = JSON.parse(await fs.promises.readFile(packageJsonPath, "utf8"));
+      const scripts = packageJson.scripts || {};
+      const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+      const startScriptName = String(start_script || "start").trim() || "start";
+
+      if (install_dependencies) {
+        const installArgs = getNpmInstallArgs({ includeDev: Boolean(run_build) });
+        await runCreateStep("npm:install", npmCmd, installArgs, projectDir);
+        const nestedInstallDirs = await resolveNestedInstallDirs(projectDir, safeName);
+        for (const installDir of nestedInstallDirs) {
+          await runCreateStep("npm:install:nested", npmCmd, installArgs, installDir);
+        }
+      }
+
+      if (run_build) {
+        if (!scripts.build) {
+          throw new Error(`Missing "build" script in ${packageJsonPath}`);
+        }
+        try {
+          await runCreateStep("npm:build", npmCmd, ["run", "build"], projectDir);
+        } catch (error) {
+          const missingModule = extractMissingModule(error?.message || "");
+          if (missingModule) {
+            if (install_dependencies) {
+              const preferredNestedDir = await resolvePreferredNestedAppDir(projectDir, safeName);
+              const installTargetDir = preferredNestedDir || projectDir;
+              try {
+                await runCreateStep(
+                  "npm:install-missing-module",
+                  npmCmd,
+                  ["install", "--include=dev", "--save-dev", missingModule],
+                  installTargetDir
+                );
+                await runCreateStep("npm:build:retry", npmCmd, ["run", "build"], projectDir);
+              } catch (_retryError) {
+                throw new Error(
+                  `${error.message}\nHint: missing dependency "${missingModule}". Auto-install + retry failed in ${installTargetDir}.`
+                );
+              }
+            } else {
+              throw new Error(
+                `${error.message}\nHint: missing dependency "${missingModule}". If this is a nested app (for example apps/${safeName}), run npm install in that app directory or enable "Run npm install before start".`
+              );
+            }
+            return;
+          }
+          throw error;
+        }
+      }
+
+      if (!scripts[startScriptName]) {
+        throw new Error(`Missing "${startScriptName}" script in ${packageJsonPath}`);
+      }
+
+      finalScript = npmCmd;
+      finalArgs = `run ${startScriptName}`;
+      finalCwd = projectDir;
+    }
+
+    if (!finalScript || !String(finalScript).trim()) {
+      throw new Error("Script path is required");
+    }
+    const safeScript = sanitizeScriptPath(finalScript);
+    const safeEnv = sanitizeEnvObject(env);
+    const safeCwd = resolveSafePath(String(finalCwd || process.cwd()), PROJECTS_ROOT, "cwd");
+
+    const parsedInstances = Number(instances || 1);
+    const safeInstances = Number.isFinite(parsedInstances)
+      ? Math.min(64, Math.max(1, Math.floor(parsedInstances)))
+      : 1;
+
+    const incomingMode = String(exec_mode || "fork").trim();
+    const safeExecMode =
+      incomingMode === "cluster" || incomingMode === "cluster_mode" ? "cluster" : "fork";
+
+    const processConfig = {
+      name: safeName,
+      script: safeScript,
+      args: sanitizeOptionalString(finalArgs, "args", 1024),
+      instances: safeInstances,
+      exec_mode: safeExecMode,
+      cwd: safeCwd,
+      watch: Boolean(watch),
+      env: {
+        ...safeEnv,
+        ...(normalizedPort ? { PORT: String(normalizedPort) } : {})
+      },
+      max_memory_restart: sanitizeMaxMemoryRestart(max_memory_restart),
+      node_args: sanitizeNodeArgs(node_args),
+      interpreter: sanitizeInterpreter(interpreter),
+      log_date_format: sanitizeOptionalString(log_date_format, "log_date_format", 128)
+    };
+
+    if (normalizedPort) {
+      const existingProcess = await findProcessByPort(normalizedPort);
+      if (existingProcess) {
+        const existingName = String(existingProcess.name || existingProcess.pm2_env?.name || "").trim() || "unknown process";
+        if (existingName === safeName) {
+          throw new Error(`Port ${normalizedPort} is already in use: ${safeName} was already using that port`);
+        }
+        throw new Error(`Port ${normalizedPort} is already in use by ${existingName}`);
+      }
+
+      const portBinding = await checkPortBinding(normalizedPort);
+      if (!portBinding.available) {
+        const suffix = portBinding.code ? ` (${portBinding.code})` : "";
+        throw new Error(`Port ${normalizedPort} is already in use by another service${suffix}`);
+      }
+    }
+
+    return new Promise((resolve, reject) => {
+      const stepId = `pm2:start#${++createStepCounter}`;
+      const startedAt = Date.now();
+      emitCreateStep({ stepId, label: "pm2:start", status: "started" });
+      pm2.start(processConfig, (error, proc) => {
+        if (error) {
+          const durationMs = Date.now() - startedAt;
+          createSteps.push({
+            label: "pm2:start",
+            success: false,
+            durationMs,
+            error: error.message
+          });
+          emitCreateStep({
+            stepId,
+            label: "pm2:start",
+            status: "error",
+            durationMs,
+            error: error?.message || "Failed to start process"
+          });
+          reject(error);
+          return;
+        }
+        const durationMs = Date.now() - startedAt;
+        createSteps.push({
+          label: "pm2:start",
+          success: true,
+          durationMs,
+          output: "Process started"
+        });
+        emitCreateStep({ stepId, label: "pm2:start", status: "success", durationMs });
+        resolve({
+          processName: safeName,
+          cwd: safeCwd,
+          steps: createSteps,
+          baselineRestarts: readRestartCount(Array.isArray(proc) ? proc[0] : proc),
+          pm2: proc
+        });
+      });
+    }).then(async (started) => {
+      const stepId = `pm2:healthcheck#${++createStepCounter}`;
+      const baselineRestarts = Number(started?.baselineRestarts || 0);
+      const healthStartedAt = Date.now();
+      emitCreateStep({ stepId, label: "pm2:healthcheck", status: "started" });
+      const health = await waitForHealthyStart(safeName, baselineRestarts);
+      if (!health.ok) {
+        const durationMs = Date.now() - healthStartedAt;
+        createSteps.push({
+          label: "pm2:healthcheck",
+          success: false,
+          durationMs,
+          error: health.reason
+        });
+        emitCreateStep({
+          stepId,
+          label: "pm2:healthcheck",
+          status: "error",
+          durationMs,
+          error: health?.reason || "Healthcheck failed"
+        });
+        throw new Error(health.reason || `Startup validation failed for ${safeName}`);
+      }
+      const durationMs = Date.now() - healthStartedAt;
+      createSteps.push({
+        label: "pm2:healthcheck",
+        success: true,
+        durationMs,
+        output: `Stable online status for ${safeName}`
+      });
+      emitCreateStep({ stepId, label: "pm2:healthcheck", status: "success", durationMs });
+      return {
+        ...started,
+        health
+      };
+    });
+  });
+  trackPm2Operation("processes.create", result.success);
+  if (result.success) {
+    const processName = sanitizeProcessName(config?.name, "process name");
+    await recordOperationNotification({
+      category: "operation",
+      title: `${processName} created`,
+      message: `Create operation completed for ${processName}`,
+      processName
+    });
+  }
+  await writeAudit("process.create", { actor, ip }, {
+    processName: processNameForAudit || null,
+    success: result.success,
+    details: result.success
+      ? {
+          steps: result.data?.steps || [],
+          health: result.data?.health || null
+        }
+      : null,
+    error: result.success ? null : result.error || "create failed"
+  });
+  return result;
+}
+
+async function getProcessLogs(name, lines = 100) {
+  const processName = sanitizeProcessName(name, "process name");
+
+  const readTail = async (filePath) => {
+    if (!filePath) {
+      return [];
+    }
+
+    let stat;
+    try {
+      stat = await fs.promises.stat(filePath);
+    } catch (_error) {
+      return [];
+    }
+
+    if (!stat.isFile()) {
+      return [];
+    }
+
+    const bytes = Math.min(LOG_TAIL_MAX_BYTES, stat.size);
+    const start = Math.max(0, stat.size - bytes);
+
+    const fd = await fs.promises.open(filePath, "r");
+    try {
+      const buffer = Buffer.alloc(bytes);
+      const result = await fd.read(buffer, 0, bytes, start);
+      const text = buffer.slice(0, result.bytesRead).toString("utf8");
+      return text
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .slice(-Number(lines));
+    } finally {
+      await fd.close();
+    }
+  };
+
+  const result = await withPM2(
+    () =>
+      new Promise((resolve, reject) => {
+        describeProcess(processName)
+          .then((proc) => {
+            if (!proc) {
+              resolve({ stdout: [], stderr: [] });
+              return;
+            }
+
+            const env = proc.pm2_env || {};
+            const stdoutPath = env.pm_out_log_path;
+            const stderrPath = env.pm_err_log_path;
+
+            Promise.all([readTail(stdoutPath), readTail(stderrPath)])
+              .then(([stdout, stderr]) => {
+                resolve({
+                  stdout,
+                  stderr,
+                  paths: {
+                    stdout: stdoutPath ? path.resolve(stdoutPath) : null,
+                    stderr: stderrPath ? path.resolve(stderrPath) : null
+                  }
+                });
+              })
+              .catch(reject);
+          })
+          .catch(reject);
+      })
+  );
+  trackPm2Operation("processes.logs", result.success);
+  return result;
+}
+
+async function reloadProcess(name, actorContext = "unknown") {
+  const processName = sanitizeProcessName(name, "process name");
+  const { actor, ip } = normalizeActorContext(actorContext);
+  const result = await withPM2(
+    () =>
+      new Promise((resolve, reject) => {
+        pm2.reload(processName, (error, proc) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve(proc);
+        });
+      })
+  );
+  trackPm2Operation("processes.reload", result.success);
+  if (result.success) {
+    try {
+      await appendHistoryEntry({
+        processName,
+        event: "reload",
+        source: "api",
+        actor
+      });
+    } catch (_error) {
+      // Best-effort audit append: do not fail reload operation.
+    }
+    await recordOperationNotification({
+      category: "operation",
+      title: `${processName} reloaded`,
+      message: `Reload operation completed for ${processName}`,
+      processName
+    });
+  }
+  await writeAudit("process.reload", { actor, ip }, {
+    processName,
+    success: result.success,
+    error: result.success ? null : result.error || "reload failed"
+  });
+  return result;
+}
+
+async function flushLogs(name) {
+  const processName = sanitizeProcessName(name, "process name");
+  const result = await withPM2(
+    () =>
+      new Promise((resolve, reject) => {
+        pm2.flush(processName, (error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve({ name: processName, flushed: true });
+        });
+      })
+  );
+  trackPm2Operation("processes.flush", result.success);
+  return result;
+}
+
+async function getProcessDetails(name) {
+  const processName = sanitizeProcessName(name, "process name");
+  const result = await withPM2(() => describeProcess(processName));
+  trackPm2Operation("processes.details", result.success);
+  return result;
+}
+
+async function runNpmScriptForProcess(name, scriptName, args = []) {
+  const processName = sanitizeProcessName(name, "process name");
+  const result = await withPM2(async () => {
+    const proc = await describeProcess(processName);
+    if (!proc) {
+      throw new Error(`Process not found: ${processName}`);
+    }
+
+    const cwd = proc.pm2_env?.pm_cwd;
+    let cwdStat;
+    try {
+      cwdStat = await fs.promises.stat(cwd);
+    } catch (_error) {
+      cwdStat = null;
+    }
+
+    if (!cwd || !cwdStat || !cwdStat.isDirectory()) {
+      throw new Error(`Cannot resolve process working directory for: ${processName}`);
+    }
+
+    const packageJsonPath = path.join(cwd, "package.json");
+    try {
+      await fs.promises.access(packageJsonPath, fs.constants.R_OK);
+    } catch (_error) {
+      throw new Error(`No package.json found in process directory: ${cwd}`);
+    }
+
+    const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+
+    if (scriptName === "install") {
+      const result = await runCommand(
+        npmCmd,
+        [...getNpmInstallArgs({ includeDev: true }), ...args],
+        cwd
+      );
+      return { command: "npm install", cwd, output: result.stdout.slice(-4000) };
+    }
+
+    const packageJson = JSON.parse(await fs.promises.readFile(packageJsonPath, "utf8"));
+    const scripts = packageJson.scripts || {};
+    if (!scripts[scriptName]) {
+      throw new Error(`Script "${scriptName}" not found in ${packageJsonPath}`);
+    }
+
+    const result = await runCommand(npmCmd, ["run", scriptName, ...args], cwd);
+    return { command: `npm run ${scriptName}`, cwd, output: result.stdout.slice(-4000) };
+  });
+  trackPm2Operation(`processes.npm.${scriptName}`, result.success);
+  return result;
+}
+
+async function npmInstall(name) {
+  return runNpmScriptForProcess(name, "install");
+}
+
+async function npmBuild(name) {
+  return runNpmScriptForProcess(name, "build");
+}
+
+/**
+ * @param {string} name
+ * @param {{
+ *   branch?: string,
+ *   installDependencies?: boolean,
+ *   runBuild?: boolean,
+ *   restartMode?: "restart"|"reload",
+ *   gitRemote?: string
+ * }} [options]
+ * @param {string} [actor]
+ */
+async function deployProcess(name, options = {}, actorContext = "unknown") {
+  const processName = sanitizeProcessName(name, "process name");
+  const { actor, ip } = normalizeActorContext(actorContext);
+  const branch = String(options.branch || "").trim();
+  const installDependencies = options.installDependencies !== false;
+  const runBuild = options.runBuild !== false;
+  const restartMode = String(options.restartMode || "restart").trim() === "reload" ? "reload" : "restart";
+  const gitRemote = String(options.gitRemote || "origin").trim() || "origin";
+  /** @type {CommandStep[]} */
+  const deploymentSteps = [];
+
+  const result = await withPM2(async () => {
+    const proc = await describeProcess(processName);
+    if (!proc) {
+      throw new Error(`Process not found: ${processName}`);
+    }
+
+    const cwd = proc.pm2_env?.pm_cwd;
+    let cwdStat;
+    try {
+      cwdStat = await fs.promises.stat(cwd);
+    } catch (_error) {
+      cwdStat = null;
+    }
+
+    if (!cwd || !cwdStat || !cwdStat.isDirectory()) {
+      throw new Error(`Cannot resolve process working directory for: ${processName}`);
+    }
+
+    const steps = deploymentSteps;
+    const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+    const npmCapabilities = await readNpmCapabilities(cwd);
+    const canInstallDependencies = npmCapabilities.hasPackageJson;
+    const canRunBuild = npmCapabilities.hasBuildScript;
+
+    const runStep = async (label, command, args) => {
+      const startedAt = Date.now();
+      try {
+        const output = await runCommand(command, args, cwd);
+        steps.push({
+          label,
+          success: true,
+          durationMs: Date.now() - startedAt,
+          output: String(output.stdout || output.stderr || "").slice(-4000)
+        });
+      } catch (error) {
+        steps.push({
+          label,
+          success: false,
+          durationMs: Date.now() - startedAt,
+          error: error.message
+        });
+        throw error;
+      }
+    };
+
+    try {
+      await runStep("git:check", "git", ["rev-parse", "--is-inside-work-tree"]);
+      await runStep("git:fetch", "git", ["fetch", gitRemote, "--prune"]);
+
+      if (branch) {
+        await runStep("git:checkout", "git", ["checkout", branch]);
+        await runStep("git:pull", "git", ["pull", "--ff-only", gitRemote, branch]);
+      } else {
+        await runStep("git:pull", "git", ["pull", "--ff-only"]);
+      }
+
+      if (installDependencies && canInstallDependencies) {
+        await runStep("npm:install", npmCmd, getNpmInstallArgs({ includeDev: runBuild }));
+      }
+
+      if (runBuild && canRunBuild) {
+        await runStep("npm:build", npmCmd, ["run", "build"]);
+      }
+
+      if (restartMode === "reload") {
+        await new Promise((resolve, reject) => {
+          pm2.reload(processName, (error) => {
+            if (error) {
+              reject(error);
+              return;
+            }
+            resolve();
+          });
+        });
+        steps.push({ label: "pm2:reload", success: true, durationMs: 0, output: "Process reloaded" });
+      } else {
+        await new Promise((resolve, reject) => {
+          pm2.restart(processName, (error) => {
+            if (error) {
+              reject(error);
+              return;
+            }
+            resolve();
+          });
+        });
+        steps.push({ label: "pm2:restart", success: true, durationMs: 0, output: "Process restarted" });
+      }
+    } catch (error) {
+      throw new Error(buildStepFailureMessage("Deployment failed", steps, error?.message || ""));
+    }
+
+    return {
+      processName,
+      cwd,
+      branch: branch || null,
+      installDependencies: installDependencies && canInstallDependencies,
+      runBuild: runBuild && canRunBuild,
+      restartMode,
+      npmCapabilities,
+      steps
+    };
+  });
+
+  trackPm2Operation("processes.deploy", result.success);
+  await appendDeploymentHistory({
+    processName,
+    actor,
+    success: result.success,
+    branch: branch || null,
+    installDependencies: result.success
+      ? Boolean(result.data.installDependencies)
+      : Boolean(installDependencies),
+    runBuild: result.success ? Boolean(result.data.runBuild) : Boolean(runBuild),
+    restartMode,
+    steps: result.success ? result.data.steps : deploymentSteps,
+    error: result.success ? null : result.error
+  }).catch(() => {
+    // Best-effort audit append.
+  });
+
+  await recordOperationNotification({
+    category: "deployment",
+    level: result.success ? "info" : "danger",
+    title: result.success ? `${processName} deployed` : `${processName} deployment failed`,
+    message: result.success
+      ? `Deploy completed${branch ? ` on ${branch}` : ""}`
+      : `Deploy failed: ${result.error || "unknown error"}`,
+    processName,
+    details: result.success
+      ? {
+          branch: branch || null,
+          steps: result.data.steps.map((step) => ({
+            label: step.label,
+            success: step.success,
+            durationMs: step.durationMs
+          }))
+        }
+      : { error: result.error }
+  });
+
+  await writeAudit("process.deploy", { actor, ip }, {
+    processName,
+    success: result.success,
+    details: result.success
+      ? {
+          branch: branch || null,
+          restartMode,
+          installDependencies: Boolean(result.data?.installDependencies),
+          runBuild: Boolean(result.data?.runBuild)
+        }
+      : null,
+    error: result.success ? null : result.error || "deploy failed"
+  });
+
+  return result;
+}
+
+async function getDeploymentHistory(limitOrOptions = 100, processName = "") {
+  if (typeof limitOrOptions === "object" && limitOrOptions !== null) {
+    const pageData = await listDeploymentHistoryPage(limitOrOptions);
+    return { success: true, data: pageData, error: null };
+  }
+  const history = await listDeploymentHistory(limitOrOptions, processName);
+  return { success: true, data: history, error: null };
+}
+
+async function getGitCommitsForProcess(name, limit = 20) {
+  const processName = sanitizeProcessName(name, "process name");
+  const result = await withPM2(async () => {
+    const proc = await describeProcess(processName);
+    if (!proc) {
+      throw new Error(`Process not found: ${processName}`);
+    }
+
+    const cwd = proc.pm2_env?.pm_cwd;
+    let cwdStat;
+    try {
+      cwdStat = await fs.promises.stat(cwd);
+    } catch (_error) {
+      cwdStat = null;
+    }
+    if (!cwd || !cwdStat || !cwdStat.isDirectory()) {
+      throw new Error(`Cannot resolve process working directory for: ${processName}`);
+    }
+
+    const normalizedLimit = Math.max(1, Math.min(100, Number(limit) || 20));
+    await runCommand("git", ["rev-parse", "--is-inside-work-tree"], cwd);
+    const output = await runCommand(
+      "git",
+      ["log", `-n${normalizedLimit}`, "--date=iso-strict", "--pretty=format:%H|%h|%ad|%an|%s"],
+      cwd
+    );
+
+    const commits = String(output.stdout || "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [hash, shortHash, date, author, ...subjectParts] = line.split("|");
+        return {
+          hash,
+          shortHash,
+          date,
+          author,
+          subject: subjectParts.join("|")
+        };
+      });
+    return { processName, cwd, commits };
+  });
+
+  trackPm2Operation("processes.git.commits", result.success);
+  return result;
+}
+
+async function gitPullProcess(name) {
+  const processName = sanitizeProcessName(name, "process name");
+  const result = await withPM2(async () => {
+    const { cwd } = await resolveProcessWorkingDirectory(processName);
+
+    await runCommand("git", ["rev-parse", "--is-inside-work-tree"], cwd);
+    const beforeHead = await runCommand("git", ["rev-parse", "--short", "HEAD"], cwd);
+    const pull = await runCommand("git", ["pull"], cwd);
+    const afterHead = await runCommand("git", ["rev-parse", "--short", "HEAD"], cwd);
+    return {
+      processName,
+      cwd,
+      beforeCommit: String(beforeHead.stdout || "").trim(),
+      afterCommit: String(afterHead.stdout || "").trim(),
+      output: compactOutput(`${pull.stdout || ""}\n${pull.stderr || ""}`)
+    };
+  });
+
+  trackPm2Operation("processes.git.pull", result.success);
+  return result;
+}
+
+/**
+ * @param {string} name
+ * @param {{ targetCommit?: string, restartMode?: "restart"|"reload" }} [options]
+ * @param {string} [actor]
+ */
+async function rollbackProcess(name, options = {}, actor = "unknown") {
+  const processName = sanitizeProcessName(name, "process name");
+  const targetCommit = String(options.targetCommit || "").trim();
+  const restartMode = String(options.restartMode || "restart").trim() === "reload" ? "reload" : "restart";
+  /** @type {CommandStep[]} */
+  const rollbackSteps = [];
+
+  const result = await withPM2(async () => {
+    const proc = await describeProcess(processName);
+    if (!proc) {
+      throw new Error(`Process not found: ${processName}`);
+    }
+
+    const cwd = proc.pm2_env?.pm_cwd;
+    let cwdStat;
+    try {
+      cwdStat = await fs.promises.stat(cwd);
+    } catch (_error) {
+      cwdStat = null;
+    }
+    if (!cwd || !cwdStat || !cwdStat.isDirectory()) {
+      throw new Error(`Cannot resolve process working directory for: ${processName}`);
+    }
+
+    const steps = rollbackSteps;
+    const runStep = async (label, command, args) => {
+      const startedAt = Date.now();
+      try {
+        const output = await runCommand(command, args, cwd);
+        steps.push({
+          label,
+          success: true,
+          durationMs: Date.now() - startedAt,
+          output: compactOutput(output.stdout || output.stderr || "")
+        });
+        return output;
+      } catch (error) {
+        steps.push({
+          label,
+          success: false,
+          durationMs: Date.now() - startedAt,
+          error: error.message
+        });
+        throw error;
+      }
+    };
+
+    try {
+      await runStep("git:check", "git", ["rev-parse", "--is-inside-work-tree"]);
+      const currentHead = await runStep("git:head", "git", ["rev-parse", "HEAD"]);
+
+      let resolvedTarget = targetCommit;
+      if (!resolvedTarget) {
+        const previousHead = await runStep("git:previous-head", "git", ["rev-parse", "HEAD~1"]);
+        resolvedTarget = String(previousHead.stdout || "").trim();
+      } else {
+        await runStep("git:verify-target", "git", ["rev-parse", "--verify", resolvedTarget]);
+      }
+
+      await runStep("git:reset", "git", ["reset", "--hard", resolvedTarget]);
+
+      if (restartMode === "reload") {
+        await new Promise((resolve, reject) => {
+          pm2.reload(processName, (error) => {
+            if (error) {
+              reject(error);
+              return;
+            }
+            resolve();
+          });
+        });
+        steps.push({ label: "pm2:reload", success: true, durationMs: 0, output: "Process reloaded" });
+      } else {
+        await new Promise((resolve, reject) => {
+          pm2.restart(processName, (error) => {
+            if (error) {
+              reject(error);
+              return;
+            }
+            resolve();
+          });
+        });
+        steps.push({ label: "pm2:restart", success: true, durationMs: 0, output: "Process restarted" });
+      }
+
+      return {
+        processName,
+        cwd,
+        fromCommit: String(currentHead.stdout || "").trim(),
+        toCommit: resolvedTarget,
+        restartMode,
+        steps
+      };
+    } catch (error) {
+      throw new Error(buildStepFailureMessage("Rollback failed", steps, error?.message || ""));
+    }
+  });
+
+  trackPm2Operation("processes.rollback", result.success);
+  await appendDeploymentHistory({
+    processName,
+    actor,
+    success: result.success,
+    branch: null,
+    installDependencies: false,
+    runBuild: false,
+    restartMode,
+    action: "rollback",
+    targetCommit: targetCommit || null,
+    steps: result.success ? result.data.steps : rollbackSteps,
+    error: result.success ? null : result.error
+  }).catch(() => {
+    // Best-effort audit append.
+  });
+
+  await recordOperationNotification({
+    category: "deployment",
+    level: result.success ? "warning" : "danger",
+    title: result.success ? `${processName} rolled back` : `${processName} rollback failed`,
+    message: result.success
+      ? `Rollback completed to ${result.data.toCommit.slice(0, 8)}`
+      : `Rollback failed: ${result.error || "unknown error"}`,
+    processName,
+    details: result.success ? result.data : { error: result.error, actor, targetCommit }
+  });
+
+  return result;
+}
+
+async function getProcessCatalog() {
+  const [live, processMeta] = await Promise.all([listProcesses(), listProcessMeta()]);
+
+  if (!live.success) {
+    return live;
+  }
+
+  const withMeta = await Promise.all(live.data.map(async (proc) => {
+    const meta = processMeta[proc.name] || {
+      group: "",
+      dependencies: [],
+      alertThresholds: { cpu: null, memoryMB: null }
+    };
+    const cwd = String(proc?.cwd || "").trim();
+    const allowedRoot = getDotEnvAllowedRoot();
+    const hasDotEnvFile = cwd && isPathInside(allowedRoot, cwd)
+      ? await pathIsReadableFile(path.join(cwd, ".env"))
+      : false;
+    const npmCapabilities = await readNpmCapabilities(cwd);
+
+    return {
+      ...proc,
+      meta,
+      hasDotEnvFile,
+      npmCapabilities
+    };
+  }));
+
+  return {
+    success: true,
+    data: {
+      processes: withMeta,
+      meta: processMeta
+    },
+    error: null
+  };
+}
+
+async function updateProcessMetadata(name, payload) {
+  const nextMeta = await setProcessMeta(name, payload || {});
+  return {
+    success: true,
+    data: nextMeta,
+    error: null
+  };
+}
+
+async function removeProcessMetadata(name) {
+  await clearProcessMeta(name);
+  return { success: true, data: { removed: true }, error: null };
+}
+
+async function readProcessMetrics(name, limit) {
+  const points = await getMetricsHistory(name, limit);
+  return { success: true, data: points, error: null };
+}
+
+async function readMonitoringSummary() {
+  const live = await listProcesses();
+  if (!live.success) {
+    return live;
+  }
+  const summary = await getMonitoringSummary(live.data);
+  return { success: true, data: summary, error: null };
+}
+
+async function exportProcessConfig() {
+  const payload = await exportConfig();
+  return { success: true, data: payload, error: null };
+}
+
+async function importProcessConfig(payload) {
+  const result = await importConfig(payload || {});
+  return { success: true, data: result, error: null };
+}
+
+module.exports = {
+  listProcesses,
+  getProcessCatalog,
+  startProcess,
+  stopProcess,
+  restartProcess,
+  runBulkAction,
+  updateProcessEnv,
+  deleteProcess,
+  createProcess,
+  getProcessLogs,
+  reloadProcess,
+  flushLogs,
+  getProcessDetails,
+  npmInstall,
+  npmBuild,
+  updateProcessMetadata,
+  removeProcessMetadata,
+  readProcessMetrics,
+  readMonitoringSummary,
+  exportProcessConfig,
+  importProcessConfig,
+  deployProcess,
+  getDeploymentHistory,
+  getGitCommitsForProcess,
+  gitPullProcess,
+  rollbackProcess,
+  readProcessDotEnv,
+  updateProcessDotEnv
+};
+

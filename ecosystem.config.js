@@ -2,7 +2,9 @@ module.exports = {
   apps: [
     {
       name: "pm2-dashboard",
-      script: "./server/index.js",
+      script: "./server/index.ts",
+      interpreter: "node",
+      node_args: "--import tsx",
       cwd: "./",
       instances: 1,
       exec_mode: "fork",
