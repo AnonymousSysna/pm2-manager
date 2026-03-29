@@ -17,10 +17,12 @@ const { listProcessMeta } = require("../utils/processMetaStore");
 const { appendMetricsSample } = require("../utils/metricsHistoryStore");
 const { sendAlertNotifications } = require("../utils/alertNotifier");
 const { appendNotification } = require("../utils/notificationStore");
+const { listAlertChannels } = require("../utils/alertChannelsStore");
 
 let busAttached = false;
 let attachInProgress = false;
 let lastMetricsSampleAt = 0;
+let busReconnectTimer = null;
 const CRASH_LOOP_WINDOW_MS = 5 * 60 * 1000;
 const CRASH_LOOP_THRESHOLD = 3;
 const restartWindowState = new Map();
@@ -97,7 +99,224 @@ function updateRestartWindow(processName, now) {
   return state;
 }
 
+function toNullableNumber(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function extractLifecycleDetails(packet, event) {
+  const processInfo = packet?.process || {};
+  const pm2Env = processInfo?.pm2_env || {};
+  const details = {
+    event,
+    exitCode: toNullableNumber(packet?.exit_code ?? packet?.process?.exit_code ?? pm2Env?.exit_code),
+    signal: String(packet?.signal || packet?.process?.signal || pm2Env?.exit_signal || "").trim() || null,
+    manually: Boolean(packet?.manually || pm2Env?.pmx_module),
+    unstableRestarts: toNullableNumber(pm2Env?.unstable_restarts),
+    status: String(pm2Env?.status || "").trim() || null
+  };
+
+  let reason = String(packet?.reason || packet?.data?.reason || "").trim();
+  if (!reason && details.exitCode !== null) {
+    reason = `exit code ${details.exitCode}`;
+  }
+  if (!reason && details.signal) {
+    reason = `signal ${details.signal}`;
+  }
+  if (!reason && event === "restart") {
+    reason = "PM2 restart event";
+  }
+
+  return {
+    ...details,
+    reason: reason || null
+  };
+}
+
 function registerPM2Monitor(io) {
+  const scheduleBusReconnect = (delayMs = 1500) => {
+    if (busReconnectTimer) {
+      return;
+    }
+    busReconnectTimer = setTimeout(() => {
+      busReconnectTimer = null;
+      attachBus();
+    }, Math.max(250, Number(delayMs) || 1500));
+    if (typeof busReconnectTimer.unref === "function") {
+      busReconnectTimer.unref();
+    }
+  };
+
+  const attachBus = () => {
+    if (busAttached || attachInProgress) {
+      return;
+    }
+
+    attachInProgress = true;
+    pm2.connect((connectError) => {
+      if (connectError) {
+        attachInProgress = false;
+        busAttached = false;
+        logger.error("pm2_monitor_connect_failed", { error: connectError.message });
+        onSocketError();
+        scheduleBusReconnect(1500);
+        return;
+      }
+
+      pm2.launchBus((error, bus) => {
+        if (error) {
+          attachInProgress = false;
+          busAttached = false;
+          logger.error("pm2_monitor_bus_launch_failed", { error: error.message });
+          onSocketError();
+          try {
+            pm2.disconnect();
+          } catch (_disconnectError) {
+            // Best-effort disconnect.
+          }
+          scheduleBusReconnect(1500);
+          return;
+        }
+
+        busAttached = true;
+        attachInProgress = false;
+
+        const onOut = (packet) => {
+          io.emit("process:log", {
+            processName: packet.process?.name,
+            type: "stdout",
+            data: packet.data,
+            timestamp: Date.now()
+          });
+        };
+
+        const onErr = (packet) => {
+          const payload = {
+            processName: packet.process?.name,
+            type: "stderr",
+            data: packet.data,
+            timestamp: Date.now()
+          };
+
+          io.emit("process:log", payload);
+        };
+
+        bus.on("log:out", onOut);
+        bus.on("pm2:log:out", onOut);
+        bus.on("log:err", onErr);
+        bus.on("pm2:log:err", onErr);
+        bus.on("process:event", async (packet) => {
+          const event = String(packet?.event || "").trim();
+          const processName = packet?.process?.name || packet?.process?.pm2_env?.name || null;
+          if (!processName || !event) {
+            return;
+          }
+          if (!["restart", "exit", "online", "stop"].includes(event)) {
+            return;
+          }
+
+          try {
+            const lifecycleDetails = extractLifecycleDetails(packet, event);
+            await appendHistoryEntry({
+              processName,
+              event,
+              source: "pm2-bus",
+              exitCode: lifecycleDetails.exitCode,
+              signal: lifecycleDetails.signal,
+              reason: lifecycleDetails.reason,
+              status: lifecycleDetails.status,
+              unstableRestarts: lifecycleDetails.unstableRestarts
+            });
+            let notification;
+            if (event === "restart") {
+              const now = Date.now();
+              const restartState = updateRestartWindow(processName, now);
+              const restartCount = restartState.restartTimestamps.length;
+              const isCrashLoop = restartCount >= CRASH_LOOP_THRESHOLD;
+
+              if (isCrashLoop && !restartState.crashLoopAlerted) {
+                restartState.crashLoopAlerted = true;
+                notification = await appendNotification({
+                  level: "danger",
+                  category: "lifecycle",
+                  title: `${processName} crash loop detected`,
+                  message: `${processName} restarted ${restartCount} times in the last 5 minutes`,
+                  processName,
+                  details: {
+                    source: "pm2-bus",
+                    event,
+                    reason: lifecycleDetails.reason,
+                    exitCode: lifecycleDetails.exitCode,
+                    signal: lifecycleDetails.signal,
+                    crashLoop: true,
+                    restartCount,
+                    threshold: CRASH_LOOP_THRESHOLD,
+                    windowMs: CRASH_LOOP_WINDOW_MS
+                  }
+                });
+              } else {
+                notification = await appendNotification({
+                  level: "info",
+                  category: "lifecycle",
+                  title: `${processName} restart`,
+                  message: `PM2 reported restart for ${processName}`,
+                  processName,
+                  details: {
+                    source: "pm2-bus",
+                    event,
+                    reason: lifecycleDetails.reason,
+                    exitCode: lifecycleDetails.exitCode,
+                    signal: lifecycleDetails.signal,
+                    crashLoop: false,
+                    restartCount,
+                    threshold: CRASH_LOOP_THRESHOLD,
+                    windowMs: CRASH_LOOP_WINDOW_MS
+                  }
+                });
+              }
+            } else {
+              notification = await appendNotification({
+                level: event === "exit" ? "warning" : "info",
+                category: "lifecycle",
+                title: `${processName} ${event}`,
+                message: `PM2 reported ${event} for ${processName}`,
+                processName,
+                details: {
+                  source: "pm2-bus",
+                  event,
+                  reason: lifecycleDetails.reason,
+                  exitCode: lifecycleDetails.exitCode,
+                  signal: lifecycleDetails.signal
+                }
+              });
+            }
+            io.emit("notifications:new", [notification]);
+          } catch (_error) {
+            // Best-effort history append.
+          }
+        });
+        bus.on("error", (busError) => {
+          busAttached = false;
+          attachInProgress = false;
+          logger.error("pm2_monitor_bus_error", { error: busError?.message || String(busError) });
+          onSocketError();
+          io.emit("monitor:error", {
+            message: busError?.message || "PM2 bus error"
+          });
+          try {
+            pm2.disconnect();
+          } catch (_disconnectError) {
+            // Best-effort disconnect.
+          }
+          scheduleBusReconnect(1000);
+        });
+      });
+    });
+  };
+
   const sampleMetrics = async (processes, socket) => {
     const now = Date.now();
     if (now - lastMetricsSampleAt < 1000) {
@@ -122,9 +341,38 @@ function registerPM2Monitor(io) {
           )
         );
 
-        sendAlertNotifications(alerts).catch(() => {
-          // Best-effort external alert delivery.
-        });
+        const deliveries = await sendAlertNotifications(alerts);
+        const failedDeliveries = deliveries.filter((item) => !item.success);
+        if (failedDeliveries.length > 0) {
+          const channels = await listAlertChannels().catch(() => []);
+          const channelMap = new Map(channels.map((channel) => [channel.id, channel]));
+          const deliveryNotifications = await Promise.all(
+            failedDeliveries.map((failed) => {
+              const channel = channelMap.get(failed.channelId);
+              const channelName = channel?.name || failed.channelId || "unknown channel";
+              return appendNotification({
+                level: "warning",
+                category: "alert",
+                title: "Alert delivery failed",
+                message: `${channelName}: ${failed.error || "delivery error"}`,
+                processName: null,
+                details: {
+                  channelId: failed.channelId || null,
+                  channelName: channel?.name || null,
+                  error: failed.error || "delivery error"
+                }
+              }).catch(() => null);
+            })
+          );
+          const created = deliveryNotifications.filter(Boolean);
+          if (created.length > 0) {
+            if (socket) {
+              socket.emit("notifications:new", created);
+            } else {
+              io.emit("notifications:new", created);
+            }
+          }
+        }
         if (socket) {
           socket.emit("monitor:alerts", alerts);
           socket.emit("notifications:new", notificationPayload.filter(Boolean));
@@ -224,136 +472,7 @@ function registerPM2Monitor(io) {
     });
   });
 
-  if (!busAttached && !attachInProgress) {
-    attachInProgress = true;
-    pm2.connect((connectError) => {
-      if (connectError) {
-        attachInProgress = false;
-        logger.error("pm2_monitor_connect_failed", { error: connectError.message });
-        onSocketError();
-        return;
-      }
-
-      pm2.launchBus((error, bus) => {
-        if (error) {
-          attachInProgress = false;
-          logger.error("pm2_monitor_bus_launch_failed", { error: error.message });
-          onSocketError();
-          return;
-        }
-
-        busAttached = true;
-        attachInProgress = false;
-
-        const onOut = (packet) => {
-          io.emit("process:log", {
-            processName: packet.process?.name,
-            type: "stdout",
-            data: packet.data,
-            timestamp: Date.now()
-          });
-        };
-
-        const onErr = (packet) => {
-          const payload = {
-            processName: packet.process?.name,
-            type: "stderr",
-            data: packet.data,
-            timestamp: Date.now()
-          };
-
-          io.emit("process:log", payload);
-        };
-
-        bus.on("log:out", onOut);
-        bus.on("pm2:log:out", onOut);
-        bus.on("log:err", onErr);
-        bus.on("pm2:log:err", onErr);
-        bus.on("process:event", async (packet) => {
-          const event = String(packet?.event || "").trim();
-          const processName = packet?.process?.name || packet?.process?.pm2_env?.name || null;
-          if (!processName || !event) {
-            return;
-          }
-          if (!["restart", "exit", "online", "stop"].includes(event)) {
-            return;
-          }
-
-          try {
-            await appendHistoryEntry({
-              processName,
-              event,
-              source: "pm2-bus"
-            });
-            let notification;
-            if (event === "restart") {
-              const now = Date.now();
-              const restartState = updateRestartWindow(processName, now);
-              const restartCount = restartState.restartTimestamps.length;
-              const isCrashLoop = restartCount >= CRASH_LOOP_THRESHOLD;
-
-              if (isCrashLoop && !restartState.crashLoopAlerted) {
-                restartState.crashLoopAlerted = true;
-                notification = await appendNotification({
-                  level: "danger",
-                  category: "lifecycle",
-                  title: `${processName} crash loop detected`,
-                  message: `${processName} restarted ${restartCount} times in the last 5 minutes`,
-                  processName,
-                  details: {
-                    source: "pm2-bus",
-                    event,
-                    crashLoop: true,
-                    restartCount,
-                    threshold: CRASH_LOOP_THRESHOLD,
-                    windowMs: CRASH_LOOP_WINDOW_MS
-                  }
-                });
-              } else {
-                notification = await appendNotification({
-                  level: "info",
-                  category: "lifecycle",
-                  title: `${processName} restart`,
-                  message: `PM2 reported restart for ${processName}`,
-                  processName,
-                  details: {
-                    source: "pm2-bus",
-                    event,
-                    crashLoop: false,
-                    restartCount,
-                    threshold: CRASH_LOOP_THRESHOLD,
-                    windowMs: CRASH_LOOP_WINDOW_MS
-                  }
-                });
-              }
-            } else {
-              notification = await appendNotification({
-                level: event === "exit" ? "warning" : "info",
-                category: "lifecycle",
-                title: `${processName} ${event}`,
-                message: `PM2 reported ${event} for ${processName}`,
-                processName,
-                details: {
-                  source: "pm2-bus",
-                  event
-                }
-              });
-            }
-            io.emit("notifications:new", [notification]);
-          } catch (_error) {
-            // Best-effort history append.
-          }
-        });
-        bus.on("error", (busError) => {
-          logger.error("pm2_monitor_bus_error", { error: busError?.message || String(busError) });
-          onSocketError();
-          io.emit("monitor:error", {
-            message: busError?.message || "PM2 bus error"
-          });
-        });
-      });
-    });
-  }
+  attachBus();
 }
 
 module.exports = { registerPM2Monitor };

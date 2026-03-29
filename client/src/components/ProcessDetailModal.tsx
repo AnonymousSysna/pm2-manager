@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useEffect, useMemo, useState } from "react";
-import { X, Copy, Play, Square, RefreshCw, RotateCcw, Trash2, Download, Hammer } from "lucide-react";
+import { X, Copy, Play, Square, RefreshCw, RotateCcw, Trash2, Download, Hammer, ShieldAlert, History } from "lucide-react";
 import toast from "../lib/toast";
 import { processes as processApi } from "../api";
 import Button from "./ui/Button";
@@ -33,11 +33,18 @@ async function copyToClipboard(text) {
   }
 }
 
-export default function ProcessDetailModal({ process, onClose, onAction }) {
+const SENSITIVE_ENV_KEY_PATTERN = /(pass(word)?|secret|token|api[_-]?key|private|credential|auth|pwd)/i;
+
+function isSensitiveEnvKey(key) {
+  return SENSITIVE_ENV_KEY_PATTERN.test(String(key || ""));
+}
+
+export default function ProcessDetailModal({ process, onClose, onAction, onViewDeployHistory }) {
   const [tab, setTab] = useState("Overview");
   const [loadingAction, setLoadingAction] = useState({});
   const [metricsPoints, setMetricsPoints] = useState([]);
   const [metricsLoading, setMetricsLoading] = useState(false);
+  const [revealSensitiveEnv, setRevealSensitiveEnv] = useState(false);
 
   useEffect(() => {
     const onEsc = (event) => {
@@ -81,6 +88,10 @@ export default function ProcessDetailModal({ process, onClose, onAction }) {
     };
   }, [process?.name]);
 
+  useEffect(() => {
+    setRevealSensitiveEnv(false);
+  }, [process?.name]);
+
   const details = useMemo(() => {
     const data = process?.details || {};
     const env = data.pm2_env || {};
@@ -107,6 +118,10 @@ export default function ProcessDetailModal({ process, onClose, onAction }) {
   }
 
   const envVars = process?.details?.pm2_env?.env || {};
+  const hasSensitiveEnv = useMemo(
+    () => Object.keys(envVars).some((key) => isSensitiveEnvKey(key)),
+    [envVars]
+  );
   const maxMemory = Math.max(...metricsPoints.map((x) => x.memory || 0), 1);
   const isOnline = process?.status === "online";
   const isStopped = process?.status === "stopped";
@@ -155,10 +170,32 @@ export default function ProcessDetailModal({ process, onClose, onAction }) {
 
         {tab === "Environment" && (
           <div className="max-h-modal-content overflow-y-auto rounded-md border border-border">
+            {hasSensitiveEnv && (
+              <div className="flex justify-end border-b border-border p-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setRevealSensitiveEnv((prev) => !prev)}
+                >
+                  {revealSensitiveEnv ? "Hide Sensitive Values" : "Reveal Sensitive Values"}
+                </Button>
+              </div>
+            )}
             {Object.entries(envVars).map(([key, value]) => (
               <div key={key} className="grid grid-cols-[1fr,1fr,40px] items-center gap-2 border-b border-border p-2 text-xs">
-                <span className="text-text-2">{key}</span>
-                <span className="truncate text-text-1">{String(value)}</span>
+                <span className="flex items-center gap-1 text-text-2">
+                  <span>{key}</span>
+                  {isSensitiveEnvKey(key) && (
+                    <span className="inline-flex items-center gap-1 rounded border border-warning-500/40 bg-warning-500/10 px-1.5 py-0.5 text-[10px] text-warning-300">
+                      <ShieldAlert size={11} />
+                      Sensitive
+                    </span>
+                  )}
+                </span>
+                <span className="truncate text-text-1">
+                  {isSensitiveEnvKey(key) && !revealSensitiveEnv ? "••••••••" : String(value)}
+                </span>
                 <Button
                   type="button"
                   variant="secondary"
@@ -251,6 +288,18 @@ export default function ProcessDetailModal({ process, onClose, onAction }) {
               disabled={loadingAction.gitPull}
               onClick={() => runAction("gitPull", process.name)}
             />
+            <Button
+              type="button"
+              className="col-span-2"
+              variant="secondary"
+              onClick={() => {
+                if (typeof onViewDeployHistory === "function") {
+                  onViewDeployHistory(process.name);
+                }
+              }}
+            >
+              <History size={16} /> Deploy History
+            </Button>
             <Button
               type="button"
               className="col-span-2"

@@ -27,6 +27,20 @@ export default function Notifications() {
   const [level, setLevel] = useState("all");
   const [category, setCategory] = useState("all");
   const [query, setQuery] = useState("");
+  const [expandedById, setExpandedById] = useState({});
+
+  const copyText = async (text) => {
+    const value = String(text ?? "");
+    if (!value) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success("Copied error details");
+    } catch (_error) {
+      toast.error("Failed to copy");
+    }
+  };
 
   const loadHistory = async () => {
     setLoading(true);
@@ -62,6 +76,17 @@ export default function Notifications() {
       return merged.slice(-1000);
     });
   }, [liveNotifications]);
+
+  const categoryOptions = useMemo(() => {
+    const set = new Set(["alert", "lifecycle", "event"]);
+    for (const item of items) {
+      const value = String(item?.category || "").trim();
+      if (value) {
+        set.add(value);
+      }
+    }
+    return Array.from(set).sort();
+  }, [items]);
 
   const visible = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -114,10 +139,9 @@ export default function Notifications() {
             </Select>
             <Select value={category} onChange={(event) => setCategory(event.target.value)} className="w-40">
               <option value="all">All categories</option>
-              <option value="alert">Alert</option>
-              <option value="deployment">Deployment</option>
-              <option value="operation">Operation</option>
-              <option value="lifecycle">Lifecycle</option>
+              {categoryOptions.map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
             </Select>
             <Input
               value={query}
@@ -148,21 +172,49 @@ export default function Notifications() {
             </div>
           )}
 
-          {visible.map((item, index) => (
-            <article key={item.id || `${item.ts}-${index}`} className="rounded-lg border border-border bg-surface-2 p-3">
-              <div className="flex items-start gap-2">
-                <span className="mt-0.5">{levelIcon(item.level)}</span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-text-1">{item.title || "Notification"}</p>
-                  <p className="mt-1 text-sm text-text-2">{item.message || "-"}</p>
-                  <p className="mt-2 text-xs text-text-3">
-                    {new Date(item.ts).toLocaleString()} | {item.category || "event"}
-                    {item.processName ? ` | ${item.processName}` : ""}
-                  </p>
+          {visible.map((item, index) => {
+            const id = item.id || `${item.ts}-${index}`;
+            const rawError = item?.details?.error || item?.details?.stack || "";
+            const fullMessage = String(rawError || item.message || "-");
+            const isExpanded = Boolean(expandedById[id]);
+            const shouldTruncate = fullMessage.length > 220;
+            const shownMessage = isExpanded || !shouldTruncate ? fullMessage : `${fullMessage.slice(0, 220)}...`;
+
+            return (
+              <article key={id} className="rounded-lg border border-border bg-surface-2 p-3">
+                <div className="flex items-start gap-2">
+                  <span className="mt-0.5">{levelIcon(item.level)}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-text-1">{item.title || "Notification"}</p>
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-text-2">{shownMessage}</p>
+                    {(shouldTruncate || rawError) && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {shouldTruncate && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            onClick={() =>
+                              setExpandedById((prev) => ({ ...prev, [id]: !isExpanded }))
+                            }
+                          >
+                            {isExpanded ? "Collapse" : "Show Full"}
+                          </Button>
+                        )}
+                        <Button type="button" size="sm" variant="secondary" onClick={() => copyText(fullMessage)}>
+                          Copy Full Error
+                        </Button>
+                      </div>
+                    )}
+                    <p className="mt-2 text-xs text-text-3">
+                      {new Date(item.ts).toLocaleString()} | {item.category || "event"}
+                      {item.processName ? ` | ${item.processName}` : ""}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </div>
       </section>
     </div>

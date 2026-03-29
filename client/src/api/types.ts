@@ -50,6 +50,11 @@ export type RestartHistoryItem = {
   event: string;
   source?: string;
   actor?: string;
+  reason?: string | null;
+  exitCode?: number | null;
+  signal?: string | null;
+  status?: string | null;
+  unstableRestarts?: number | null;
 };
 
 export type AuditHistoryItem = {

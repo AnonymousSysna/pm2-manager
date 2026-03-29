@@ -10,6 +10,7 @@ const { logger } = require("./utils/logger");
 const { errorHandler, notFoundHandler } = require("./middleware/errorHandler");
 const { metricsMiddleware, renderMetrics } = require("./middleware/metrics");
 const { verifyCsrf } = require("./middleware/csrf");
+const { createRateLimiter } = require("./middleware/rateLimit");
 const pm2 = require("pm2");
 
 dotenv.config({ path: path.resolve(__dirname, ".env") });
@@ -66,6 +67,16 @@ const configuredOrigins = String(process.env.CORS_ALLOWED_ORIGINS || "")
   .split(",")
   .map((v) => v.trim())
   .filter(Boolean);
+const HEALTHCHECK_TIMEOUT_MS = Number.isFinite(Number(process.env.HEALTHCHECK_TIMEOUT_MS))
+  ? Math.max(1000, Math.floor(Number(process.env.HEALTHCHECK_TIMEOUT_MS)))
+  : 5000;
+const metricsReadLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: Number.isFinite(Number(process.env.METRICS_RATE_LIMIT_MAX))
+    ? Math.max(1, Math.floor(Number(process.env.METRICS_RATE_LIMIT_MAX)))
+    : 20,
+  message: "Too many metrics requests. Please retry shortly."
+});
 
 app.set("trust proxy", trustProxy);
 
@@ -110,9 +121,54 @@ app.use((req, res, next) => {
 });
 
 app.get("/health", (_req, res) => {
+  let finished = false;
+  let connected = false;
+
+  const finish = (statusCode, payload) => {
+    if (finished) {
+      return;
+    }
+    finished = true;
+    clearTimeout(timeout);
+    if (connected) {
+      try {
+        pm2.disconnect();
+      } catch (_disconnectError) {
+        // Best-effort disconnect.
+      }
+      connected = false;
+    }
+    res.status(statusCode).json(payload);
+  };
+
+  const timeout = setTimeout(() => {
+    finish(503, {
+      status: "degraded",
+      pm2Connected: false,
+      uptime: process.uptime(),
+      port: PORT,
+      timestamp: Date.now(),
+      error: `Health check timed out after ${HEALTHCHECK_TIMEOUT_MS}ms`
+    });
+  }, HEALTHCHECK_TIMEOUT_MS);
+  if (typeof timeout.unref === "function") {
+    timeout.unref();
+  }
+
   pm2.connect((connectError) => {
+    if (finished) {
+      if (!connectError) {
+        try {
+          pm2.disconnect();
+        } catch (_disconnectError) {
+          // Best-effort disconnect.
+        }
+      }
+      return;
+    }
+
     if (connectError) {
-      res.status(503).json({
+      finish(503, {
         status: "degraded",
         pm2Connected: false,
         uptime: process.uptime(),
@@ -123,10 +179,10 @@ app.get("/health", (_req, res) => {
       return;
     }
 
+    connected = true;
     pm2.list((listError) => {
-      pm2.disconnect();
       if (listError) {
-        res.status(503).json({
+        finish(503, {
           status: "degraded",
           pm2Connected: false,
           uptime: process.uptime(),
@@ -137,7 +193,7 @@ app.get("/health", (_req, res) => {
         return;
       }
 
-      res.json({
+      finish(200, {
         status: "ok",
         pm2Connected: true,
         uptime: process.uptime(),
@@ -148,7 +204,7 @@ app.get("/health", (_req, res) => {
   });
 });
 
-app.get("/metrics", (req, res) => {
+app.get("/metrics", metricsReadLimiter, (req, res) => {
   const ip = getRequestIp(req);
   if (!isIpAllowed(ip)) {
     res.status(403).json({ success: false, data: null, error: "Access denied for this IP" });

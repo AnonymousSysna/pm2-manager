@@ -60,6 +60,43 @@ function formatCreateStepLabel(label) {
     .join(" / ");
 }
 
+const MAX_MEMORY_RESTART_PATTERN = /^\d+(M|G|K|m|g|k)$/;
+
+function validateDotEnvContent(content = "") {
+  const lines = String(content || "").split(/\r?\n/);
+  const errors = [];
+
+  lines.forEach((line, index) => {
+    const lineNo = index + 1;
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      return;
+    }
+
+    const withoutExport = trimmed.startsWith("export ") ? trimmed.slice(7).trim() : trimmed;
+    const equalIndex = withoutExport.indexOf("=");
+    if (equalIndex < 1) {
+      errors.push({ line: lineNo, reason: "missing KEY=VALUE format" });
+      return;
+    }
+
+    const key = withoutExport.slice(0, equalIndex).trim();
+    const value = withoutExport.slice(equalIndex + 1);
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+      errors.push({ line: lineNo, reason: "invalid key name" });
+      return;
+    }
+
+    const valueTrimmed = value.trim();
+    if ((valueTrimmed.startsWith("\"") && !valueTrimmed.endsWith("\""))
+      || (valueTrimmed.startsWith("'") && !valueTrimmed.endsWith("'"))) {
+      errors.push({ line: lineNo, reason: "unclosed quote" });
+    }
+  });
+
+  return errors;
+}
+
 export default function CreateProcess() {
   const navigate = useNavigate();
   const { createStepEvents } = useSocket();
@@ -137,6 +174,20 @@ export default function CreateProcess() {
   }, [isLaunching, launchStartedAt]);
 
   const templateNames = useMemo(() => Object.keys(templates).sort(), [templates]);
+  const maxMemoryRestartError = useMemo(() => {
+    const value = String(form.max_memory_restart || "").trim();
+    if (!value) {
+      return "";
+    }
+    if (!MAX_MEMORY_RESTART_PATTERN.test(value)) {
+      return "Format must match e.g. 256M, 1G, 512K.";
+    }
+    return "";
+  }, [form.max_memory_restart]);
+  const envFileValidationErrors = useMemo(
+    () => validateDotEnvContent(form.env_file_content),
+    [form.env_file_content]
+  );
   const liveCreateSteps = useMemo(() => {
     if (!createOperationId) {
       return [];
@@ -246,6 +297,14 @@ export default function CreateProcess() {
 
     if (mode === "git" && !form.project_path.trim()) {
       setError("Project Directory is required in Git Clone Mode.");
+      return;
+    }
+    if (tab === "advanced" && maxMemoryRestartError) {
+      setError(maxMemoryRestartError);
+      return;
+    }
+    if (mode === "git" && envFileValidationErrors.length > 0) {
+      setError(`.env content has invalid lines: ${envFileValidationErrors.slice(0, 5).map((item) => item.line).join(", ")}`);
       return;
     }
 
@@ -450,6 +509,15 @@ export default function CreateProcess() {
                   placeholder={"NODE_ENV=production\nAPI_KEY=replace_me"}
                   className="min-h-32"
                 />
+                {envFileValidationErrors.length > 0 ? (
+                  <p className="mt-1 text-xs text-danger-300">
+                    Invalid `.env` syntax on line(s): {envFileValidationErrors.slice(0, 5).map((item) => item.line).join(", ")}.
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-text-3">
+                    Validates live as `KEY=VALUE` lines while typing.
+                  </p>
+                )}
               </Field>
 
               <Field label="Start Script">
@@ -503,7 +571,16 @@ export default function CreateProcess() {
               )}
 
               <Field label="Max Memory Restart">
-                <Input value={form.max_memory_restart} onChange={(e) => update("max_memory_restart", e.target.value)} placeholder="500M" />
+                <Input
+                  value={form.max_memory_restart}
+                  onChange={(e) => update("max_memory_restart", e.target.value)}
+                  placeholder="500M"
+                />
+                {maxMemoryRestartError ? (
+                  <p className="mt-1 text-xs text-danger-300">{maxMemoryRestartError}</p>
+                ) : (
+                  <p className="mt-1 text-xs text-text-3">Accepted format: number + unit (`K`, `M`, or `G`). Example: `500M`.</p>
+                )}
               </Field>
 
               <Field label="Node Args">
@@ -571,7 +648,12 @@ export default function CreateProcess() {
             </div>
           )}
 
-          <Button type="submit" variant="success" className="w-full" disabled={isLaunching}>
+          <Button
+            type="submit"
+            variant="success"
+            className="w-full"
+            disabled={isLaunching || (tab === "advanced" && Boolean(maxMemoryRestartError)) || (mode === "git" && envFileValidationErrors.length > 0)}
+          >
             {isLaunching ? "Launching..." : "Launch Process"}
           </Button>
         </form>

@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { useEffect, useRef, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, AlertTriangle } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import toast, { getErrorMessage } from "../lib/toast";
 import { auth, pm2Admin, processes as processApi, alerts as alertsApi } from "../api";
 import Button from "../components/ui/Button";
@@ -10,6 +11,8 @@ import Select from "../components/ui/Select";
 import { PageIntro } from "../components/ui/PageLayout";
 
 export default function Settings() {
+  const [searchParams] = useSearchParams();
+  const initialDeploymentProcess = String(searchParams.get("deploymentProcess") || "").trim();
   const [info, setInfo] = useState({ pm2Version: "-", nodeVersion: "-", pm2Home: "-" });
   const [pollSeconds, setPollSeconds] = useState(Number(localStorage.getItem("pm2_poll_interval_ms") || 2000) / 1000);
   const [autoScroll, setAutoScroll] = useState(localStorage.getItem("pm2_auto_scroll_logs") !== "false");
@@ -26,6 +29,7 @@ export default function Settings() {
   const [deploymentHistory, setDeploymentHistory] = useState([]);
   const [deploymentHistoryLoading, setDeploymentHistoryLoading] = useState(false);
   const [deploymentPage, setDeploymentPage] = useState(1);
+  const [deploymentProcessFilter, setDeploymentProcessFilter] = useState(initialDeploymentProcess);
   const [deploymentPagination, setDeploymentPagination] = useState({
     page: 1,
     pageSize: 10,
@@ -44,6 +48,8 @@ export default function Settings() {
   const [auditHistory, setAuditHistory] = useState([]);
   const [auditHistoryLoading, setAuditHistoryLoading] = useState(false);
   const [auditPage, setAuditPage] = useState(1);
+  const [auditActionPreset, setAuditActionPreset] = useState("");
+  const [auditActionCustom, setAuditActionCustom] = useState("");
   const [auditPagination, setAuditPagination] = useState({
     page: 1,
     pageSize: 10,
@@ -52,12 +58,32 @@ export default function Settings() {
   });
   const fileRef = useRef(null);
 
+  const auditActionFilter = auditActionPreset === "__custom__"
+    ? auditActionCustom.trim()
+    : auditActionPreset.trim();
+
+  const formatTimestamp = (value) => {
+    if (!value) {
+      return "—";
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return "—";
+    }
+    return date.toLocaleString();
+  };
+
   const loadDeploymentHistory = async (page = deploymentPage, { silent = false } = {}) => {
     if (!silent) {
       setDeploymentHistoryLoading(true);
     }
     try {
-      const result = await processApi.deploymentHistoryPage(page, deploymentPagination.pageSize, "", true);
+      const result = await processApi.deploymentHistoryPage(
+        page,
+        deploymentPagination.pageSize,
+        deploymentProcessFilter.trim(),
+        true
+      );
       if (result.success && result.data?.pagination && Array.isArray(result.data?.items)) {
         setDeploymentHistory(result.data.items);
         setDeploymentPagination(result.data.pagination);
@@ -97,7 +123,14 @@ export default function Settings() {
       setAuditHistoryLoading(true);
     }
     try {
-      const result = await processApi.auditHistoryPage(page, auditPagination.pageSize, "", "", "", true);
+      const result = await processApi.auditHistoryPage(
+        page,
+        auditPagination.pageSize,
+        auditActionFilter.trim(),
+        "",
+        "",
+        true
+      );
       if (result.success && result.data?.pagination && Array.isArray(result.data?.items)) {
         setAuditHistory(result.data.items);
         setAuditPagination(result.data.pagination);
@@ -141,6 +174,14 @@ export default function Settings() {
   }, []);
 
   useEffect(() => {
+    loadDeploymentHistory(1, { silent: true });
+  }, [deploymentProcessFilter]);
+
+  useEffect(() => {
+    loadAuditHistory(1, { silent: true });
+  }, [auditActionFilter]);
+
+  useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme === "light" ? "light" : "dark");
   }, [theme]);
 
@@ -173,10 +214,16 @@ export default function Settings() {
     localStorage.setItem("pm2_auto_scroll_logs", autoScroll ? "true" : "false");
     localStorage.setItem("pm2_theme", theme);
     document.documentElement.setAttribute("data-theme", theme === "light" ? "light" : "dark");
+    window.dispatchEvent(new Event("pm2:settings-updated"));
     toast.success("Dashboard settings saved");
   };
 
   const changePassword = async () => {
+    if (!newPassword.trim()) {
+      toast.error("New password cannot be empty");
+      return;
+    }
+
     if (newPassword !== confirmPassword) {
       toast.error("New password and confirm password must match");
       return;
@@ -297,6 +344,8 @@ export default function Settings() {
     }
   };
 
+  const channelsWithFailures = channels.filter((channel) => Number(channel?.deliveryStats?.failedDeliveries || 0) > 0);
+
   return (
     <div className="space-y-4">
       <PageIntro
@@ -369,7 +418,15 @@ export default function Settings() {
       </section>
 
       <section className="page-panel">
-        <h2 className="section-title mb-3">External Alert Channels</h2>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h2 className="section-title">External Alert Channels</h2>
+          {channelsWithFailures.length > 0 && (
+            <span className="inline-flex items-center gap-1 rounded border border-warning-500/40 bg-warning-500/10 px-2 py-1 text-xs text-warning-300">
+              <AlertTriangle size={12} />
+              {channelsWithFailures.length} channel(s) have failed deliveries
+            </span>
+          )}
+        </div>
         <div className="grid gap-2 md:grid-cols-2">
           <Input value={channelName} onChange={(e) => setChannelName(e.target.value)} placeholder="Channel name" />
           <Input value={channelUrl} onChange={(e) => setChannelUrl(e.target.value)} placeholder="https://..." />
@@ -399,6 +456,16 @@ export default function Settings() {
               <span className="font-medium text-text-1">{channel.name}</span>
               <span className="text-text-3">{channel.type}</span>
               <span className="text-text-3">min:{channel.minSeverity}</span>
+              {Number(channel?.deliveryStats?.failedDeliveries || 0) > 0 && (
+                <span className="rounded border border-warning-500/40 bg-warning-500/10 px-1.5 py-0.5 text-xs text-warning-300">
+                  failed: {Number(channel?.deliveryStats?.failedDeliveries || 0)}
+                </span>
+              )}
+              {channel?.deliveryStats?.lastFailureAt && (
+                <span className="text-xs text-warning-300">
+                  last fail: {new Date(channel.deliveryStats.lastFailureAt).toLocaleString()}
+                </span>
+              )}
               <span className="truncate text-xs text-text-3">{channel.url}</span>
               <Button variant="secondary" onClick={() => testChannel(channel.id)}>
                 Test
@@ -426,6 +493,18 @@ export default function Settings() {
               Refresh
             </Button>
           </div>
+        </div>
+        <div className="mb-2 grid gap-2 md:grid-cols-[1fr,auto] md:items-center">
+          <Input
+            value={deploymentProcessFilter}
+            onChange={(event) => setDeploymentProcessFilter(event.target.value)}
+            placeholder="Filter by process name"
+          />
+          {initialDeploymentProcess && (
+            <span className="text-xs text-text-3">
+              Opened from process: <span className="text-text-2">{initialDeploymentProcess}</span>
+            </span>
+          )}
         </div>
         <p className="mb-2 text-xs text-text-3">
           Page {deploymentPagination.page} of {deploymentPagination.totalPages} ({deploymentPagination.totalItems} items)
@@ -506,8 +585,15 @@ export default function Settings() {
                 {item.processName} {item.event || "event"} by {item.actor || "system"}
               </p>
               <p className="text-xs text-text-3">
-                {new Date(item.ts).toLocaleString()} | source:{item.source || "unknown"}
+                {formatTimestamp(item.ts)} | source:{item.source || "unknown"}
               </p>
+              {(item.reason || item.exitCode !== null || item.signal) && (
+                <p className="mt-1 text-xs text-warning-300">
+                  reason: {item.reason || "-"}
+                  {item.exitCode !== null && item.exitCode !== undefined ? ` | exit:${item.exitCode}` : ""}
+                  {item.signal ? ` | signal:${item.signal}` : ""}
+                </p>
+              )}
             </div>
           ))}
         </div>
@@ -547,6 +633,24 @@ export default function Settings() {
             Refresh
           </Button>
         </div>
+        <div className="mb-2 grid gap-2 md:grid-cols-[220px,1fr] md:items-center">
+          <Select value={auditActionPreset} onChange={(event) => setAuditActionPreset(event.target.value)}>
+            <option value="">All actions</option>
+            <option value="process.deploy">process.deploy</option>
+            <option value="process.rollback">process.rollback</option>
+            <option value="process.dotenv.update">process.dotenv.update</option>
+            <option value="process.start">process.start</option>
+            <option value="process.stop">process.stop</option>
+            <option value="process.restart">process.restart</option>
+            <option value="__custom__">Custom...</option>
+          </Select>
+          <Input
+            value={auditActionCustom}
+            onChange={(event) => setAuditActionCustom(event.target.value)}
+            placeholder="Custom action filter (e.g. auth.login)"
+            disabled={auditActionPreset !== "__custom__"}
+          />
+        </div>
         <p className="mb-2 text-xs text-text-3">
           Page {auditPagination.page} of {auditPagination.totalPages} ({auditPagination.totalItems} items)
         </p>
@@ -559,7 +663,7 @@ export default function Settings() {
                 {item.action} {item.processName ? `(${item.processName})` : ""}
               </p>
               <p className="text-xs text-text-3">
-                {new Date(item.ts).toLocaleString()} | actor:{item.actor || "unknown"} | ip:{item.ip || "unknown"} | {item.success ? "success" : "failed"}
+                {formatTimestamp(item.ts)} | actor:{item.actor || "unknown"} | ip:{item.ip || "unknown"} | {item.success ? "success" : "failed"}
               </p>
               {!item.success && item.error && <p className="mt-1 whitespace-pre-wrap text-xs text-danger-300">{item.error}</p>}
             </div>

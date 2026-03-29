@@ -28,6 +28,59 @@ function levelFromLine(line) {
   return "plain";
 }
 
+function normalizeTimestamp(value, fallbackTimestamp) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (/^\d+$/.test(trimmed)) {
+      const numeric = Number(trimmed);
+      if (Number.isFinite(numeric)) {
+        return numeric;
+      }
+    }
+    const parsed = Date.parse(trimmed);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return fallbackTimestamp;
+}
+
+function normalizeHistoricalLine(line, fallbackTimestamp) {
+  if (line && typeof line === "object") {
+    const message = line.data ?? line.message ?? line.line ?? "";
+    return {
+      data: String(message),
+      timestamp: normalizeTimestamp(line.timestamp ?? line.ts ?? line.time, fallbackTimestamp)
+    };
+  }
+
+  const text = String(line || "");
+  const timestampMatch = text.match(
+    /^\s*\[?(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)\]?\s*(.*)$/
+  );
+  if (timestampMatch) {
+    const parsed = Date.parse(timestampMatch[1]);
+    if (Number.isFinite(parsed)) {
+      return {
+        data: timestampMatch[2] || text,
+        timestamp: parsed
+      };
+    }
+  }
+
+  return {
+    data: text,
+    timestamp: fallbackTimestamp
+  };
+}
+
+function socketEntryKey(entry) {
+  return `${String(entry?.timestamp ?? "")}|${String(entry?.type ?? "")}|${String(entry?.data ?? "")}`;
+}
+
 function toCsv(entries) {
   const lines = ["timestamp,process,type,level,message"];
   for (const entry of entries) {
@@ -66,11 +119,13 @@ export default function Logs() {
   const [combinedView, setCombinedView] = useState(false);
   const [processOptions, setProcessOptions] = useState([]);
   const [entries, setEntries] = useState([]);
+  const [logsLoading, setLogsLoading] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [showCreateHint, setShowCreateHint] = useState(launchSource === "create" && Boolean(defaultProcess));
   const [createSummary, setCreateSummary] = useState(null);
   const { logsByProcess, processes, connected } = useSocket();
   const containerRef = useRef(null);
+  const liveCursorRef = useRef(new Map());
 
   useEffect(() => {
     if (launchSource !== "create" || !defaultProcess) {
@@ -115,6 +170,7 @@ export default function Logs() {
     }
 
     const loadLogs = async () => {
+      setLogsLoading(true);
       try {
         const targets = combinedView
           ? processOptions.map((item) => item.name).slice(0, 8)
@@ -122,36 +178,50 @@ export default function Logs() {
 
         const responses = await Promise.all(targets.map((name) => processApi.logs(name, lineCount)));
         const nextEntries = [];
+        const nextCursor = new Map();
+        let fallbackTimestamp = Date.now();
         for (let i = 0; i < targets.length; i += 1) {
           const result = responses[i];
           if (!result.success) {
             continue;
           }
           const processName = targets[i];
-          const stdout = (result.data.stdout || []).map((line) => ({
-            processName,
-            type: "stdout",
-            level: levelFromLine(line),
-            data: line,
-            timestamp: Date.now()
-          }));
-          const stderr = (result.data.stderr || []).map((line) => ({
-            processName,
-            type: "stderr",
-            level: levelFromLine(line),
-            data: line,
-            timestamp: Date.now()
-          }));
+          const stdout = (result.data.stdout || []).map((line) => {
+            const normalized = normalizeHistoricalLine(line, fallbackTimestamp);
+            fallbackTimestamp += 1;
+            return {
+              processName,
+              type: "stdout",
+              level: levelFromLine(normalized.data),
+              data: normalized.data,
+              timestamp: normalized.timestamp
+            };
+          });
+          const stderr = (result.data.stderr || []).map((line) => {
+            const normalized = normalizeHistoricalLine(line, fallbackTimestamp);
+            fallbackTimestamp += 1;
+            return {
+              processName,
+              type: "stderr",
+              level: levelFromLine(normalized.data),
+              data: normalized.data,
+              timestamp: normalized.timestamp
+            };
+          });
           nextEntries.push(...stdout, ...stderr);
+
+          const live = logsByProcess[processName] || [];
+          if (live.length > 0) {
+            nextCursor.set(processName, socketEntryKey(live[live.length - 1]));
+          }
         }
 
-        setEntries(
-          nextEntries
-            .sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0))
-            .slice(-Math.max(100, lineCount * Math.max(1, targets.length)))
-        );
+        liveCursorRef.current = nextCursor;
+        setEntries(nextEntries.slice(-Math.max(100, lineCount * Math.max(1, targets.length))));
       } catch (error) {
         toast.error(error?.response?.data?.error || error.message || "Unable to fetch logs");
+      } finally {
+        setLogsLoading(false);
       }
     };
 
@@ -163,6 +233,10 @@ export default function Logs() {
       setShowCreateHint(false);
     }
   }, [showCreateHint, entries.length]);
+
+  useEffect(() => {
+    liveCursorRef.current = new Map();
+  }, [selected, combinedView, processOptions]);
 
   useEffect(() => {
     const targetNames = combinedView
@@ -178,13 +252,34 @@ export default function Logs() {
     const incoming = [];
     for (const name of targetNames) {
       const live = logsByProcess[name] || [];
-      for (const item of live.slice(-20)) {
+      if (live.length === 0) {
+        continue;
+      }
+
+      const cursor = liveCursorRef.current.get(name);
+      if (!cursor) {
+        liveCursorRef.current.set(name, socketEntryKey(live[live.length - 1]));
+        continue;
+      }
+
+      let startIndex = -1;
+      for (let i = live.length - 1; i >= 0; i -= 1) {
+        if (socketEntryKey(live[i]) === cursor) {
+          startIndex = i;
+          break;
+        }
+      }
+
+      const nextItems = startIndex >= 0 ? live.slice(startIndex + 1) : live.slice(-1);
+      for (const item of nextItems) {
         incoming.push({
           ...item,
           processName: item.processName || name,
           level: levelFromLine(item.data)
         });
       }
+
+      liveCursorRef.current.set(name, socketEntryKey(live[live.length - 1]));
     }
 
     if (incoming.length === 0) {
@@ -221,6 +316,8 @@ export default function Logs() {
       );
     });
   }, [entries, filter, keyword]);
+
+  const hasActiveFilter = filter !== "both" || keyword.trim().length > 0;
 
   const selectedProcessStatus = useMemo(() => {
     if (!selected) {
@@ -394,7 +491,9 @@ export default function Logs() {
 
         {(selected || combinedView) && visibleEntries.length === 0 && (
           <p className="text-text-3">
-            No log entries yet. The process may still be starting, or it may not be writing to stdout/stderr.
+            {logsLoading && "Loading log entries..."}
+            {!logsLoading && hasActiveFilter && entries.length > 0 && "No logs match your current filter."}
+            {!logsLoading && (!hasActiveFilter || entries.length === 0) && "Waiting for logs from the selected process."}
           </p>
         )}
 

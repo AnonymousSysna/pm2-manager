@@ -838,6 +838,25 @@ function parseDotEnvContent(content = "") {
   return { lines: parsedLines, entries };
 }
 
+function collectInvalidDotEnvLines(content = "") {
+  const lines = String(content ?? "").split(/\r?\n/);
+  const invalid = [];
+  lines.forEach((line, index) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      return;
+    }
+    if (/^(export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=/.test(trimmed)) {
+      return;
+    }
+    invalid.push({
+      line: index + 1,
+      content: line
+    });
+  });
+  return invalid;
+}
+
 async function updateProcessEnv(name, envPatch = {}, options = {}, actorContext = "unknown") {
   const processName = sanitizeProcessName(name, "process name");
   const { actor, ip } = normalizeActorContext(actorContext);
@@ -926,19 +945,22 @@ async function readProcessDotEnv(name) {
         allowedRoot,
         envPath,
         hasEnvFile: false,
-        entries: []
+        entries: [],
+        invalidLines: []
       };
     }
 
     const content = await fs.promises.readFile(envPath, "utf8");
     const parsed = parseDotEnvContent(content);
+    const invalidLines = collectInvalidDotEnvLines(content);
     return {
       processName,
       cwd,
       allowedRoot,
       envPath,
       hasEnvFile: true,
-      entries: parsed.entries
+      entries: parsed.entries,
+      invalidLines
     };
   });
   trackPm2Operation("processes.dotenv.read", result.success);
@@ -959,7 +981,11 @@ async function updateProcessDotEnv(name, payload = {}, actorContext = "unknown")
     if (!ENV_KEY_PATTERN.test(key)) {
       return { success: false, data: null, error: `Invalid environment variable name: ${rawKey}` };
     }
-    values[key] = String(rawValue ?? "");
+    const value = String(rawValue ?? "");
+    if (/\r|\n/.test(value)) {
+      return { success: false, data: null, error: `Invalid newline in value for ${key}` };
+    }
+    values[key] = value;
   }
 
   const result = await withPM2(async () => {
@@ -973,6 +999,15 @@ async function updateProcessDotEnv(name, payload = {}, actorContext = "unknown")
     }
 
     const content = await fs.promises.readFile(envPath, "utf8");
+    const invalidLines = collectInvalidDotEnvLines(content);
+    if (invalidLines.length > 0) {
+      throw new Error(
+        `.env has invalid syntax on line(s): ${invalidLines
+          .slice(0, 5)
+          .map((item) => item.line)
+          .join(", ")}`
+      );
+    }
     const parsed = parseDotEnvContent(content);
 
     let updatedCount = 0;
@@ -991,6 +1026,15 @@ async function updateProcessDotEnv(name, payload = {}, actorContext = "unknown")
     await fs.promises.writeFile(envPath, nextLines.join(eol), "utf8");
 
     const nextParsed = parseDotEnvContent(nextLines.join(eol));
+    const nextInvalidLines = collectInvalidDotEnvLines(nextLines.join(eol));
+    if (nextInvalidLines.length > 0) {
+      throw new Error(
+        `.env validation failed after update on line(s): ${nextInvalidLines
+          .slice(0, 5)
+          .map((item) => item.line)
+          .join(", ")}`
+      );
+    }
     return {
       processName,
       cwd,
@@ -998,7 +1042,8 @@ async function updateProcessDotEnv(name, payload = {}, actorContext = "unknown")
       envPath,
       hasEnvFile: true,
       updatedCount,
-      entries: nextParsed.entries
+      entries: nextParsed.entries,
+      invalidLines: []
     };
   });
 

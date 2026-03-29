@@ -123,6 +123,7 @@ export default function Dashboard() {
   const [dotEnvRevealValues, setDotEnvRevealValues] = useState(false);
   const [dotEnvDiffOpen, setDotEnvDiffOpen] = useState(false);
   const [dotEnvDiffEntries, setDotEnvDiffEntries] = useState([]);
+  const [dotEnvValidationError, setDotEnvValidationError] = useState("");
   const [deployingProcess, setDeployingProcess] = useState(null);
   const [deployForm, setDeployForm] = useState({
     branch: "",
@@ -431,6 +432,10 @@ export default function Dashboard() {
     }
   };
 
+  const openDeploymentHistoryForProcess = (name) => {
+    navigate(`/dashboard/settings?deploymentProcess=${encodeURIComponent(name)}`);
+  };
+
   const toggleSelected = (name, checked) => {
     setSelectedNames((prev) => {
       if (checked) {
@@ -470,21 +475,27 @@ export default function Dashboard() {
     try {
       const result = await toast.promise(
         processApi.bulkAction(action, names).then((response) => {
-          if (!response.success) {
+          if (!response || (!response.success && !response.data)) {
             throw new Error(response.error || `Failed to ${action} selected processes`);
           }
           return response;
         }),
         {
           loading: `${actionLabel} ${names.length} process(es)...`,
-          success: `${actionLabel} completed for ${names.length} process(es)`,
+          success: `${actionLabel} request finished`,
           error: (error) => getErrorMessage(error, `Failed to ${action} selected processes`)
         }
       );
 
-      const failed = result?.data?.results?.filter((item) => !item.success) || [];
+      const responseData = result?.data || {};
+      const allResults = Array.isArray(responseData.results) ? responseData.results : [];
+      const failed = allResults.filter((item) => !item.success);
+      const succeeded = allResults.filter((item) => item.success);
+      if (succeeded.length > 0) {
+        toast.success(`${actionLabel}: ${succeeded.length} succeeded`);
+      }
       if (failed.length > 0) {
-        toast.error(`Failed: ${failed.map((item) => item.name).join(", ")}`);
+        toast.error(`${actionLabel}: ${failed.length} failed (${failed.map((item) => item.name).join(", ")})`);
       }
       refreshCatalog();
     } catch (_error) {
@@ -505,6 +516,7 @@ export default function Dashboard() {
     setDotEnvRevealValues(false);
     setDotEnvDiffEntries([]);
     setDotEnvDiffOpen(false);
+    setDotEnvValidationError("");
     try {
       const result = await processApi.getDotEnv(proc.name);
       if (!result.success) {
@@ -514,6 +526,11 @@ export default function Dashboard() {
         throw new Error(".env file is missing for this process");
       }
       const entries = Array.isArray(result.data?.entries) ? result.data.entries : [];
+      const invalidLines = Array.isArray(result.data?.invalidLines) ? result.data.invalidLines : [];
+      if (invalidLines.length > 0) {
+        const lineList = invalidLines.slice(0, 5).map((item) => item.line).join(", ");
+        setDotEnvValidationError(`Invalid .env syntax detected on line(s): ${lineList}`);
+      }
       const originalByKey = {};
       entries.forEach((item) => {
         originalByKey[item.key] = String(item.value ?? "");
@@ -537,6 +554,11 @@ export default function Dashboard() {
 
   const submitDotEnvModal = async () => {
     if (!editingDotEnvProcess?.name) {
+      return;
+    }
+
+    if (dotEnvValidationError) {
+      toast.error(dotEnvValidationError);
       return;
     }
 
@@ -939,6 +961,12 @@ export default function Dashboard() {
                     icon={<Rocket size={14} />}
                   />
                   <ActionButton
+                    title="Deploy History"
+                    variant="secondary"
+                    onClick={() => openDeploymentHistoryForProcess(proc.name)}
+                    icon={<ListChecks size={14} />}
+                  />
+                  <ActionButton
                     title="Rollback"
                     variant="warning"
                     disabled={loadingAction[`${proc.name}:rollback`]}
@@ -1110,6 +1138,12 @@ export default function Dashboard() {
                           icon={<Rocket size={14} />}
                         />
                         <ActionButton
+                          title="Deploy History"
+                          variant="secondary"
+                          onClick={() => openDeploymentHistoryForProcess(proc.name)}
+                          icon={<ListChecks size={14} />}
+                        />
+                        <ActionButton
                           title="Rollback"
                           variant="warning"
                           disabled={loadingAction[`${proc.name}:rollback`]}
@@ -1148,7 +1182,12 @@ export default function Dashboard() {
       </section>
 
       {selectedProcess && (
-        <ProcessDetailModal process={selectedProcess} onClose={() => setSelectedProcess(null)} onAction={callAction} />
+        <ProcessDetailModal
+          process={selectedProcess}
+          onClose={() => setSelectedProcess(null)}
+          onAction={callAction}
+          onViewDeployHistory={openDeploymentHistoryForProcess}
+        />
       )}
 
       {deployingProcess && (
@@ -1187,6 +1226,11 @@ export default function Dashboard() {
                     Deployment in progress. Keep this page open.
                   </div>
                   <p className="mt-1 text-xs text-text-3">Elapsed: {deployElapsedSec}s</p>
+                  {deployElapsedSec >= 300 && (
+                    <p className="mt-1 text-xs text-warning-300">
+                      This deployment is taking unusually long (over 5 minutes). Check git access, build output, and network.
+                    </p>
+                  )}
                 </div>
               )}
               <label className="space-y-1">
@@ -1356,6 +1400,12 @@ export default function Dashboard() {
               <div className="rounded-md border border-border bg-surface-2 p-3 text-sm text-text-3">Loading .env...</div>
             ) : (
               <div className="max-h-80 space-y-3 overflow-y-auto rounded-md border border-border bg-surface-2 p-3">
+                {dotEnvValidationError && (
+                  <div className="rounded border border-warning-500/40 bg-warning-500/10 p-2 text-xs text-warning-300">
+                    <p>{dotEnvValidationError}</p>
+                    <p className="mt-1">Fix malformed `.env` lines before saving changes.</p>
+                  </div>
+                )}
                 {dotEnvFields.length === 0 && (
                   <p className="text-sm text-text-3">No editable `KEY=VALUE` lines found in `.env`.</p>
                 )}
@@ -1386,7 +1436,7 @@ export default function Dashboard() {
               <Button
                 type="button"
                 variant="success"
-                disabled={dotEnvLoading || dotEnvSaving}
+                disabled={dotEnvLoading || dotEnvSaving || Boolean(dotEnvValidationError)}
                 onClick={submitDotEnvModal}
               >
                 Save .env

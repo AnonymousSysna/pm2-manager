@@ -2,6 +2,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { io } from "socket.io-client";
 
+function readPollInterval() {
+  const stored = Number(localStorage.getItem("pm2_poll_interval_ms") || 2000);
+  return Number.isFinite(stored) && stored > 0 ? stored : 2000;
+}
+
 export function useSocket() {
   const [processes, setProcesses] = useState([]);
   const [logsByProcess, setLogsByProcess] = useState({});
@@ -12,9 +17,19 @@ export function useSocket() {
   const [connected, setConnected] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
 
-  const pollInterval = useMemo(() => {
-    const stored = Number(localStorage.getItem("pm2_poll_interval_ms") || 2000);
-    return Number.isFinite(stored) && stored > 0 ? stored : 2000;
+  const [pollInterval, setPollInterval] = useState(readPollInterval());
+
+  useEffect(() => {
+    const syncInterval = () => {
+      setPollInterval(readPollInterval());
+    };
+
+    window.addEventListener("storage", syncInterval);
+    window.addEventListener("pm2:settings-updated", syncInterval);
+    return () => {
+      window.removeEventListener("storage", syncInterval);
+      window.removeEventListener("pm2:settings-updated", syncInterval);
+    };
   }, []);
 
   useEffect(() => {

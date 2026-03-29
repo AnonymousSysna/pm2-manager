@@ -221,7 +221,12 @@ function evaluateThresholdAlerts(processes, processMeta) {
   const events = [];
 
   for (const process of processes) {
-    const processName = sanitizeProcessName(process.name, "process name");
+    let processName;
+    try {
+      processName = sanitizeProcessName(process.name, "process name");
+    } catch (_error) {
+      continue;
+    }
     const thresholds = processMeta[processName]?.alertThresholds || {};
     const metrics = {
       cpu: Number(process.cpu || 0),
