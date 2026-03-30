@@ -495,13 +495,6 @@ async function addReverseProxy(payload = {}) {
   const upstream = sanitizeUpstream(payload.upstream);
 
   const status = await detectCaddy();
-  if (!status.installed) {
-    return {
-      success: false,
-      data: null,
-      error: "Caddy is not installed"
-    };
-  }
 
   const caddyfilePath = getCaddyfilePath();
   const sites = await readManagedSites();
@@ -510,32 +503,43 @@ async function addReverseProxy(payload = {}) {
   await removeDomainBlocksFromCaddyfile(caddyfilePath, domain);
   await updateCaddyfileManagedSection(caddyfilePath, sites);
 
-  let validation = null;
-  try {
-    await runCommand("caddy", ["validate", "--config", caddyfilePath, "--adapter", "caddyfile"]);
-    validation = { success: true, error: null };
-  } catch (error) {
-    validation = { success: false, error: error.message };
+  let validation = { success: false, skipped: true, error: "Caddy is not installed or unavailable in PATH" };
+  let reload = { success: false, skipped: true, error: "Caddy is not installed or unavailable in PATH" };
+  if (status.installed && status.available) {
+    try {
+      await runCommand("caddy", ["validate", "--config", caddyfilePath, "--adapter", "caddyfile"]);
+      validation = { success: true, skipped: false, error: null };
+    } catch (error) {
+      validation = { success: false, skipped: false, error: error.message };
+    }
+
+    try {
+      await runCommand("caddy", ["reload", "--config", caddyfilePath, "--adapter", "caddyfile"]);
+      reload = { success: true, skipped: false, error: null };
+    } catch (error) {
+      reload = { success: false, skipped: false, error: error.message };
+    }
   }
 
-  let reload = null;
-  try {
-    await runCommand("caddy", ["reload", "--config", caddyfilePath, "--adapter", "caddyfile"]);
-    reload = { success: true, error: null };
-  } catch (error) {
-    reload = { success: false, error: error.message };
+  const warnings = [];
+  if (!validation.success) {
+    warnings.push(validation.error);
+  }
+  if (!reload.success) {
+    warnings.push(reload.error);
   }
 
   return {
-    success: reload?.success || false,
+    success: true,
     data: {
       domain,
       upstream,
       caddyfilePath,
       validation,
-      reload
+      reload,
+      warnings
     },
-    error: reload?.success ? null : "Saved config but failed to reload Caddy"
+    error: null
   };
 }
 
@@ -543,13 +547,6 @@ async function deleteReverseProxy(payload = {}) {
   const domain = sanitizeDomain(payload.domain);
 
   const status = await detectCaddy();
-  if (!status.installed) {
-    return {
-      success: false,
-      data: null,
-      error: "Caddy is not installed"
-    };
-  }
 
   const caddyfilePath = getCaddyfilePath();
   const sites = await readManagedSites();
@@ -558,31 +555,42 @@ async function deleteReverseProxy(payload = {}) {
   await removeDomainBlocksFromCaddyfile(caddyfilePath, domain);
   await updateCaddyfileManagedSection(caddyfilePath, sites);
 
-  let validation = null;
-  try {
-    await runCommand("caddy", ["validate", "--config", caddyfilePath, "--adapter", "caddyfile"]);
-    validation = { success: true, error: null };
-  } catch (error) {
-    validation = { success: false, error: error.message };
+  let validation = { success: false, skipped: true, error: "Caddy is not installed or unavailable in PATH" };
+  let reload = { success: false, skipped: true, error: "Caddy is not installed or unavailable in PATH" };
+  if (status.installed && status.available) {
+    try {
+      await runCommand("caddy", ["validate", "--config", caddyfilePath, "--adapter", "caddyfile"]);
+      validation = { success: true, skipped: false, error: null };
+    } catch (error) {
+      validation = { success: false, skipped: false, error: error.message };
+    }
+
+    try {
+      await runCommand("caddy", ["reload", "--config", caddyfilePath, "--adapter", "caddyfile"]);
+      reload = { success: true, skipped: false, error: null };
+    } catch (error) {
+      reload = { success: false, skipped: false, error: error.message };
+    }
   }
 
-  let reload = null;
-  try {
-    await runCommand("caddy", ["reload", "--config", caddyfilePath, "--adapter", "caddyfile"]);
-    reload = { success: true, error: null };
-  } catch (error) {
-    reload = { success: false, error: error.message };
+  const warnings = [];
+  if (!validation.success) {
+    warnings.push(validation.error);
+  }
+  if (!reload.success) {
+    warnings.push(reload.error);
   }
 
   return {
-    success: reload?.success || false,
+    success: true,
     data: {
       domain,
       caddyfilePath,
       validation,
-      reload
+      reload,
+      warnings
     },
-    error: reload?.success ? null : "Removed config but failed to reload Caddy"
+    error: null
   };
 }
 

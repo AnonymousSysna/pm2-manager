@@ -52,6 +52,9 @@ export default function Caddy() {
         throw new Error(result.error || "Failed to save reverse proxy");
       }
       toast.success(`Reverse proxy configured for ${form.domain}`);
+      if (Array.isArray(result?.data?.warnings) && result.data.warnings.length > 0) {
+        toast.warning(`Saved, but Caddy reload warning: ${result.data.warnings[0]}`);
+      }
       setForm((prev) => ({ ...prev, domain: "" }));
       await loadStatus();
     } catch (error) {
@@ -92,6 +95,9 @@ export default function Caddy() {
         throw new Error(result.error || "Failed to delete reverse proxy");
       }
       toast.success(`Removed reverse proxy for ${domain}`);
+      if (Array.isArray(result?.data?.warnings) && result.data.warnings.length > 0) {
+        toast.warning(`Deleted, but Caddy reload warning: ${result.data.warnings[0]}`);
+      }
       if (form.domain === domain) {
         setForm((prev) => ({ ...prev, domain: "" }));
       }
