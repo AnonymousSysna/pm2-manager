@@ -4,11 +4,15 @@ const path = require("path");
 const PROCESS_NAME_PATTERN = /^[A-Za-z0-9:_-]{1,100}$/;
 const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const SAFE_ARG_CHARS = /^[A-Za-z0-9_./:=,@+\-\s]*$/;
+const RESERVED_PROCESS_NAMES = new Set(["catalog", "interpreters"]);
 
 function sanitizeProcessName(name, field = "name") {
   const value = String(name || "").trim();
   if (!PROCESS_NAME_PATTERN.test(value)) {
     throw new Error(`${field} must match ${PROCESS_NAME_PATTERN}`);
+  }
+  if (RESERVED_PROCESS_NAMES.has(value.toLowerCase())) {
+    throw new Error(`${field} contains reserved value: ${value}`);
   }
   return value;
 }

@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useEffect, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { CheckCircle2, RefreshCw, XCircle } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { processes as processApi } from "../api";
 import Button from "../components/ui/Button";
@@ -181,7 +181,7 @@ export default function History() {
             </span>
           )}
         </div>
-        <p className="mb-2 text-xs text-text-3">
+        <p className="mb-2 border-b border-border pb-2 text-xs text-text-3">
           Page {deploymentPagination.page} of {deploymentPagination.totalPages} ({deploymentPagination.totalItems} items)
         </p>
         <div className="max-h-60 space-y-2 overflow-y-auto text-sm">
@@ -193,7 +193,7 @@ export default function History() {
                 {item.processName} {item.action === "rollback" ? "rollback" : "deployment"} by {item.actor || "unknown"} {item.success ? "succeeded" : "failed"}
               </p>
               <p className="text-xs text-text-3">
-                {new Date(item.ts).toLocaleString()} {item.branch ? ` branch:${item.branch}` : ""}
+                {formatTimestamp(item.ts)} {item.branch ? `| branch: ${item.branch}` : ""}
               </p>
               {item.action === "rollback" && item.targetCommit && (
                 <p className="text-xs text-text-3">target commit: {String(item.targetCommit).slice(0, 12)}</p>
@@ -202,8 +202,9 @@ export default function History() {
               {Array.isArray(item.steps) && item.steps.length > 0 && (
                 <div className="mt-1 space-y-1 border-t border-border pt-1">
                   {item.steps.map((step, stepIndex) => (
-                    <p key={`${item.ts}-${idx}-${step.label}-${stepIndex}`} className={`text-xs ${step.success ? "text-text-3" : "text-danger-300"}`}>
-                      {step.success ? "ok" : "x"} {step.label}
+                    <p key={`${item.ts}-${idx}-${step.label}-${stepIndex}`} className={`flex items-center gap-1 text-xs ${step.success ? "text-text-3" : "text-danger-300"}`}>
+                      {step.success ? <CheckCircle2 size={12} aria-label="success" /> : <XCircle size={12} aria-label="failed" />}
+                      {step.label}
                       {step.error ? `: ${step.error}` : ""}
                     </p>
                   ))}
@@ -248,7 +249,7 @@ export default function History() {
             Refresh
           </Button>
         </div>
-        <p className="mb-2 text-xs text-text-3">
+        <p className="mb-2 border-b border-border pb-2 text-xs text-text-3">
           Page {restartPagination.page} of {restartPagination.totalPages} ({restartPagination.totalItems} items)
         </p>
         <div className="max-h-60 space-y-2 overflow-y-auto text-sm">
@@ -260,13 +261,13 @@ export default function History() {
                 {item.processName} {item.event || "event"} by {item.actor || "system"}
               </p>
               <p className="text-xs text-text-3">
-                {formatTimestamp(item.ts)} | source:{item.source || "unknown"}
+                {formatTimestamp(item.ts)} | source: {item.source || "unknown"}
               </p>
               {(item.reason || item.exitCode !== null || item.signal) && (
                 <p className="mt-1 text-xs text-warning-300">
                   reason: {item.reason || "-"}
-                  {item.exitCode !== null && item.exitCode !== undefined ? ` | exit:${item.exitCode}` : ""}
-                  {item.signal ? ` | signal:${item.signal}` : ""}
+                  {item.exitCode !== null && item.exitCode !== undefined ? ` | exit: ${item.exitCode}` : ""}
+                  {item.signal ? ` | signal: ${item.signal}` : ""}
                 </p>
               )}
             </div>
@@ -326,7 +327,7 @@ export default function History() {
             disabled={auditActionPreset !== "__custom__"}
           />
         </div>
-        <p className="mb-2 text-xs text-text-3">
+        <p className="mb-2 border-b border-border pb-2 text-xs text-text-3">
           Page {auditPagination.page} of {auditPagination.totalPages} ({auditPagination.totalItems} items)
         </p>
         <div className="max-h-72 space-y-2 overflow-y-auto text-sm">
@@ -338,7 +339,7 @@ export default function History() {
                 {item.action} {item.processName ? `(${item.processName})` : ""}
               </p>
               <p className="text-xs text-text-3">
-                {formatTimestamp(item.ts)} | actor:{item.actor || "unknown"} | ip:{item.ip || "unknown"} | {item.success ? "success" : "failed"}
+                {formatTimestamp(item.ts)} | actor: {item.actor || "unknown"} | ip: {item.ip || "unknown"} | {item.success ? "success" : "failed"}
               </p>
               {!item.success && item.error && <p className="mt-1 whitespace-pre-wrap text-xs text-danger-300">{item.error}</p>}
             </div>
@@ -368,4 +369,3 @@ export default function History() {
     </div>
   );
 }
-

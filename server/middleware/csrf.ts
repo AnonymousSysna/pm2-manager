@@ -50,7 +50,7 @@ function verifyCsrf(req, res, next) {
   }
 
   const path = String(req.path || req.originalUrl || "");
-  if (path.endsWith("/auth/login")) {
+  if (path.endsWith("/auth/login") || path.endsWith("/auth/refresh")) {
     next();
     return;
   }

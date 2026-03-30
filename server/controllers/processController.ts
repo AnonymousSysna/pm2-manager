@@ -1516,7 +1516,6 @@ async function createProcess(config, actorContext = "unknown") {
                 `${error.message}\nHint: missing dependency "${missingModule}". If this is a nested app (for example apps/${safeName}), run npm install in that app directory or enable "Run npm install before start".`
               );
             }
-            return;
           }
           throw error;
         }

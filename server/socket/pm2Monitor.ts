@@ -413,6 +413,10 @@ function registerPM2Monitor(io) {
 
     try {
       const decoded = jwt.verify(token, secret);
+      if (decoded?.tokenType && decoded.tokenType !== "access") {
+        next(new Error("Unauthorized: invalid token type"));
+        return;
+      }
       socket.user = decoded;
       next();
     } catch (_error) {
