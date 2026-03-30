@@ -433,7 +433,7 @@ export default function Dashboard() {
   };
 
   const openDeploymentHistoryForProcess = (name) => {
-    navigate(`/dashboard/settings?deploymentProcess=${encodeURIComponent(name)}`);
+    navigate(`/dashboard/history?deploymentProcess=${encodeURIComponent(name)}`);
   };
 
   const toggleSelected = (name, checked) => {

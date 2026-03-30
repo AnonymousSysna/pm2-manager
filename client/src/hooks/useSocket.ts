@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { useEffect, useMemo, useState } from "react";
 import { io } from "socket.io-client";
+import { processes as processApi } from "../api";
 
 function readPollInterval() {
   const stored = Number(localStorage.getItem("pm2_poll_interval_ms") || 2000);
@@ -130,6 +131,31 @@ export function useSocket() {
 
     return () => {
       socket.disconnect();
+    };
+  }, [pollInterval]);
+
+  useEffect(() => {
+    let active = true;
+
+    const syncProcesses = async () => {
+      try {
+        const result = await processApi.list();
+        if (!active || !result.success || !Array.isArray(result.data)) {
+          return;
+        }
+        setProcesses(result.data);
+      } catch (_error) {
+        // Socket updates remain the primary source; ignore fallback polling errors.
+      }
+    };
+
+    syncProcesses();
+    const intervalMs = Math.min(15000, Math.max(5000, pollInterval * 3));
+    const timer = setInterval(syncProcesses, intervalMs);
+
+    return () => {
+      active = false;
+      clearInterval(timer);
     };
   }, [pollInterval]);
 

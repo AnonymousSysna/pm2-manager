@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Bell, Globe, Menu, Plus, Puzzle, ScrollText, Settings, LogOut, Moon, Sun, X } from "lucide-react";
+import { Activity, Bell, Globe, History, Menu, Plus, Puzzle, ScrollText, Settings, LogOut, Moon, Sun, X } from "lucide-react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useSocket } from "../hooks/useSocket";
 import { auth, caddy as caddyApi } from "../api";
@@ -12,6 +12,7 @@ const staticLinks = [
   { to: "/dashboard/create", label: "Create", icon: Plus },
   { to: "/dashboard/notifications", label: "Notifications", icon: Bell },
   { to: "/dashboard/logs", label: "Logs", icon: ScrollText },
+  { to: "/dashboard/history", label: "History", icon: History },
   { to: "/dashboard/settings", label: "Settings", icon: Settings },
   { to: "/dashboard/extensions", label: "Extensions", icon: Puzzle }
 ];
@@ -21,6 +22,7 @@ const pageTitleMap = {
   "/dashboard/create": "Create Process",
   "/dashboard/notifications": "Notification Center",
   "/dashboard/logs": "Logs",
+  "/dashboard/history": "History",
   "/dashboard/settings": "Settings",
   "/dashboard/extensions": "Extensions",
   "/dashboard/caddy": "Caddy Reverse Proxy"

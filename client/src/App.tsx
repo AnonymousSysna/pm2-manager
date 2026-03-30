@@ -9,6 +9,7 @@ const Dashboard = lazy(() => import("./pages/Dashboard"));
 const CreateProcess = lazy(() => import("./pages/CreateProcess"));
 const Logs = lazy(() => import("./pages/Logs"));
 const Settings = lazy(() => import("./pages/Settings"));
+const History = lazy(() => import("./pages/History"));
 const Notifications = lazy(() => import("./pages/Notifications"));
 const Extensions = lazy(() => import("./pages/Extensions"));
 const Caddy = lazy(() => import("./pages/Caddy"));
@@ -84,6 +85,14 @@ export default function App() {
             element={(
               <LazyRoute>
                 <Settings />
+              </LazyRoute>
+            )}
+          />
+          <Route
+            path="history"
+            element={(
+              <LazyRoute>
+                <History />
               </LazyRoute>
             )}
           />
