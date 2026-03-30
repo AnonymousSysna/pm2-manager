@@ -594,7 +594,9 @@ export default function CreateProcess() {
               <div className="rounded border border-border bg-surface-2 p-3">
                 <p className="text-sm font-medium text-text-2">Recommended Runtime</p>
                 <p className="text-sm text-text-3">
-                  {runtimeHint.reason} -> interpreter `{runtimeHint.interpreter}`, mode `{runtimeHint.execMode}`
+                  {runtimeHint.reason}
+                  {" -> "}
+                  interpreter <code>{runtimeHint.interpreter}</code>, mode <code>{runtimeHint.execMode}</code>
                 </p>
                 <div className="mt-2">
                   <Button type="button" variant="info" size="sm" onClick={applyRuntimeHint}>
