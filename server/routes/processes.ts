@@ -29,7 +29,9 @@ const {
   gitPullProcess,
   rollbackProcess,
   readProcessDotEnv,
-  updateProcessDotEnv
+  updateProcessDotEnv,
+  getNodeRuntimeStatus,
+  installNodeRuntime
 } = require("../controllers/processController");
 const { verifyToken } = require("../middleware/auth");
 const { validateProcessParam } = require("../middleware/validate");
@@ -60,6 +62,21 @@ router.get("/catalog", readLimiter, asyncHandler(async (_req, res) => {
 router.get("/interpreters", readLimiter, asyncHandler(async (_req, res) => {
   const result = await getInterpreterCatalog();
   res.status(result.success ? 200 : 500).json(result);
+}));
+
+router.get("/runtimes/node", readLimiter, asyncHandler(async (_req, res) => {
+  const result = await getNodeRuntimeStatus();
+  res.status(result.success ? 200 : 500).json(result);
+}));
+
+router.post("/runtimes/node/install", criticalWriteLimiter, asyncHandler(async (req, res) => {
+  const result = await installNodeRuntime(req.body || {});
+  const status = result.success
+    ? 200
+    : /required|not installed|no supported|failed/i.test(result.error || "")
+      ? 400
+      : 500;
+  res.status(status).json(result);
 }));
 
 router.get("/history/restarts", readLimiter, asyncHandler(async (req, res) => {

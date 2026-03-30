@@ -30,6 +30,14 @@ function isAuthEndpoint(url: string | undefined): boolean {
   );
 }
 
+function isAuthMeEndpoint(url: string | undefined): boolean {
+  const value = String(url || "");
+  return (
+    value.includes("/api/v1/auth/me") ||
+    value.includes("/api/auth/me")
+  );
+}
+
 function getCookie(name: string): string {
   const cookie = document.cookie
     .split(";")
@@ -74,7 +82,7 @@ api.interceptors.response.use(
     const onLoginRoute = window.location.pathname.startsWith("/login");
     const originalConfig = (error?.config || {}) as InternalAxiosRequestConfig & { _retry?: boolean };
 
-    if (status === 401 && !isAuthEndpoint(requestUrl)) {
+    if (status === 401 && (!isAuthEndpoint(requestUrl) || isAuthMeEndpoint(requestUrl))) {
       if (originalConfig._retry) {
         if (!onLoginRoute) {
           window.location.href = "/login";
@@ -114,6 +122,9 @@ export const processes = {
   list: () => api.get<ApiResult<ProcessSummary[]>>("/api/v1/processes").then(unwrap),
   catalog: () => api.get<ApiResult<any>>("/api/v1/processes/catalog").then(unwrap),
   interpreters: () => api.get<ApiResult<any>>("/api/v1/processes/interpreters").then(unwrap),
+  nodeRuntimeStatus: () => api.get<ApiResult<any>>("/api/v1/processes/runtimes/node").then(unwrap),
+  installNodeRuntime: (version: string, manager = "") =>
+    api.post<ApiResult<any>>("/api/v1/processes/runtimes/node/install", { version, manager }).then(unwrap),
   monitoringSummary: () => api.get<ApiResult<any[]>>("/api/v1/processes/monitoring/summary").then(unwrap),
   setMeta: (name: string, payload: Record<string, unknown>) =>
     api.patch<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/meta`, payload).then(unwrap),

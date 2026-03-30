@@ -148,6 +148,10 @@ export default function CreateProcess() {
   const [launchElapsedSec, setLaunchElapsedSec] = useState(0);
   const [createOperationId, setCreateOperationId] = useState("");
   const [revealSensitiveEnv, setRevealSensitiveEnv] = useState(false);
+  const [nodeRuntimeState, setNodeRuntimeState] = useState({
+    loading: false,
+    data: null
+  });
   const [form, setForm] = useState({
     name: "",
     script: "",
@@ -158,6 +162,8 @@ export default function CreateProcess() {
     start_script: "start",
     install_dependencies: true,
     run_build: false,
+    node_version: "",
+    auto_install_node: true,
     args: "",
     port: "",
     cwd: "",
@@ -190,6 +196,23 @@ export default function CreateProcess() {
 
   useEffect(() => {
     setTemplates(parseTemplateStore(localStorage.getItem(TEMPLATE_STORAGE_KEY)));
+  }, []);
+
+  useEffect(() => {
+    const loadRuntime = async () => {
+      try {
+        setNodeRuntimeState((prev) => ({ ...prev, loading: true }));
+        const result = await processes.nodeRuntimeStatus();
+        if (result.success) {
+          setNodeRuntimeState({ loading: false, data: result.data || null });
+          return;
+        }
+      } catch (_error) {
+        // Optional runtime panel.
+      }
+      setNodeRuntimeState((prev) => ({ ...prev, loading: false }));
+    };
+    loadRuntime();
   }, []);
 
   useEffect(() => {
@@ -379,6 +402,10 @@ export default function CreateProcess() {
       start_script: mode === "project" || mode === "git" ? form.start_script || "start" : undefined,
       install_dependencies: mode === "project" || mode === "git" ? Boolean(form.install_dependencies) : undefined,
       run_build: mode === "project" || mode === "git" ? Boolean(form.run_build) : undefined,
+      node_version: mode === "project" || mode === "git" ? String(form.node_version || "").trim() || undefined : undefined,
+      auto_install_node: mode === "project" || mode === "git"
+        ? Boolean(form.auto_install_node && String(form.node_version || "").trim())
+        : undefined,
       args: mode === "script" ? form.args || undefined : undefined,
       port: form.port || undefined,
       cwd: mode === "script" ? form.cwd || undefined : undefined,
@@ -639,6 +666,43 @@ export default function CreateProcess() {
                     />
                     Run npm run build before start
                   </label>
+                  <Field label="Node Version (Optional)">
+                    <Input
+                      value={form.node_version}
+                      onChange={(e) => update("node_version", e.target.value)}
+                      placeholder="20, 20.12, or 20.12.2"
+                    />
+                    <p className="mt-1 text-xs text-text-3">
+                      If set, install/build/start uses this Node runtime version (good for avoiding old-node build failures).
+                    </p>
+                  </Field>
+                  {String(form.node_version || "").trim() && (
+                    <label className="flex items-center gap-3 text-sm text-text-2">
+                      <Checkbox
+                        checked={form.auto_install_node}
+                        onChange={(e) => update("auto_install_node", e.target.checked)}
+                      />
+                      Auto-install Node version if missing
+                    </label>
+                  )}
+                  <div className="rounded border border-border bg-surface p-2 text-xs text-text-3">
+                    {nodeRuntimeState.loading ? (
+                      <p>Checking Node runtime managers...</p>
+                    ) : (
+                      <>
+                        <p>
+                          Host Node: <span className="text-text-2">{nodeRuntimeState.data?.systemNode?.version || "-"}</span>
+                        </p>
+                        <p className="mt-1">
+                          Managers: {Array.isArray(nodeRuntimeState.data?.managers)
+                            ? nodeRuntimeState.data.managers
+                              .map((item) => `${item.displayName} (${item.installed ? "installed" : "missing"})`)
+                              .join(", ")
+                            : "-"}
+                        </p>
+                      </>
+                    )}
+                  </div>
                 </>
               )}
 

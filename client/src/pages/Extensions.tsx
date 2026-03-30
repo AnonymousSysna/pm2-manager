@@ -5,6 +5,8 @@ import { caddy as caddyApi, processes as processApi } from "../api";
 import toast, { getErrorMessage } from "../lib/toast";
 import Button from "../components/ui/Button";
 import Badge from "../components/ui/Badge";
+import Input from "../components/ui/Input";
+import Select from "../components/ui/Select";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 
 export default function Extensions() {
@@ -18,6 +20,13 @@ export default function Extensions() {
       installed: 0
     }
   });
+  const [nodeRuntimeState, setNodeRuntimeState] = useState({
+    loading: true,
+    data: null
+  });
+  const [nodeInstallVersion, setNodeInstallVersion] = useState("");
+  const [nodeInstallManager, setNodeInstallManager] = useState("");
+  const [nodeInstalling, setNodeInstalling] = useState(false);
   const [status, setStatus] = useState({
     platform: "unknown",
     installed: false,
@@ -44,6 +53,7 @@ export default function Extensions() {
   useEffect(() => {
     loadStatus();
     loadInterpreters();
+    loadNodeRuntime();
   }, []);
 
   const loadInterpreters = async () => {
@@ -64,6 +74,46 @@ export default function Extensions() {
     } catch (error) {
       setInterpreterState((prev) => ({ ...prev, loading: false }));
       toast.error(getErrorMessage(error, "Unable to detect interpreters"));
+    }
+  };
+
+  const loadNodeRuntime = async () => {
+    try {
+      setNodeRuntimeState((prev) => ({ ...prev, loading: true }));
+      const result = await processApi.nodeRuntimeStatus();
+      if (!result.success) {
+        throw new Error(result.error || "Unable to load Node runtime status");
+      }
+      setNodeRuntimeState({
+        loading: false,
+        data: result.data || null
+      });
+    } catch (error) {
+      setNodeRuntimeState((prev) => ({ ...prev, loading: false }));
+      toast.error(getErrorMessage(error, "Unable to load Node runtime status"));
+    }
+  };
+
+  const installNodeVersion = async () => {
+    const version = String(nodeInstallVersion || "").trim();
+    if (!version) {
+      toast.error("Node version is required");
+      return;
+    }
+    try {
+      setNodeInstalling(true);
+      const result = await processApi.installNodeRuntime(version, nodeInstallManager);
+      if (!result.success) {
+        throw new Error(result.error || "Node install failed");
+      }
+      const installedVersion = result.data?.installed?.version || version;
+      toast.success(`Node ${installedVersion} installed (${result.data?.installed?.manager || "runtime manager"})`);
+      await loadNodeRuntime();
+      await loadInterpreters();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Node install failed"));
+    } finally {
+      setNodeInstalling(false);
     }
   };
 
@@ -174,6 +224,79 @@ export default function Extensions() {
               No interpreter presets detected.
             </div>
           ) : null}
+        </div>
+
+        <div className="mt-4 rounded-md border border-border bg-surface-2 p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-text-1">Node Runtime Manager</p>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={nodeRuntimeState.loading}
+              onClick={loadNodeRuntime}
+            >
+              {nodeRuntimeState.loading ? "Refreshing..." : "Refresh"}
+            </Button>
+          </div>
+
+          <div className="grid gap-2 md:grid-cols-[1fr,180px,auto]">
+            <Input
+              value={nodeInstallVersion}
+              onChange={(event) => setNodeInstallVersion(event.target.value)}
+              placeholder="Install Node version (e.g. 20, 20.12.2)"
+            />
+            <Select value={nodeInstallManager} onChange={(event) => setNodeInstallManager(event.target.value)}>
+              <option value="">Auto manager</option>
+              {Array.isArray(nodeRuntimeState.data?.managers) && nodeRuntimeState.data.managers.map((manager) => (
+                <option key={manager.manager} value={manager.manager}>
+                  {manager.displayName}
+                </option>
+              ))}
+            </Select>
+            <Button
+              type="button"
+              variant="outlineInfo"
+              disabled={nodeInstalling || !String(nodeInstallVersion || "").trim()}
+              onClick={installNodeVersion}
+            >
+              {nodeInstalling ? "Installing..." : "Install Node"}
+            </Button>
+          </div>
+
+          <div className="mt-3 space-y-2">
+            <p className="text-xs text-text-3">
+              Platform: <span className="text-text-2">{nodeRuntimeState.data?.platform || "-"}</span>{" "}
+              | System Node: <span className="text-text-2">{nodeRuntimeState.data?.systemNode?.version || "-"}</span>
+            </p>
+            {Array.isArray(nodeRuntimeState.data?.managers) && nodeRuntimeState.data.managers.map((manager) => (
+              <div key={manager.manager} className="rounded border border-border bg-surface p-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-xs font-semibold text-text-2">{manager.displayName}</p>
+                  <Badge tone={manager.installed ? "success" : "warning"}>
+                    {manager.installed ? "Installed" : "Missing"}
+                  </Badge>
+                </div>
+                <p className="mt-1 text-xs text-text-3">
+                  Installed versions:{" "}
+                  <span className="text-text-2">
+                    {Array.isArray(manager.versions) && manager.versions.length > 0
+                      ? manager.versions.join(", ")
+                      : "-"}
+                  </span>
+                </p>
+                {!manager.installed && Array.isArray(manager.installCommands) && manager.installCommands.length > 0 && (
+                  <div className="mt-1 text-xs text-text-3">
+                    {manager.installCommands.map((command) => (
+                      <pre key={command} className="overflow-x-auto whitespace-pre-wrap text-xs text-text-3">
+                        {command}
+                      </pre>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       </section>
     </div>

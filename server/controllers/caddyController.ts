@@ -528,9 +528,10 @@ async function addReverseProxy(payload = {}) {
   if (!reload.success) {
     warnings.push(reload.error);
   }
+  const operationSuccess = validation.success && reload.success;
 
   return {
-    success: true,
+    success: operationSuccess,
     data: {
       domain,
       upstream,
@@ -539,7 +540,7 @@ async function addReverseProxy(payload = {}) {
       reload,
       warnings
     },
-    error: null
+    error: operationSuccess ? null : "Caddy validate/reload failed"
   };
 }
 
@@ -580,9 +581,10 @@ async function deleteReverseProxy(payload = {}) {
   if (!reload.success) {
     warnings.push(reload.error);
   }
+  const operationSuccess = validation.success && reload.success;
 
   return {
-    success: true,
+    success: operationSuccess,
     data: {
       domain,
       caddyfilePath,
@@ -590,7 +592,7 @@ async function deleteReverseProxy(payload = {}) {
       reload,
       warnings
     },
-    error: null
+    error: operationSuccess ? null : "Caddy validate/reload failed"
   };
 }
 

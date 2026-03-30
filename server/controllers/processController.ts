@@ -36,6 +36,13 @@ const {
   getMonitoringSummary
 } = require("../utils/metricsHistoryStore");
 const { appendAuditEntry } = require("../utils/auditTrail");
+const {
+  getNodeRuntimeCatalog,
+  installNodeRuntimeVersion,
+  resolveNodeRuntimeForVersion,
+  detectNodeVersionFromProject,
+  normalizeVersion
+} = require("../utils/nodeRuntimeManager");
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
 const COMMAND_TIMEOUT_MS = Number.isFinite(Number(process.env.COMMAND_TIMEOUT_MS))
@@ -146,6 +153,8 @@ const INTERPRETER_CATALOG = [
  * @property {boolean} [install_dependencies]
  * @property {boolean} [run_build]
  * @property {string} [start_script]
+ * @property {string} [node_version]
+ * @property {boolean} [auto_install_node]
  */
 
 /**
@@ -383,6 +392,16 @@ async function readNpmCapabilities(cwd) {
   }
 }
 
+function isNodeInterpreterValue(value = "") {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+  return ["node", "nodejs", "node.exe"].includes(normalized)
+    || normalized.endsWith("/node")
+    || normalized.endsWith("\\node.exe");
+}
+
 async function resolveNestedInstallDirs(projectDir, preferredAppName = "") {
   const appRoots = [path.join(projectDir, "apps"), path.join(projectDir, "packages")];
   const installDirs = [];
@@ -457,10 +476,14 @@ function getNpmInstallArgs({ includeDev = false } = {}) {
   return ["install", "--include=dev"];
 }
 
-function runCommand(command, args, cwd) {
+function runCommand(command, args, cwd, options = {}) {
+  const childEnv = options && typeof options === "object" && options.env
+    ? { ...process.env, ...options.env }
+    : process.env;
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,
+      env: childEnv,
       stdio: ["ignore", "pipe", "pipe"]
     });
 
@@ -944,7 +967,20 @@ async function runBulkAction(action, names = [], actorContext = "unknown") {
     };
   }
 
-  const uniqueNames = [...new Set(names.map((name) => sanitizeProcessName(name, "process name")))];
+  const sanitizedNames = [];
+  for (let index = 0; index < names.length; index += 1) {
+    try {
+      sanitizedNames.push(sanitizeProcessName(names[index], "process name"));
+    } catch (error) {
+      return {
+        success: false,
+        data: null,
+        error: error?.message || `Invalid process name at index ${index}`
+      };
+    }
+  }
+
+  const uniqueNames = [...new Set(sanitizedNames)];
   const handler = {
     start: startProcess,
     stop: stopProcess,
@@ -1323,7 +1359,9 @@ async function createProcess(config, actorContext = "unknown") {
       env_file_content,
       install_dependencies,
       run_build,
-      start_script
+      start_script,
+      node_version,
+      auto_install_node
     } = config;
 
     const safeName = sanitizeProcessName(name, "process name");
@@ -1343,12 +1381,12 @@ async function createProcess(config, actorContext = "unknown") {
     };
     /** @type {CommandStep[]} */
     const createSteps = [];
-    const runCreateStep = async (label, command, commandArgs, commandCwd) => {
+    const runCreateStep = async (label, command, commandArgs, commandCwd, commandOptions = {}) => {
       const stepId = `${label}#${++createStepCounter}`;
       const startedAt = Date.now();
       emitCreateStep({ stepId, label, status: "started" });
       try {
-        const output = await runCommand(command, commandArgs, commandCwd);
+        const output = await runCommand(command, commandArgs, commandCwd, commandOptions);
         const durationMs = Date.now() - startedAt;
         createSteps.push({
           label,
@@ -1392,6 +1430,8 @@ async function createProcess(config, actorContext = "unknown") {
     let finalScript = normalizedScript;
     let finalArgs = args;
     let finalCwd = normalizedCwd;
+    let resolvedInterpreterOverride = "";
+    let resolvedNodeVersion = normalizeVersion(node_version);
 
     const projectPathInput = String(project_path || "").trim();
     if (projectPathInput) {
@@ -1474,15 +1514,46 @@ async function createProcess(config, actorContext = "unknown") {
 
       const packageJson = JSON.parse(await fs.promises.readFile(packageJsonPath, "utf8"));
       const scripts = packageJson.scripts || {};
-      const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+      let npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
       const startScriptName = String(start_script || "start").trim() || "start";
+      const shouldUseNodeRuntime = isNodeInterpreterValue(interpreter);
+      let npmCommandArgsBuilder = (nextArgs = []) => nextArgs;
+      let stepCommandOptions = {};
+
+      if (!resolvedNodeVersion && shouldUseNodeRuntime) {
+        resolvedNodeVersion = await detectNodeVersionFromProject(projectDir);
+      }
+
+      if (resolvedNodeVersion && shouldUseNodeRuntime) {
+        const runtime = await resolveNodeRuntimeForVersion(resolvedNodeVersion, {
+          autoInstall: Boolean(auto_install_node)
+        });
+        if (runtime) {
+          resolvedNodeVersion = normalizeVersion(runtime.version);
+          resolvedInterpreterOverride = String(runtime.nodePath || "").trim();
+          npmCmd = runtime.npmCommand || npmCmd;
+          npmCommandArgsBuilder = runtime.wrapNpmArgs || ((nextArgs = []) => nextArgs);
+        }
+      }
 
       if (install_dependencies) {
         const installArgs = getNpmInstallArgs({ includeDev: Boolean(run_build) });
-        await runCreateStep("npm:install", npmCmd, installArgs, projectDir);
+        await runCreateStep(
+          "npm:install",
+          npmCmd,
+          npmCommandArgsBuilder(installArgs),
+          projectDir,
+          stepCommandOptions
+        );
         const nestedInstallDirs = await resolveNestedInstallDirs(projectDir, safeName);
         for (const installDir of nestedInstallDirs) {
-          await runCreateStep("npm:install:nested", npmCmd, installArgs, installDir);
+          await runCreateStep(
+            "npm:install:nested",
+            npmCmd,
+            npmCommandArgsBuilder(installArgs),
+            installDir,
+            stepCommandOptions
+          );
         }
       }
 
@@ -1491,7 +1562,13 @@ async function createProcess(config, actorContext = "unknown") {
           throw new Error(`Missing "build" script in ${packageJsonPath}`);
         }
         try {
-          await runCreateStep("npm:build", npmCmd, ["run", "build"], projectDir);
+          await runCreateStep(
+            "npm:build",
+            npmCmd,
+            npmCommandArgsBuilder(["run", "build"]),
+            projectDir,
+            stepCommandOptions
+          );
         } catch (error) {
           const missingModule = extractMissingModule(error?.message || "");
           if (missingModule) {
@@ -1502,10 +1579,17 @@ async function createProcess(config, actorContext = "unknown") {
                 await runCreateStep(
                   "npm:install-missing-module",
                   npmCmd,
-                  ["install", "--include=dev", "--save-dev", missingModule],
-                  installTargetDir
+                  npmCommandArgsBuilder(["install", "--include=dev", "--save-dev", missingModule]),
+                  installTargetDir,
+                  stepCommandOptions
                 );
-                await runCreateStep("npm:build:retry", npmCmd, ["run", "build"], projectDir);
+                await runCreateStep(
+                  "npm:build:retry",
+                  npmCmd,
+                  npmCommandArgsBuilder(["run", "build"]),
+                  projectDir,
+                  stepCommandOptions
+                );
               } catch (_retryError) {
                 throw new Error(
                   `${error.message}\nHint: missing dependency "${missingModule}". Auto-install + retry failed in ${installTargetDir}.`
@@ -1526,8 +1610,28 @@ async function createProcess(config, actorContext = "unknown") {
       }
 
       finalScript = npmCmd;
-      finalArgs = `run ${startScriptName}`;
+      finalArgs = npmCommandArgsBuilder(["run", startScriptName]).join(" ");
       finalCwd = projectDir;
+    }
+
+    if (resolvedNodeVersion && isNodeInterpreterValue(interpreter) && !resolvedInterpreterOverride) {
+      const runtime = await resolveNodeRuntimeForVersion(resolvedNodeVersion, {
+        autoInstall: Boolean(auto_install_node)
+      });
+      if (runtime) {
+        resolvedNodeVersion = normalizeVersion(runtime.version);
+        resolvedInterpreterOverride = String(runtime.nodePath || "").trim();
+        const normalizedFinalScript = String(finalScript || "").trim().toLowerCase();
+        const isNpmEntry = ["npm", "npm.cmd"].includes(normalizedFinalScript);
+        if (isNpmEntry) {
+          if (runtime.manager === "fnm") {
+            finalScript = "fnm";
+            finalArgs = `exec --using ${resolvedNodeVersion} -- npm${finalArgs ? ` ${String(finalArgs).trim()}` : ""}`;
+          } else if (runtime.npmCommand) {
+            finalScript = runtime.npmCommand;
+          }
+        }
+      }
     }
 
     if (!finalScript || !String(finalScript).trim()) {
@@ -1556,11 +1660,12 @@ async function createProcess(config, actorContext = "unknown") {
       watch: Boolean(watch),
       env: {
         ...safeEnv,
-        ...(normalizedPort ? { PORT: String(normalizedPort) } : {})
+        ...(normalizedPort ? { PORT: String(normalizedPort) } : {}),
+        ...(resolvedNodeVersion ? { NODE_VERSION: resolvedNodeVersion } : {})
       },
       max_memory_restart: sanitizeMaxMemoryRestart(max_memory_restart),
       node_args: sanitizeNodeArgs(node_args),
-      interpreter: sanitizeInterpreter(interpreter),
+      interpreter: sanitizeInterpreter(resolvedInterpreterOverride || interpreter),
       log_date_format: sanitizeOptionalString(log_date_format, "log_date_format", 128)
     };
 
@@ -2342,10 +2447,12 @@ async function getProcessCatalog() {
 
 async function getInterpreterCatalog() {
   const interpreters = await Promise.all(INTERPRETER_CATALOG.map((entry) => detectInterpreter(entry)));
+  const nodeRuntime = await getNodeRuntimeCatalog();
   return {
     success: true,
     data: {
       interpreters,
+      nodeRuntime,
       totals: {
         supported: INTERPRETER_CATALOG.length,
         installed: interpreters.filter((item) => item.installed).length
@@ -2353,6 +2460,41 @@ async function getInterpreterCatalog() {
     },
     error: null
   };
+}
+
+async function getNodeRuntimeStatus() {
+  const catalog = await getNodeRuntimeCatalog();
+  return {
+    success: true,
+    data: catalog,
+    error: null
+  };
+}
+
+async function installNodeRuntime(payload = {}) {
+  const version = normalizeVersion(payload?.version);
+  if (!version) {
+    return { success: false, data: null, error: "version is required" };
+  }
+  const preferredManager = String(payload?.manager || "").trim().toLowerCase();
+  try {
+    const installed = await installNodeRuntimeVersion(version, preferredManager);
+    const catalog = await getNodeRuntimeCatalog();
+    return {
+      success: true,
+      data: {
+        installed,
+        catalog
+      },
+      error: null
+    };
+  } catch (error) {
+    return {
+      success: false,
+      data: null,
+      error: error?.message || "Failed to install requested Node version"
+    };
+  }
 }
 
 async function updateProcessMetadata(name, payload) {
@@ -2421,6 +2563,8 @@ module.exports = {
   gitPullProcess,
   rollbackProcess,
   getInterpreterCatalog,
+  getNodeRuntimeStatus,
+  installNodeRuntime,
   readProcessDotEnv,
   updateProcessDotEnv
 };
