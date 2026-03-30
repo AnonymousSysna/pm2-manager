@@ -61,6 +61,43 @@ function formatCreateStepLabel(label) {
 }
 
 const MAX_MEMORY_RESTART_PATTERN = /^\d+(M|G|K|m|g|k)$/;
+const DEFAULT_RUNTIME_HINT = {
+  interpreter: "node",
+  execMode: "cluster",
+  reason: "Node.js app detected"
+};
+
+function inferRuntimeHint(mode, form) {
+  if (mode === "project" || mode === "git") {
+    return DEFAULT_RUNTIME_HINT;
+  }
+
+  const script = String(form?.script || "").trim().toLowerCase();
+  if (!script) {
+    return { interpreter: "node", execMode: "fork", reason: "Set script path to detect runtime" };
+  }
+
+  if (/\.(mjs|cjs|js|ts)$/.test(script) || script === "npm" || script === "npm.cmd" || script.endsWith("/npm")) {
+    return DEFAULT_RUNTIME_HINT;
+  }
+  if (script.endsWith(".py")) {
+    return { interpreter: "python3", execMode: "fork", reason: "Python script detected" };
+  }
+  if (script.endsWith(".php")) {
+    return { interpreter: "php", execMode: "fork", reason: "PHP script detected" };
+  }
+  if (script.endsWith(".rb")) {
+    return { interpreter: "ruby", execMode: "fork", reason: "Ruby script detected" };
+  }
+  if (script.endsWith(".pl")) {
+    return { interpreter: "perl", execMode: "fork", reason: "Perl script detected" };
+  }
+  if (script.endsWith(".sh")) {
+    return { interpreter: "bash", execMode: "fork", reason: "Shell script detected" };
+  }
+
+  return { interpreter: "node", execMode: "fork", reason: "Unknown script type, using safe defaults" };
+}
 
 function validateDotEnvContent(content = "") {
   const lines = String(content || "").split(/\r?\n/);
@@ -100,7 +137,8 @@ function validateDotEnvContent(content = "") {
 export default function CreateProcess() {
   const navigate = useNavigate();
   const { createStepEvents } = useSocket();
-  const [tab, setTab] = useState("simple");
+  const [step, setStep] = useState(1);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [mode, setMode] = useState("script");
   const [templates, setTemplates] = useState({});
   const [selectedTemplate, setSelectedTemplate] = useState("");
@@ -174,6 +212,7 @@ export default function CreateProcess() {
   }, [isLaunching, launchStartedAt]);
 
   const templateNames = useMemo(() => Object.keys(templates).sort(), [templates]);
+  const runtimeHint = useMemo(() => inferRuntimeHint(mode, form), [mode, form]);
   const maxMemoryRestartError = useMemo(() => {
     const value = String(form.max_memory_restart || "").trim();
     if (!value) {
@@ -225,7 +264,7 @@ export default function CreateProcess() {
     }
     const templatePayload = {
       mode,
-      tab,
+      showAdvanced,
       form
     };
     setTemplates((prev) => ({ ...prev, [templateName]: templatePayload }));
@@ -239,7 +278,7 @@ export default function CreateProcess() {
       return;
     }
     setMode(item.mode || "script");
-    setTab(item.tab || "simple");
+    setShowAdvanced(Boolean(item.showAdvanced || item.tab === "advanced"));
     setForm((prev) => ({
       ...prev,
       ...item.form,
@@ -247,6 +286,7 @@ export default function CreateProcess() {
         ? item.form.envRows
         : [{ ...defaultEnvRow }]
     }));
+    setStep(1);
     setSelectedTemplate(templateName);
     toast.success(`Loaded template: ${templateName}`);
   };
@@ -266,6 +306,91 @@ export default function CreateProcess() {
     });
     setSelectedTemplate("");
     toast.success("Template deleted");
+  };
+
+  const applyRuntimeHint = () => {
+    setForm((prev) => ({
+      ...prev,
+      interpreter: runtimeHint.interpreter,
+      exec_mode: runtimeHint.execMode,
+      instances: runtimeHint.execMode === "cluster" ? Math.max(1, Number(prev.instances || 1)) : 1
+    }));
+  };
+
+  const validateStepOne = () => {
+    if (!form.name.trim()) {
+      return "Process Name is required.";
+    }
+    if (mode === "script" && !form.script.trim()) {
+      return "Script Path is required in Script Mode.";
+    }
+    if (mode === "project" && !form.project_path.trim()) {
+      return "Project Directory is required in Project Mode.";
+    }
+    if (mode === "git" && !form.git_clone_url.trim()) {
+      return "Git clone URL is required in Git Clone Mode.";
+    }
+    if (mode === "git" && !form.project_path.trim()) {
+      return "Project Directory is required in Git Clone Mode.";
+    }
+    return "";
+  };
+
+  const validateStepTwo = () => {
+    if (showAdvanced && maxMemoryRestartError) {
+      return maxMemoryRestartError;
+    }
+    if (mode === "git" && envFileValidationErrors.length > 0) {
+      return `.env content has invalid lines: ${envFileValidationErrors.slice(0, 5).map((item) => item.line).join(", ")}`;
+    }
+    return "";
+  };
+
+  const nextStep = () => {
+    const validationError = step === 1 ? validateStepOne() : validateStepTwo();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    setError("");
+    setStep((prev) => Math.min(3, prev + 1));
+  };
+
+  const prevStep = () => {
+    setError("");
+    setStep((prev) => Math.max(1, prev - 1));
+  };
+
+  const buildPayload = () => {
+    const env = {};
+    form.envRows.forEach((row) => {
+      if (row.key.trim()) {
+        env[row.key.trim()] = row.value;
+      }
+    });
+
+    return {
+      name: form.name,
+      script: mode === "script" ? form.script : undefined,
+      project_path: mode === "project" || mode === "git" ? form.project_path : undefined,
+      git_clone_url: mode === "git" ? form.git_clone_url : undefined,
+      git_branch: mode === "git" ? form.git_branch || undefined : undefined,
+      env_file_content: mode === "git" ? form.env_file_content : undefined,
+      start_script: mode === "project" || mode === "git" ? form.start_script || "start" : undefined,
+      install_dependencies: mode === "project" || mode === "git" ? Boolean(form.install_dependencies) : undefined,
+      run_build: mode === "project" || mode === "git" ? Boolean(form.run_build) : undefined,
+      args: mode === "script" ? form.args || undefined : undefined,
+      port: form.port || undefined,
+      cwd: mode === "script" ? form.cwd || undefined : undefined,
+      watch: form.watch,
+      exec_mode: form.exec_mode,
+      instances: form.exec_mode === "cluster" ? Number(form.instances || 1) : 1,
+      max_memory_restart: showAdvanced ? form.max_memory_restart || undefined : undefined,
+      node_args: showAdvanced ? form.node_args || undefined : undefined,
+      interpreter: showAdvanced ? form.interpreter || undefined : undefined,
+      log_date_format: showAdvanced ? form.log_date_format || undefined : undefined,
+      env
+    };
   };
 
   const submit = async (event) => {
@@ -299,7 +424,7 @@ export default function CreateProcess() {
       setError("Project Directory is required in Git Clone Mode.");
       return;
     }
-    if (tab === "advanced" && maxMemoryRestartError) {
+    if (showAdvanced && maxMemoryRestartError) {
       setError(maxMemoryRestartError);
       return;
     }
@@ -308,35 +433,7 @@ export default function CreateProcess() {
       return;
     }
 
-    const env = {};
-    form.envRows.forEach((row) => {
-      if (row.key.trim()) {
-        env[row.key.trim()] = row.value;
-      }
-    });
-
-    const payload = {
-      name: form.name,
-      script: mode === "script" ? form.script : undefined,
-      project_path: mode === "project" || mode === "git" ? form.project_path : undefined,
-      git_clone_url: mode === "git" ? form.git_clone_url : undefined,
-      git_branch: mode === "git" ? form.git_branch || undefined : undefined,
-      env_file_content: mode === "git" ? form.env_file_content : undefined,
-      start_script: mode === "project" || mode === "git" ? form.start_script || "start" : undefined,
-      install_dependencies: mode === "project" || mode === "git" ? Boolean(form.install_dependencies) : undefined,
-      run_build: mode === "project" || mode === "git" ? Boolean(form.run_build) : undefined,
-      args: mode === "script" ? form.args || undefined : undefined,
-      port: form.port || undefined,
-      cwd: mode === "script" ? form.cwd || undefined : undefined,
-      watch: form.watch,
-      exec_mode: form.exec_mode,
-      instances: form.exec_mode === "cluster" ? Number(form.instances || 1) : 1,
-      max_memory_restart: tab === "advanced" ? form.max_memory_restart || undefined : undefined,
-      node_args: tab === "advanced" ? form.node_args || undefined : undefined,
-      interpreter: tab === "advanced" ? form.interpreter || undefined : undefined,
-      log_date_format: tab === "advanced" ? form.log_date_format || undefined : undefined,
-      env
-    };
+    const payload = buildPayload();
 
     try {
       setIsLaunching(true);
@@ -385,8 +482,9 @@ export default function CreateProcess() {
       />
 
       <div className="page-panel">
-        <PanelHeader title="Templates & Mode" className="mb-3" />
-        <div className="mb-4 grid gap-2 rounded border border-border bg-surface-2 p-3 md:grid-cols-[1fr,auto,auto,auto]">
+        <PanelHeader title="Guided Setup" className="mb-3" />
+
+        <div className="mb-4 grid gap-2 rounded border border-border bg-surface-2 p-3 md:grid-cols-[1fr,auto,auto]">
           <Select value={selectedTemplate} onChange={(e) => {
             const value = e.target.value;
             setSelectedTemplate(value);
@@ -401,162 +499,156 @@ export default function CreateProcess() {
           </Select>
           <Button type="button" variant="secondary" onClick={saveTemplate}>Save Template</Button>
           <Button type="button" variant="danger" onClick={deleteTemplate} disabled={!selectedTemplate}>Delete Template</Button>
-          <Button type="button" variant="info" onClick={() => setMode("git")}>Git Clone Mode</Button>
         </div>
 
         <div className="mb-4 flex flex-wrap gap-2">
-          <ModeButton active={mode === "script"} onClick={() => setMode("script")}>Script Mode</ModeButton>
-          <ModeButton active={mode === "project"} onClick={() => setMode("project")}>Project Directory Mode</ModeButton>
-          <ModeButton active={mode === "git"} onClick={() => setMode("git")}>Git Clone Mode</ModeButton>
-        </div>
-
-        <div className="mb-4 flex flex-wrap gap-2">
-          <ModeButton active={tab === "simple"} onClick={() => setTab("simple")}>Simple</ModeButton>
-          <ModeButton active={tab === "advanced"} onClick={() => setTab("advanced")}>Advanced</ModeButton>
+          <StepBadge active={step === 1} done={step > 1}>1. Source</StepBadge>
+          <StepBadge active={step === 2} done={step > 2}>2. Runtime</StepBadge>
+          <StepBadge active={step === 3}>3. Review</StepBadge>
         </div>
 
         <form onSubmit={submit} className="space-y-4">
-          <Field label="Process Name" required>
-            <Input value={form.name} onChange={(e) => update("name", e.target.value)} />
-          </Field>
-
-          {mode === "script" && (
+          {step === 1 && (
             <>
-              <Field label="Script Path" required>
-                <Input
-                  value={form.script}
-                  onChange={(e) => update("script", e.target.value)}
-                  placeholder="app.js, npm, or /absolute/path/to/app.js"
-                />
+              <div className="rounded border border-border bg-surface-2 p-3">
+                <p className="mb-2 text-sm font-medium text-text-2">Choose Source Type</p>
+                <div className="flex flex-wrap gap-2">
+                  <ModeButton active={mode === "script"} onClick={() => setMode("script")}>Script Path</ModeButton>
+                  <ModeButton active={mode === "project"} onClick={() => setMode("project")}>Project Directory</ModeButton>
+                  <ModeButton active={mode === "git"} onClick={() => setMode("git")}>Git Clone</ModeButton>
+                </div>
+              </div>
+
+              <Field label="Process Name" required>
+                <Input value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="my-app" />
               </Field>
 
-              <Field label="Arguments">
-                <Input value={form.args} onChange={(e) => update("args", e.target.value)} />
-              </Field>
+              {mode === "script" && (
+                <Field label="Script Path" required>
+                  <Input
+                    value={form.script}
+                    onChange={(e) => update("script", e.target.value)}
+                    placeholder="app.js, npm, or /absolute/path/to/app.py"
+                  />
+                </Field>
+              )}
 
-              <Field label="Working Directory">
-                <Input value={form.cwd} onChange={(e) => update("cwd", e.target.value)} />
-              </Field>
+              {mode === "project" && (
+                <Field label="Project Directory" required>
+                  <Input
+                    value={form.project_path}
+                    onChange={(e) => update("project_path", e.target.value)}
+                    placeholder="/root/my-app"
+                  />
+                </Field>
+              )}
+
+              {mode === "git" && (
+                <>
+                  <Field label="Git Clone URL" required>
+                    <Input
+                      value={form.git_clone_url}
+                      onChange={(e) => updateCloneUrl(e.target.value)}
+                      placeholder="https://github.com/org/repo.git"
+                    />
+                  </Field>
+
+                  <Field label="Git Branch (Optional)">
+                    <Input
+                      value={form.git_branch}
+                      onChange={(e) => update("git_branch", e.target.value)}
+                      placeholder="main"
+                    />
+                  </Field>
+
+                  <Field label="Project Directory" required>
+                    <Input
+                      value={form.project_path}
+                      onChange={(e) => update("project_path", e.target.value)}
+                      placeholder="/root/pm2-manager/apps/{auto-inferred-from-repo-name}"
+                    />
+                  </Field>
+
+                  <Field label=".env File Content (Optional)">
+                    <Textarea
+                      value={form.env_file_content}
+                      onChange={(e) => update("env_file_content", e.target.value)}
+                      placeholder={"NODE_ENV=production\nAPI_KEY=replace_me"}
+                      className="min-h-32"
+                    />
+                    {envFileValidationErrors.length > 0 ? (
+                      <p className="mt-1 text-xs text-danger-300">
+                        Invalid `.env` syntax on line(s): {envFileValidationErrors.slice(0, 5).map((item) => item.line).join(", ")}.
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-xs text-text-3">Validated live while typing (`KEY=VALUE`).</p>
+                    )}
+                  </Field>
+                </>
+              )}
             </>
           )}
 
-          {mode === "project" && (
+          {step === 2 && (
             <>
-              <Field label="Project Directory" required>
-                <Input
-                  value={form.project_path}
-                  onChange={(e) => update("project_path", e.target.value)}
-                  placeholder="/root/my-app"
-                />
-              </Field>
+              <div className="rounded border border-border bg-surface-2 p-3">
+                <p className="text-sm font-medium text-text-2">Recommended Runtime</p>
+                <p className="text-sm text-text-3">
+                  {runtimeHint.reason} -> interpreter `{runtimeHint.interpreter}`, mode `{runtimeHint.execMode}`
+                </p>
+                <div className="mt-2">
+                  <Button type="button" variant="info" size="sm" onClick={applyRuntimeHint}>
+                    Apply Recommendation
+                  </Button>
+                </div>
+              </div>
 
-              <Field label="Start Script">
-                <Input
-                  value={form.start_script}
-                  onChange={(e) => update("start_script", e.target.value)}
-                  placeholder="start"
-                />
-              </Field>
+              {mode === "script" && (
+                <>
+                  <Field label="Arguments">
+                    <Input value={form.args} onChange={(e) => update("args", e.target.value)} />
+                  </Field>
+                  <Field label="Working Directory">
+                    <Input value={form.cwd} onChange={(e) => update("cwd", e.target.value)} />
+                  </Field>
+                </>
+              )}
 
-              <label className="flex items-center gap-3 text-sm text-text-2">
-                <Checkbox
-                  checked={form.install_dependencies}
-                  onChange={(e) => update("install_dependencies", e.target.checked)}
-                />
-                Run npm install before start
-              </label>
+              {(mode === "project" || mode === "git") && (
+                <>
+                  <Field label="Start Script">
+                    <Input
+                      value={form.start_script}
+                      onChange={(e) => update("start_script", e.target.value)}
+                      placeholder="start"
+                    />
+                  </Field>
+                  <label className="flex items-center gap-3 text-sm text-text-2">
+                    <Checkbox
+                      checked={form.install_dependencies}
+                      onChange={(e) => update("install_dependencies", e.target.checked)}
+                    />
+                    Run npm install before start
+                  </label>
+                  <label className="flex items-center gap-3 text-sm text-text-2">
+                    <Checkbox
+                      checked={form.run_build}
+                      onChange={(e) => update("run_build", e.target.checked)}
+                    />
+                    Run npm run build before start
+                  </label>
+                </>
+              )}
 
-              <label className="flex items-center gap-3 text-sm text-text-2">
-                <Checkbox
-                  checked={form.run_build}
-                  onChange={(e) => update("run_build", e.target.checked)}
-                />
-                Run npm run build before start
-              </label>
-            </>
-          )}
-
-          {mode === "git" && (
-            <>
-              <Field label="Git Clone URL" required>
-                <Input
-                  value={form.git_clone_url}
-                  onChange={(e) => updateCloneUrl(e.target.value)}
-                  placeholder="https://github.com/org/repo.git"
-                />
-              </Field>
-
-              <Field label="Git Branch (Optional)">
-                <Input
-                  value={form.git_branch}
-                  onChange={(e) => update("git_branch", e.target.value)}
-                  placeholder="main"
-                />
-              </Field>
-
-              <Field label="Project Directory" required>
-                <Input
-                  value={form.project_path}
-                  onChange={(e) => update("project_path", e.target.value)}
-                  placeholder="/root/pm2-manager/apps/{auto-inferred-from-repo-name}"
-                />
-              </Field>
-
-              <Field label=".env File Content (Optional)">
-                <Textarea
-                  value={form.env_file_content}
-                  onChange={(e) => update("env_file_content", e.target.value)}
-                  placeholder={"NODE_ENV=production\nAPI_KEY=replace_me"}
-                  className="min-h-32"
-                />
-                {envFileValidationErrors.length > 0 ? (
-                  <p className="mt-1 text-xs text-danger-300">
-                    Invalid `.env` syntax on line(s): {envFileValidationErrors.slice(0, 5).map((item) => item.line).join(", ")}.
-                  </p>
-                ) : (
-                  <p className="mt-1 text-xs text-text-3">
-                    Validates live as `KEY=VALUE` lines while typing.
-                  </p>
-                )}
-              </Field>
-
-              <Field label="Start Script">
-                <Input
-                  value={form.start_script}
-                  onChange={(e) => update("start_script", e.target.value)}
-                  placeholder="start"
-                />
+              <Field label="Port">
+                <Input type="number" value={form.port} onChange={(e) => update("port", e.target.value)} />
               </Field>
 
               <label className="flex items-center gap-3 text-sm text-text-2">
-                <Checkbox
-                  checked={form.install_dependencies}
-                  onChange={(e) => update("install_dependencies", e.target.checked)}
-                />
-                Run npm install after clone
+                <Checkbox checked={form.watch} onChange={(e) => update("watch", e.target.checked)} />
+                Watch Mode
               </label>
 
-              <label className="flex items-center gap-3 text-sm text-text-2">
-                <Checkbox
-                  checked={form.run_build}
-                  onChange={(e) => update("run_build", e.target.checked)}
-                />
-                Run npm run build after clone
-              </label>
-            </>
-          )}
-
-          <Field label="Port">
-            <Input type="number" value={form.port} onChange={(e) => update("port", e.target.value)} />
-          </Field>
-
-          <label className="flex items-center gap-3 text-sm text-text-2">
-            <Checkbox checked={form.watch} onChange={(e) => update("watch", e.target.checked)} />
-            Watch Mode
-          </label>
-
-          {tab === "advanced" && (
-            <>
               <Field label="Exec Mode">
                 <Select value={form.exec_mode} onChange={(e) => update("exec_mode", e.target.value)}>
                   <option value="fork">fork</option>
@@ -570,74 +662,99 @@ export default function CreateProcess() {
                 </Field>
               )}
 
-              <Field label="Max Memory Restart">
-                <Input
-                  value={form.max_memory_restart}
-                  onChange={(e) => update("max_memory_restart", e.target.value)}
-                  placeholder="500M"
-                />
-                {maxMemoryRestartError ? (
-                  <p className="mt-1 text-xs text-danger-300">{maxMemoryRestartError}</p>
-                ) : (
-                  <p className="mt-1 text-xs text-text-3">Accepted format: number + unit (`K`, `M`, or `G`). Example: `500M`.</p>
-                )}
-              </Field>
-
-              <Field label="Node Args">
-                <Input value={form.node_args} onChange={(e) => update("node_args", e.target.value)} />
-              </Field>
-
-              <Field label="Interpreter">
-                <Input value={form.interpreter} onChange={(e) => update("interpreter", e.target.value)} />
-              </Field>
-
-              <Field label="Log Date Format">
-                <Input value={form.log_date_format} onChange={(e) => update("log_date_format", e.target.value)} />
-              </Field>
-
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-medium text-text-2">Environment Variables</p>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setRevealSensitiveEnv((prev) => !prev)}
-                  >
-                    {revealSensitiveEnv ? "Mask Sensitive Values" : "Reveal Sensitive Values"}
+              <div className="rounded border border-border bg-surface-2 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-text-2">Advanced Settings</p>
+                  <Button type="button" variant="secondary" size="sm" onClick={() => setShowAdvanced((prev) => !prev)}>
+                    {showAdvanced ? "Hide Advanced" : "Show Advanced"}
                   </Button>
                 </div>
-                {form.envRows.map((row, index) => (
-                  <div key={`env-${index}`} className="grid grid-cols-[1fr,1fr,auto] gap-2">
-                    <Input
-                      value={row.key}
-                      onChange={(e) => updateEnvRow(index, "key", e.target.value)}
-                      placeholder="KEY"
-                    />
-                    <Input
-                      type={isSensitiveEnvKey(row.key) && !revealSensitiveEnv ? "password" : "text"}
-                      value={row.value}
-                      onChange={(e) => updateEnvRow(index, "value", e.target.value)}
-                      placeholder="VALUE"
-                    />
-                    <Button
-                      type="button"
-                      variant="danger"
-                      onClick={() => update("envRows", form.envRows.filter((_, i) => i !== index))}
-                    >
-                      Remove
-                    </Button>
+
+                {showAdvanced && (
+                  <div className="mt-3 space-y-3">
+                    <Field label="Max Memory Restart">
+                      <Input
+                        value={form.max_memory_restart}
+                        onChange={(e) => update("max_memory_restart", e.target.value)}
+                        placeholder="500M"
+                      />
+                      {maxMemoryRestartError ? (
+                        <p className="mt-1 text-xs text-danger-300">{maxMemoryRestartError}</p>
+                      ) : (
+                        <p className="mt-1 text-xs text-text-3">Format: number + `K`, `M`, or `G`.</p>
+                      )}
+                    </Field>
+
+                    <Field label="Node Args">
+                      <Input value={form.node_args} onChange={(e) => update("node_args", e.target.value)} />
+                    </Field>
+
+                    <Field label="Interpreter">
+                      <Input value={form.interpreter} onChange={(e) => update("interpreter", e.target.value)} />
+                    </Field>
+
+                    <Field label="Log Date Format">
+                      <Input value={form.log_date_format} onChange={(e) => update("log_date_format", e.target.value)} />
+                    </Field>
+
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-medium text-text-2">Environment Variables</p>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setRevealSensitiveEnv((prev) => !prev)}
+                        >
+                          {revealSensitiveEnv ? "Mask Sensitive Values" : "Reveal Sensitive Values"}
+                        </Button>
+                      </div>
+                      {form.envRows.map((row, index) => (
+                        <div key={`env-${index}`} className="grid grid-cols-[1fr,1fr,auto] gap-2">
+                          <Input
+                            value={row.key}
+                            onChange={(e) => updateEnvRow(index, "key", e.target.value)}
+                            placeholder="KEY"
+                          />
+                          <Input
+                            type={isSensitiveEnvKey(row.key) && !revealSensitiveEnv ? "password" : "text"}
+                            value={row.value}
+                            onChange={(e) => updateEnvRow(index, "value", e.target.value)}
+                            placeholder="VALUE"
+                          />
+                          <Button
+                            type="button"
+                            variant="danger"
+                            onClick={() => update("envRows", form.envRows.filter((_, i) => i !== index))}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => update("envRows", [...form.envRows, { ...defaultEnvRow }])}
+                      >
+                        Add Variable
+                      </Button>
+                    </div>
                   </div>
-                ))}
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => update("envRows", [...form.envRows, { ...defaultEnvRow }])}
-                >
-                  Add Variable
-                </Button>
+                )}
               </div>
             </>
+          )}
+
+          {step === 3 && (
+            <div className="space-y-3">
+              <div className="rounded border border-border bg-surface-2 p-3">
+                <p className="text-sm font-medium text-text-2">Review</p>
+                <p className="text-sm text-text-3">Check generated config before launch.</p>
+              </div>
+              <pre className="max-h-96 overflow-auto rounded border border-border bg-surface-2 p-3 text-xs text-text-2">
+                {JSON.stringify(buildPayload(), null, 2)}
+              </pre>
+            </div>
           )}
 
           {error && <p className="text-sm text-danger-300">{error}</p>}
@@ -648,14 +765,24 @@ export default function CreateProcess() {
             </div>
           )}
 
-          <Button
-            type="submit"
-            variant="success"
-            className="w-full"
-            disabled={isLaunching || (tab === "advanced" && Boolean(maxMemoryRestartError)) || (mode === "git" && envFileValidationErrors.length > 0)}
-          >
-            {isLaunching ? "Launching..." : "Launch Process"}
-          </Button>
+          <div className="flex flex-wrap justify-between gap-2">
+            <Button type="button" variant="secondary" onClick={prevStep} disabled={step === 1 || isLaunching}>
+              Back
+            </Button>
+            {step < 3 ? (
+              <Button type="button" variant="info" onClick={nextStep} disabled={isLaunching}>
+                Continue
+              </Button>
+            ) : (
+              <Button
+                type="submit"
+                variant="success"
+                disabled={isLaunching || (showAdvanced && Boolean(maxMemoryRestartError)) || (mode === "git" && envFileValidationErrors.length > 0)}
+              >
+                {isLaunching ? "Launching..." : "Launch Process"}
+              </Button>
+            )}
+          </div>
         </form>
       </div>
 
@@ -725,6 +852,23 @@ function ModeButton({ active, onClick, children }) {
     >
       {children}
     </Button>
+  );
+}
+
+function StepBadge({ active, done, children }) {
+  return (
+    <span
+      className={[
+        "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
+        active
+          ? "bg-brand-500/20 text-brand-300"
+          : done
+            ? "bg-success-500/20 text-success-300"
+            : "bg-surface-2 text-text-3"
+      ].join(" ")}
+    >
+      {children}
+    </span>
   );
 }
 
