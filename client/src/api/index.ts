@@ -113,6 +113,7 @@ export const auth = {
 export const processes = {
   list: () => api.get<ApiResult<ProcessSummary[]>>("/api/v1/processes").then(unwrap),
   catalog: () => api.get<ApiResult<any>>("/api/v1/processes/catalog").then(unwrap),
+  interpreters: () => api.get<ApiResult<any>>("/api/v1/processes/interpreters").then(unwrap),
   monitoringSummary: () => api.get<ApiResult<any[]>>("/api/v1/processes/monitoring/summary").then(unwrap),
   setMeta: (name: string, payload: Record<string, unknown>) =>
     api.patch<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/meta`, payload).then(unwrap),

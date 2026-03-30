@@ -51,6 +51,78 @@ const START_HEALTHCHECK_TIMEOUT_MS = Number.isFinite(Number(process.env.START_HE
 const START_HEALTHCHECK_STABILITY_MS = Number.isFinite(Number(process.env.START_HEALTHCHECK_STABILITY_MS))
   ? Math.max(1500, Math.floor(Number(process.env.START_HEALTHCHECK_STABILITY_MS)))
   : 3000;
+const INTERPRETER_DETECT_TIMEOUT_MS = 4000;
+const INTERPRETER_CATALOG = [
+  {
+    key: "node",
+    displayName: "Node.js",
+    clusterCapable: true,
+    commands: [
+      { command: "node", args: ["--version"] },
+      { command: "nodejs", args: ["--version"] }
+    ]
+  },
+  {
+    key: "python",
+    displayName: "Python",
+    clusterCapable: false,
+    commands: [
+      { command: "python3", args: ["--version"] },
+      { command: "python", args: ["--version"] }
+    ]
+  },
+  {
+    key: "php",
+    displayName: "PHP",
+    clusterCapable: false,
+    commands: [{ command: "php", args: ["-v"] }]
+  },
+  {
+    key: "ruby",
+    displayName: "Ruby",
+    clusterCapable: false,
+    commands: [{ command: "ruby", args: ["-v"] }]
+  },
+  {
+    key: "perl",
+    displayName: "Perl",
+    clusterCapable: false,
+    commands: [{ command: "perl", args: ["-v"] }]
+  },
+  {
+    key: "bash",
+    displayName: "Bash",
+    clusterCapable: false,
+    commands: [{ command: "bash", args: ["--version"] }]
+  },
+  {
+    key: "sh",
+    displayName: "Shell (sh)",
+    clusterCapable: false,
+    commands: [{ command: "sh", args: ["--version"] }]
+  },
+  {
+    key: "bun",
+    displayName: "Bun",
+    clusterCapable: false,
+    commands: [{ command: "bun", args: ["--version"] }]
+  },
+  {
+    key: "deno",
+    displayName: "Deno",
+    clusterCapable: false,
+    commands: [{ command: "deno", args: ["--version"] }]
+  },
+  {
+    key: "powershell",
+    displayName: "PowerShell",
+    clusterCapable: false,
+    commands: [
+      { command: "pwsh", args: ["-Version"] },
+      { command: "powershell", args: ["-Version"] }
+    ]
+  }
+];
 
 /**
  * @typedef {Object} CreateProcessConfig
@@ -97,6 +169,37 @@ function normalizeActorContext(actorOrContext = "unknown") {
     actor: String(actorOrContext || "unknown").trim() || "unknown",
     ip: "unknown"
   };
+}
+
+function sanitizeGitRemoteName(value) {
+  const normalized = String(value || "").trim() || "origin";
+  if (normalized.startsWith("-")) {
+    throw new Error("gitRemote cannot start with '-'");
+  }
+  if (!/^[A-Za-z0-9._-]{1,100}$/.test(normalized)) {
+    throw new Error("gitRemote contains invalid characters");
+  }
+  return normalized;
+}
+
+function sanitizeGitRef(value, fieldName, { allowEmpty = false } = {}) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    if (allowEmpty) {
+      return "";
+    }
+    throw new Error(`${fieldName} is required`);
+  }
+  if (normalized.startsWith("-")) {
+    throw new Error(`${fieldName} cannot start with '-'`);
+  }
+  if (/\s/.test(normalized)) {
+    throw new Error(`${fieldName} cannot contain whitespace`);
+  }
+  if (normalized.length > 200) {
+    throw new Error(`${fieldName} exceeds max length 200`);
+  }
+  return normalized;
 }
 
 async function writeAudit(action, actorOrContext, payload = {}) {
@@ -428,6 +531,88 @@ function compactOutput(output = "") {
     .slice(-8)
     .join("\n")
     .slice(-2000);
+}
+
+function runDetectCommand(command, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: process.cwd(),
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+      setTimeout(() => child.kill("SIGKILL"), 1000).unref();
+    }, INTERPRETER_DETECT_TIMEOUT_MS);
+
+    child.stdout.on("data", (data) => {
+      stdout += data.toString();
+    });
+
+    child.stderr.on("data", (data) => {
+      stderr += data.toString();
+    });
+
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+
+    child.on("close", (code) => {
+      clearTimeout(timeout);
+      if (timedOut) {
+        reject(new Error(`Command timed out: ${command} ${args.join(" ")}`));
+        return;
+      }
+      if (code === 0) {
+        resolve({ command, args, stdout, stderr, code });
+        return;
+      }
+      reject(new Error(`Command failed: ${command} ${args.join(" ")} (exit ${code})`));
+    });
+  });
+}
+
+function pickVersionText(stdout = "", stderr = "") {
+  const merged = `${stdout || ""}\n${stderr || ""}`
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return merged[0] || null;
+}
+
+async function detectInterpreter(entry) {
+  const supportedCommands = entry.commands.map((item) => item.command);
+  for (const candidate of entry.commands) {
+    try {
+      const result = await runDetectCommand(candidate.command, candidate.args || []);
+      return {
+        key: entry.key,
+        displayName: entry.displayName,
+        installed: true,
+        interpreter: candidate.command,
+        version: pickVersionText(result.stdout, result.stderr),
+        supportedCommands,
+        clusterCapable: Boolean(entry.clusterCapable)
+      };
+    } catch (_error) {
+      // Try next command alias.
+    }
+  }
+
+  return {
+    key: entry.key,
+    displayName: entry.displayName,
+    installed: false,
+    interpreter: null,
+    version: null,
+    supportedCommands,
+    clusterCapable: Boolean(entry.clusterCapable)
+  };
 }
 
 function buildStepFailureMessage(prefix, steps = [], fallbackError = "") {
@@ -1074,8 +1259,9 @@ async function updateProcessDotEnv(name, payload = {}, actorContext = "unknown")
   return result;
 }
 
-async function deleteProcess(name) {
+async function deleteProcess(name, actorContext = "unknown") {
   const processName = sanitizeProcessName(name, "process name");
+  const { actor, ip } = normalizeActorContext(actorContext);
   const result = await withPM2(
     () =>
       new Promise((resolve, reject) => {
@@ -1098,6 +1284,11 @@ async function deleteProcess(name) {
       processName
     });
   }
+  await writeAudit("process.delete", { actor, ip }, {
+    processName,
+    success: result.success,
+    error: result.success ? null : result.error || "delete failed"
+  });
   return result;
 }
 
@@ -1701,11 +1892,21 @@ async function npmBuild(name) {
 async function deployProcess(name, options = {}, actorContext = "unknown") {
   const processName = sanitizeProcessName(name, "process name");
   const { actor, ip } = normalizeActorContext(actorContext);
-  const branch = String(options.branch || "").trim();
+  let branch = "";
+  let gitRemote = "origin";
+  try {
+    branch = sanitizeGitRef(options.branch, "branch", { allowEmpty: true });
+    gitRemote = sanitizeGitRemoteName(options.gitRemote);
+  } catch (error) {
+    return {
+      success: false,
+      data: null,
+      error: error.message || "Invalid deploy options"
+    };
+  }
   const installDependencies = options.installDependencies !== false;
   const runBuild = options.runBuild !== false;
   const restartMode = String(options.restartMode || "restart").trim() === "reload" ? "reload" : "restart";
-  const gitRemote = String(options.gitRemote || "origin").trim() || "origin";
   /** @type {CommandStep[]} */
   const deploymentSteps = [];
 
@@ -1948,11 +2149,21 @@ async function gitPullProcess(name) {
 /**
  * @param {string} name
  * @param {{ targetCommit?: string, restartMode?: "restart"|"reload" }} [options]
- * @param {string} [actor]
+ * @param {string|{actor?:string,ip?:string}} [actorContext]
  */
-async function rollbackProcess(name, options = {}, actor = "unknown") {
+async function rollbackProcess(name, options = {}, actorContext = "unknown") {
   const processName = sanitizeProcessName(name, "process name");
-  const targetCommit = String(options.targetCommit || "").trim();
+  const { actor, ip } = normalizeActorContext(actorContext);
+  let targetCommit = "";
+  try {
+    targetCommit = sanitizeGitRef(options.targetCommit, "targetCommit", { allowEmpty: true });
+  } catch (error) {
+    return {
+      success: false,
+      data: null,
+      error: error.message || "Invalid rollback options"
+    };
+  }
   const restartMode = String(options.restartMode || "restart").trim() === "reload" ? "reload" : "restart";
   /** @type {CommandStep[]} */
   const rollbackSteps = [];
@@ -2076,6 +2287,19 @@ async function rollbackProcess(name, options = {}, actor = "unknown") {
     details: result.success ? result.data : { error: result.error, actor, targetCommit }
   });
 
+  await writeAudit("process.rollback", { actor, ip }, {
+    processName,
+    success: result.success,
+    details: result.success
+      ? {
+          fromCommit: result.data?.fromCommit || null,
+          toCommit: result.data?.toCommit || null,
+          restartMode
+        }
+      : null,
+    error: result.success ? null : result.error || "rollback failed"
+  });
+
   return result;
 }
 
@@ -2112,6 +2336,21 @@ async function getProcessCatalog() {
     data: {
       processes: withMeta,
       meta: processMeta
+    },
+    error: null
+  };
+}
+
+async function getInterpreterCatalog() {
+  const interpreters = await Promise.all(INTERPRETER_CATALOG.map((entry) => detectInterpreter(entry)));
+  return {
+    success: true,
+    data: {
+      interpreters,
+      totals: {
+        supported: INTERPRETER_CATALOG.length,
+        installed: interpreters.filter((item) => item.installed).length
+      }
     },
     error: null
   };
@@ -2182,6 +2421,7 @@ module.exports = {
   getGitCommitsForProcess,
   gitPullProcess,
   rollbackProcess,
+  getInterpreterCatalog,
   readProcessDotEnv,
   updateProcessDotEnv
 };

@@ -3,6 +3,7 @@ const express = require("express");
 const {
   listProcesses,
   getProcessCatalog,
+  getInterpreterCatalog,
   startProcess,
   stopProcess,
   restartProcess,
@@ -53,6 +54,11 @@ router.get("/", readLimiter, asyncHandler(async (_req, res) => {
 
 router.get("/catalog", readLimiter, asyncHandler(async (_req, res) => {
   const result = await getProcessCatalog();
+  res.status(result.success ? 200 : 500).json(result);
+}));
+
+router.get("/interpreters", readLimiter, asyncHandler(async (_req, res) => {
+  const result = await getInterpreterCatalog();
   res.status(result.success ? 200 : 500).json(result);
 }));
 
@@ -259,7 +265,10 @@ router.patch("/:name/dotenv", writeLimiter, validateProcessParam, asyncHandler(a
 }));
 
 router.delete("/:name", criticalWriteLimiter, validateProcessParam, asyncHandler(async (req, res) => {
-  const result = await deleteProcess(req.params.name);
+  const result = await deleteProcess(req.params.name, {
+    actor: req.user?.username || "unknown",
+    ip: getRequestIp(req)
+  });
   res.status(result.success ? 200 : 500).json(result);
 }));
 
@@ -315,8 +324,10 @@ router.post("/:name/git/pull", criticalWriteLimiter, validateProcessParam, async
 }));
 
 router.post("/:name/rollback", criticalWriteLimiter, validateProcessParam, asyncHandler(async (req, res) => {
-  const actor = req.user?.username || "unknown";
-  const result = await rollbackProcess(req.params.name, req.body || {}, actor);
+  const result = await rollbackProcess(req.params.name, req.body || {}, {
+    actor: req.user?.username || "unknown",
+    ip: getRequestIp(req)
+  });
   res.status(result.success ? 200 : 500).json(result);
 }));
 
