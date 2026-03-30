@@ -199,6 +199,7 @@ export const caddy = {
   status: () => api.get<ApiResult<any>>("/api/v1/caddy/status").then(unwrap),
   install: () => api.post<ApiResult<any>>("/api/v1/caddy/install").then(unwrap),
   addProxy: (payload: Record<string, unknown>) => api.post<ApiResult<any>>("/api/v1/caddy/proxies", payload).then(unwrap),
+  deleteProxy: (domain: string) => api.delete<ApiResult<any>>(`/api/v1/caddy/proxies/${encodeURIComponent(domain)}`).then(unwrap),
   restart: () => api.post<ApiResult<any>>("/api/v1/caddy/restart").then(unwrap)
 };
 

@@ -10,6 +10,7 @@ export default function Caddy() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [restarting, setRestarting] = useState(false);
+  const [deletingDomain, setDeletingDomain] = useState("");
   const [status, setStatus] = useState({
     installed: false,
     available: false,
@@ -73,6 +74,32 @@ export default function Caddy() {
       toast.error(getErrorMessage(error, "Failed to restart Caddy"));
     } finally {
       setRestarting(false);
+    }
+  };
+
+  const editProxy = (item) => {
+    setForm({
+      domain: item.domain || "",
+      upstream: item.upstream || "localhost:3000"
+    });
+  };
+
+  const deleteProxy = async (domain) => {
+    try {
+      setDeletingDomain(domain);
+      const result = await caddyApi.deleteProxy(domain);
+      if (!result.success) {
+        throw new Error(result.error || "Failed to delete reverse proxy");
+      }
+      toast.success(`Removed reverse proxy for ${domain}`);
+      if (form.domain === domain) {
+        setForm((prev) => ({ ...prev, domain: "" }));
+      }
+      await loadStatus();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Failed to delete reverse proxy"));
+    } finally {
+      setDeletingDomain("");
     }
   };
 
@@ -144,9 +171,31 @@ export default function Caddy() {
         {Array.isArray(status.managedSites) && status.managedSites.length > 0 && (
           <div className="space-y-2">
             {status.managedSites.map((item) => (
-              <div key={item.domain} className="page-panel p-2 text-sm">
-                <p className="font-medium text-text-1">{item.domain}</p>
-                <p className="text-text-3">reverse_proxy {item.upstream}</p>
+              <div key={item.domain} className="page-panel flex items-start justify-between gap-3 p-2 text-sm">
+                <div>
+                  <p className="font-medium text-text-1">{item.domain}</p>
+                  <p className="text-text-3">reverse_proxy {item.upstream}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outlineInfo"
+                    size="sm"
+                    disabled={saving || restarting || loading || deletingDomain === item.domain}
+                    onClick={() => editProxy(item)}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outlineDanger"
+                    size="sm"
+                    disabled={saving || restarting || loading || deletingDomain === item.domain}
+                    onClick={() => deleteProxy(item.domain)}
+                  >
+                    {deletingDomain === item.domain ? "Deleting..." : "Delete"}
+                  </Button>
+                </div>
               </div>
             ))}
           </div>

@@ -143,6 +143,146 @@ function sanitizeUpstream(value) {
   return upstream;
 }
 
+function isDomainLike(value) {
+  return /^(?:\*\.)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(String(value || "").trim());
+}
+
+function extractSiteAddresses(header) {
+  return String(header || "")
+    .split(/[,\s]+/)
+    .map((token) => token.trim())
+    .filter(Boolean)
+    .map((token) => token.replace(/^https?:\/\//i, ""))
+    .map((token) => token.replace(/:\d+$/, ""))
+    .filter((token) => isDomainLike(token));
+}
+
+function parseTopLevelSiteBlocks(content) {
+  const lines = String(content || "").split(/\r?\n/);
+  const blocks = [];
+  let depth = 0;
+  let blockStart = -1;
+  let blockHeader = "";
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (depth === 0 && blockStart === -1 && trimmed && !trimmed.startsWith("#")) {
+      const openIndex = line.indexOf("{");
+      if (openIndex >= 0) {
+        const header = line.slice(0, openIndex).trim();
+        if (header && !header.startsWith("(")) {
+          blockStart = i;
+          blockHeader = header;
+        }
+      }
+    }
+
+    const openCount = (line.match(/{/g) || []).length;
+    const closeCount = (line.match(/}/g) || []).length;
+    depth += openCount - closeCount;
+
+    if (blockStart >= 0 && depth === 0) {
+      const blockLines = lines.slice(blockStart, i + 1);
+      const upstreamLine = blockLines.find((entry) => /^\s*reverse_proxy\s+/.test(entry));
+      const upstreamMatch = upstreamLine ? upstreamLine.match(/^\s*reverse_proxy\s+([^\s#]+)/) : null;
+      blocks.push({
+        start: blockStart,
+        end: i,
+        addresses: extractSiteAddresses(blockHeader),
+        upstream: upstreamMatch ? String(upstreamMatch[1] || "").trim() : "",
+        lines: blockLines
+      });
+      blockStart = -1;
+      blockHeader = "";
+    }
+  }
+
+  return {
+    lines,
+    blocks
+  };
+}
+
+async function readCaddyfileSites(caddyfilePath) {
+  let content = "";
+  try {
+    content = await fs.promises.readFile(caddyfilePath, "utf8");
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+    return {};
+  }
+
+  const parsed = parseTopLevelSiteBlocks(content);
+  const sites = {};
+  parsed.blocks.forEach((block) => {
+    if (!block.upstream) {
+      return;
+    }
+    block.addresses.forEach((domain) => {
+      sites[domain] = block.upstream;
+    });
+  });
+  return sites;
+}
+
+async function removeDomainBlocksFromCaddyfile(caddyfilePath, domain) {
+  let content = "";
+  try {
+    content = await fs.promises.readFile(caddyfilePath, "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+
+  const parsed = parseTopLevelSiteBlocks(content);
+  const ranges = parsed.blocks
+    .filter((block) => block.addresses.includes(domain))
+    .map((block) => [block.start, block.end]);
+
+  if (!ranges.length) {
+    return false;
+  }
+
+  const toRemove = new Set();
+  ranges.forEach(([start, end]) => {
+    for (let i = start; i <= end; i += 1) {
+      toRemove.add(i);
+    }
+  });
+
+  const nextLines = [];
+  for (let i = 0; i < parsed.lines.length; i += 1) {
+    if (!toRemove.has(i)) {
+      nextLines.push(parsed.lines[i]);
+    }
+  }
+
+  const compacted = [];
+  let previousBlank = false;
+  nextLines.forEach((line) => {
+    const isBlank = !String(line || "").trim();
+    if (isBlank && previousBlank) {
+      return;
+    }
+    compacted.push(line);
+    previousBlank = isBlank;
+  });
+  const nextContent = `${compacted.join("\n").trimEnd()}\n`;
+
+  if (nextContent !== content) {
+    await fs.promises.mkdir(path.dirname(caddyfilePath), { recursive: true });
+    await fs.promises.writeFile(caddyfilePath, nextContent, "utf8");
+    return true;
+  }
+  return false;
+}
+
 function buildManagedSection(sites) {
   const domains = Object.keys(sites).sort((a, b) => a.localeCompare(b));
   const blocks = domains.map((domain) => {
@@ -255,7 +395,15 @@ async function getInstallInfo() {
   };
 }
 
-function getStatusPayload(caddyStatus, installInfo, sites) {
+function getStatusPayload(caddyStatus, installInfo, sites, caddyfileSites) {
+  const mergedSites = {
+    ...(caddyfileSites || {}),
+    ...(sites || {})
+  };
+  const managedSites = Object.entries(mergedSites)
+    .map(([domain, upstream]) => ({ domain, upstream }))
+    .sort((a, b) => a.domain.localeCompare(b.domain));
+
   return {
     platform: installInfo.platform,
     hostname: os.hostname(),
@@ -263,20 +411,22 @@ function getStatusPayload(caddyStatus, installInfo, sites) {
     installed: caddyStatus.installed,
     available: caddyStatus.available,
     version: caddyStatus.version,
-    managedSites: Object.entries(sites).map(([domain, upstream]) => ({ domain, upstream })),
+    managedSites,
     installCommands: installInfo.installCommands.map((item) => `${item.command} ${item.args.join(" ")}`)
   };
 }
 
 async function getCaddyStatus() {
+  const caddyfilePath = getCaddyfilePath();
   const [caddyStatus, installInfo, sites] = await Promise.all([
     detectCaddy(),
     getInstallInfo(),
     readManagedSites()
   ]);
+  const caddyfileSites = await readCaddyfileSites(caddyfilePath);
   return {
     success: true,
-    data: getStatusPayload(caddyStatus, installInfo, sites),
+    data: getStatusPayload(caddyStatus, installInfo, sites, caddyfileSites),
     error: null
   };
 }
@@ -357,6 +507,7 @@ async function addReverseProxy(payload = {}) {
   const sites = await readManagedSites();
   sites[domain] = upstream;
   await writeManagedSites(sites);
+  await removeDomainBlocksFromCaddyfile(caddyfilePath, domain);
   await updateCaddyfileManagedSection(caddyfilePath, sites);
 
   let validation = null;
@@ -385,6 +536,53 @@ async function addReverseProxy(payload = {}) {
       reload
     },
     error: reload?.success ? null : "Saved config but failed to reload Caddy"
+  };
+}
+
+async function deleteReverseProxy(payload = {}) {
+  const domain = sanitizeDomain(payload.domain);
+
+  const status = await detectCaddy();
+  if (!status.installed) {
+    return {
+      success: false,
+      data: null,
+      error: "Caddy is not installed"
+    };
+  }
+
+  const caddyfilePath = getCaddyfilePath();
+  const sites = await readManagedSites();
+  delete sites[domain];
+  await writeManagedSites(sites);
+  await removeDomainBlocksFromCaddyfile(caddyfilePath, domain);
+  await updateCaddyfileManagedSection(caddyfilePath, sites);
+
+  let validation = null;
+  try {
+    await runCommand("caddy", ["validate", "--config", caddyfilePath, "--adapter", "caddyfile"]);
+    validation = { success: true, error: null };
+  } catch (error) {
+    validation = { success: false, error: error.message };
+  }
+
+  let reload = null;
+  try {
+    await runCommand("caddy", ["reload", "--config", caddyfilePath, "--adapter", "caddyfile"]);
+    reload = { success: true, error: null };
+  } catch (error) {
+    reload = { success: false, error: error.message };
+  }
+
+  return {
+    success: reload?.success || false,
+    data: {
+      domain,
+      caddyfilePath,
+      validation,
+      reload
+    },
+    error: reload?.success ? null : "Removed config but failed to reload Caddy"
   };
 }
 
@@ -452,6 +650,7 @@ module.exports = {
   getCaddyStatus,
   installCaddy,
   addReverseProxy,
+  deleteReverseProxy,
   restartCaddyService
 };
 

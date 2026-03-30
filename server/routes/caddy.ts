@@ -7,6 +7,7 @@ const {
   getCaddyStatus,
   installCaddy,
   addReverseProxy,
+  deleteReverseProxy,
   restartCaddyService
 } = require("../controllers/caddyController");
 
@@ -31,6 +32,16 @@ router.post("/install", criticalWriteLimiter, asyncHandler(async (_req, res) => 
 
 router.post("/proxies", criticalWriteLimiter, asyncHandler(async (req, res) => {
   const result = await addReverseProxy(req.body || {});
+  const status = result.success
+    ? 200
+    : /required|invalid|not installed/i.test(result.error || "")
+      ? 400
+      : 500;
+  res.status(status).json(result);
+}));
+
+router.delete("/proxies/:domain", criticalWriteLimiter, asyncHandler(async (req, res) => {
+  const result = await deleteReverseProxy({ domain: req.params.domain });
   const status = result.success
     ? 200
     : /required|invalid|not installed/i.test(result.error || "")
