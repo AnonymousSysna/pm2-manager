@@ -11,6 +11,7 @@ export default function Caddy() {
   const [saving, setSaving] = useState(false);
   const [restarting, setRestarting] = useState(false);
   const [deletingDomain, setDeletingDomain] = useState("");
+  const [pendingDeleteDomain, setPendingDeleteDomain] = useState("");
   const [status, setStatus] = useState({
     installed: false,
     available: false,
@@ -106,6 +107,7 @@ export default function Caddy() {
       toast.error(getErrorMessage(error, "Failed to delete reverse proxy"));
     } finally {
       setDeletingDomain("");
+      setPendingDeleteDomain("");
     }
   };
 
@@ -197,7 +199,7 @@ export default function Caddy() {
                     variant="outlineDanger"
                     size="sm"
                     disabled={saving || restarting || loading || deletingDomain === item.domain}
-                    onClick={() => deleteProxy(item.domain)}
+                    onClick={() => setPendingDeleteDomain(item.domain)}
                   >
                     {deletingDomain === item.domain ? "Deleting..." : "Delete"}
                   </Button>
@@ -207,6 +209,48 @@ export default function Caddy() {
           </div>
         )}
       </section>
+
+      {pendingDeleteDomain && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="surface-overlay absolute inset-0"
+            aria-label="Close delete confirmation"
+            onClick={() => {
+              if (!deletingDomain) {
+                setPendingDeleteDomain("");
+              }
+            }}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-lg border border-border bg-surface p-4 shadow-xl">
+            <PanelHeader title="Delete Domain" className="mb-2" />
+            <p className="text-sm text-text-2">
+              Delete reverse proxy for <span className="font-semibold">{pendingDeleteDomain}</span>?
+            </p>
+            <p className="mt-1 text-xs text-text-3">
+              This removes it from managed domains and updates the Caddyfile.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={Boolean(deletingDomain)}
+                onClick={() => setPendingDeleteDomain("")}
+              >
+                No
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                disabled={Boolean(deletingDomain)}
+                onClick={() => deleteProxy(pendingDeleteDomain)}
+              >
+                {deletingDomain ? "Deleting..." : "Yes, Delete"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
