@@ -9,6 +9,20 @@ Web app for operating PM2-managed services with real-time monitoring, deployment
 
 Default app URL: `http://<host>:8000`
 
+## Quick Start (One Tap)
+
+Linux/macOS:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AnonymousSysna/pm2-manager/main/scripts/onetap.sh | bash
+```
+
+Windows PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/AnonymousSysna/pm2-manager/main/scripts/onetap.ps1 | iex"
+```
+
 ## Current Webapp Modules
 
 - Dashboard: live process status, metrics charts, bulk actions, deploy/rollback, metadata editing, `.env` editing, app URL quick-open (when port is known)
@@ -35,7 +49,7 @@ Default app URL: `http://<host>:8000`
 
 - Node.js 18+ (or 20+ recommended)
 - npm
-- PM2 installed globally: `npm i -g pm2`
+- git
 
 ## Install
 
@@ -43,6 +57,37 @@ Default app URL: `http://<host>:8000`
 npm install
 npm --prefix server install
 npm --prefix client install
+```
+
+## One-Tap Start
+
+Runs clone/pull, dependency install, client build, `.env` bootstrap, and PM2 start/restart.
+
+Linux/macOS:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AnonymousSysna/pm2-manager/main/scripts/onetap.sh | bash
+```
+
+Windows PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/AnonymousSysna/pm2-manager/main/scripts/onetap.ps1 | iex"
+```
+
+Optional overrides:
+
+- `REPO_URL=<git-url>` to use a different repository
+- `PM2_MANAGER_DIR=<install-path>` to choose target directory
+
+If you are already inside this repo, run:
+
+```bash
+npm run onetap:linux
+```
+
+```powershell
+npm run onetap:windows
 ```
 
 ## Environment Variables

@@ -27,6 +27,7 @@ export default function Extensions() {
   const [nodeInstallVersion, setNodeInstallVersion] = useState("");
   const [nodeInstallManager, setNodeInstallManager] = useState("");
   const [nodeInstalling, setNodeInstalling] = useState(false);
+  const [installingInterpreterKey, setInstallingInterpreterKey] = useState("");
   const [status, setStatus] = useState({
     platform: "unknown",
     installed: false,
@@ -114,6 +115,26 @@ export default function Extensions() {
       toast.error(getErrorMessage(error, "Node install failed"));
     } finally {
       setNodeInstalling(false);
+    }
+  };
+
+  const installInterpreter = async (key) => {
+    const normalized = String(key || "").trim();
+    if (!normalized) {
+      return;
+    }
+    try {
+      setInstallingInterpreterKey(normalized);
+      const result = await processApi.installInterpreter(normalized);
+      if (!result.success) {
+        throw new Error(result.error || `Failed to install ${normalized}`);
+      }
+      toast.success(`${normalized} installed via ${result.data?.installResult?.manager || "package manager"}`);
+      await loadInterpreters();
+    } catch (error) {
+      toast.error(getErrorMessage(error, `Failed to install ${normalized}`));
+    } finally {
+      setInstallingInterpreterKey("");
     }
   };
 
@@ -211,11 +232,42 @@ export default function Extensions() {
                 <span className="text-xs text-text-3">
                   PM2 interpreter: <span className="text-text-2">{item.interpreter || "-"}</span>
                 </span>
+                {!item.installed && item.installer?.supported && (
+                  <div className="ml-auto">
+                    <Button
+                      type="button"
+                      variant="outlineInfo"
+                      size="sm"
+                      disabled={Boolean(installingInterpreterKey) || !item.installer?.canInstall}
+                      onClick={() => installInterpreter(item.key)}
+                    >
+                      {installingInterpreterKey === item.key ? "Installing..." : "Install"}
+                    </Button>
+                  </div>
+                )}
               </div>
               <p className="mt-1 text-xs text-text-3">Version: <span className="text-text-2">{item.version || "-"}</span></p>
               <p className="mt-1 text-xs text-text-3">
                 Checked commands: <span className="text-text-2">{Array.isArray(item.supportedCommands) ? item.supportedCommands.join(", ") : "-"}</span>
               </p>
+              {!item.installed && item.installer?.supported && (
+                <div className="mt-1 text-xs text-text-3">
+                  <p>
+                    Install status:{" "}
+                    <span className={item.installer?.canInstall ? "text-success-300" : "text-warning-300"}>
+                      {item.installer?.canInstall ? "Ready" : "Blocked"}
+                    </span>
+                  </p>
+                  {item.installer?.reason && (
+                    <p className="text-warning-300">{item.installer.reason}</p>
+                  )}
+                  {Array.isArray(item.installer?.availableManagers) && item.installer.availableManagers.length > 0 && (
+                    <p>
+                      Managers: <span className="text-text-2">{item.installer.availableManagers.join(", ")}</span>
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           ))}
 

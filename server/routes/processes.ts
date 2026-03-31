@@ -31,7 +31,8 @@ const {
   readProcessDotEnv,
   updateProcessDotEnv,
   getNodeRuntimeStatus,
-  installNodeRuntime
+  installNodeRuntime,
+  installInterpreterRuntime
 } = require("../controllers/processController");
 const { verifyToken } = require("../middleware/auth");
 const { validateProcessParam } = require("../middleware/validate");
@@ -62,6 +63,16 @@ router.get("/catalog", readLimiter, asyncHandler(async (_req, res) => {
 router.get("/interpreters", readLimiter, asyncHandler(async (_req, res) => {
   const result = await getInterpreterCatalog();
   res.status(result.success ? 200 : 500).json(result);
+}));
+
+router.post("/interpreters/install", criticalWriteLimiter, asyncHandler(async (req, res) => {
+  const result = await installInterpreterRuntime(req.body || {});
+  const status = result.success
+    ? 200
+    : /required|unsupported|not running|elevated|failed|not available/i.test(result.error || "")
+      ? 400
+      : 500;
+  res.status(status).json(result);
 }));
 
 router.get("/runtimes/node", readLimiter, asyncHandler(async (_req, res) => {

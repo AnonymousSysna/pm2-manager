@@ -37,6 +37,10 @@ const {
 } = require("../utils/metricsHistoryStore");
 const { appendAuditEntry } = require("../utils/auditTrail");
 const {
+  getInterpreterInstallerStatus,
+  installInterpreter
+} = require("../utils/interpreterInstaller");
+const {
   getNodeRuntimeCatalog,
   installNodeRuntimeVersion,
   resolveNodeRuntimeForVersion,
@@ -2446,7 +2450,18 @@ async function getProcessCatalog() {
 }
 
 async function getInterpreterCatalog() {
-  const interpreters = await Promise.all(INTERPRETER_CATALOG.map((entry) => detectInterpreter(entry)));
+  const interpreters = await Promise.all(
+    INTERPRETER_CATALOG.map(async (entry) => {
+      const [detected, installer] = await Promise.all([
+        detectInterpreter(entry),
+        getInterpreterInstallerStatus(entry.key)
+      ]);
+      return {
+        ...detected,
+        installer
+      };
+    })
+  );
   const nodeRuntime = await getNodeRuntimeCatalog();
   return {
     success: true,
@@ -2460,6 +2475,43 @@ async function getInterpreterCatalog() {
     },
     error: null
   };
+}
+
+async function installInterpreterRuntime(payload = {}) {
+  const key = String(payload?.key || "").trim().toLowerCase();
+  if (!key) {
+    return { success: false, data: null, error: "key is required" };
+  }
+  const target = INTERPRETER_CATALOG.find((item) => item.key === key);
+  if (!target) {
+    return { success: false, data: null, error: `Unsupported interpreter key: ${key}` };
+  }
+
+  try {
+    const installResult = await installInterpreter(key);
+    const [detected, installer] = await Promise.all([
+      detectInterpreter(target),
+      getInterpreterInstallerStatus(target.key)
+    ]);
+    return {
+      success: true,
+      data: {
+        key,
+        installResult,
+        interpreter: {
+          ...detected,
+          installer
+        }
+      },
+      error: null
+    };
+  } catch (error) {
+    return {
+      success: false,
+      data: null,
+      error: error?.message || `Failed to install interpreter: ${key}`
+    };
+  }
 }
 
 async function getNodeRuntimeStatus() {
@@ -2563,6 +2615,7 @@ module.exports = {
   gitPullProcess,
   rollbackProcess,
   getInterpreterCatalog,
+  installInterpreterRuntime,
   getNodeRuntimeStatus,
   installNodeRuntime,
   readProcessDotEnv,

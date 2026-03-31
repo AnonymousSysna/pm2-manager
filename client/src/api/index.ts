@@ -122,6 +122,8 @@ export const processes = {
   list: () => api.get<ApiResult<ProcessSummary[]>>("/api/v1/processes").then(unwrap),
   catalog: () => api.get<ApiResult<any>>("/api/v1/processes/catalog").then(unwrap),
   interpreters: () => api.get<ApiResult<any>>("/api/v1/processes/interpreters").then(unwrap),
+  installInterpreter: (key: string) =>
+    api.post<ApiResult<any>>("/api/v1/processes/interpreters/install", { key }).then(unwrap),
   nodeRuntimeStatus: () => api.get<ApiResult<any>>("/api/v1/processes/runtimes/node").then(unwrap),
   installNodeRuntime: (version: string, manager = "") =>
     api.post<ApiResult<any>>("/api/v1/processes/runtimes/node/install", { version, manager }).then(unwrap),
