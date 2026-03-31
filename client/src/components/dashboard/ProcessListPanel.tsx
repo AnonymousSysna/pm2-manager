@@ -85,14 +85,14 @@ export default function ProcessListPanel({
           return (
             <article key={proc.name} className="rounded-xl border border-border bg-surface-2 p-3">
               <div className="mb-2 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap">
                   <Checkbox
                     checked={Boolean(selectedNames[proc.name])}
                     onChange={(e) => toggleSelected(proc.name, e.target.checked)}
                   />
                   <button
                     type="button"
-                    className="text-left font-semibold text-info-300 underline-offset-2 hover:underline"
+                    className="whitespace-nowrap text-left font-semibold text-info-300 underline-offset-2 hover:underline"
                     onClick={() => openDetails(proc)}
                   >
                     {proc.name}
@@ -240,7 +240,7 @@ export default function ProcessListPanel({
                   <td className="px-2 py-3">
                     <button
                       type="button"
-                      className="font-medium text-info-300 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info-300"
+                      className="whitespace-nowrap font-medium text-info-300 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info-300"
                       onClick={() => openDetails(proc)}
                     >
                       {proc.name}
