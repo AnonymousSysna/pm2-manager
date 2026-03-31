@@ -110,7 +110,7 @@ export default function ProcessListPanel({
                   Anomaly: {anomaly.isAnomaly ? `score ${anomaly.score}` : "-"}
                 </p>
               </div>
-              <div className="mt-3 flex flex-wrap gap-1">
+              <div className="mt-3 flex gap-1 overflow-x-auto whitespace-nowrap pb-1">
                 <ActionButton title="Logs" variant="secondary" onClick={() => onOpenLogs(proc.name)} icon={<ScrollText size={14} />} />
                 {Number(proc.port) > 0 && (
                   <ActionButton
@@ -266,7 +266,7 @@ export default function ProcessListPanel({
                     {proc.cronRestart ? <Badge tone="info">{proc.cronRestart}</Badge> : <span className="text-xs text-text-3">-</span>}
                   </td>
                   <td className="px-2 py-3">
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex gap-1 overflow-x-auto whitespace-nowrap pb-1">
                       <ActionButton title="Logs" variant="secondary" onClick={() => onOpenLogs(proc.name)} icon={<ScrollText size={14} />} />
                       {Number(proc.port) > 0 && (
                         <ActionButton

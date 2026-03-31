@@ -6,14 +6,12 @@ import { auth, pm2Admin, alerts as alertsApi, processes as processApi } from "..
 import Button from "../components/ui/Button";
 import Checkbox from "../components/ui/Checkbox";
 import Input from "../components/ui/Input";
-import Select from "../components/ui/Select";
 import { PageIntro } from "../components/ui/PageLayout";
 
 export default function Settings() {
   const [info, setInfo] = useState({ pm2Version: "-", nodeVersion: "-", pm2Home: "-" });
   const [pollSeconds, setPollSeconds] = useState(Number(localStorage.getItem("pm2_poll_interval_ms") || 2000) / 1000);
   const [autoScroll, setAutoScroll] = useState(localStorage.getItem("pm2_auto_scroll_logs") !== "false");
-  const [theme, setTheme] = useState(localStorage.getItem("pm2_theme") || "dark");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -50,10 +48,6 @@ export default function Settings() {
       });
   }, []);
 
-  useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme === "light" ? "light" : "dark");
-  }, [theme]);
-
   const runAction = async (label, fn, confirmText) => {
     if (confirmText && !window.confirm(confirmText)) {
       return;
@@ -81,8 +75,6 @@ export default function Settings() {
   const saveDashboardSettings = () => {
     localStorage.setItem("pm2_poll_interval_ms", String(Math.max(1000, Math.min(10000, pollSeconds * 1000))));
     localStorage.setItem("pm2_auto_scroll_logs", autoScroll ? "true" : "false");
-    localStorage.setItem("pm2_theme", theme);
-    document.documentElement.setAttribute("data-theme", theme === "light" ? "light" : "dark");
     window.dispatchEvent(new Event("pm2:settings-updated"));
     toast.success("Dashboard settings saved");
   };
@@ -306,13 +298,6 @@ export default function Settings() {
           <label className="flex items-center gap-2">
             <Checkbox checked={autoScroll} onChange={(e) => setAutoScroll(e.target.checked)} />
             Auto-scroll logs
-          </label>
-          <label className="flex items-center gap-2">
-            <span>Theme</span>
-            <Select value={theme} onChange={(e) => setTheme(e.target.value)} className="w-auto min-w-28">
-              <option value="dark">Dark</option>
-              <option value="light">Light</option>
-            </Select>
           </label>
           <Button variant="secondary" onClick={saveDashboardSettings}>
             Save Dashboard Settings
