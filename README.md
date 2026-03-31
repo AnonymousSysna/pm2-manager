@@ -11,6 +11,12 @@ Default app URL: `http://<host>:8000`
 
 ## Quick Start (One Tap)
 
+NPM (recommended once published):
+
+```bash
+npx @anonymoussysna/pm2-manager-cli
+```
+
 Linux/macOS:
 
 ```bash

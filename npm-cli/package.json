@@ -1,0 +1,24 @@
+{
+  "name": "@anonymoussysna/pm2-manager-cli",
+  "version": "1.0.0",
+  "description": "One-tap installer/launcher for pm2-manager",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "pm2-manager": "bin/pm2-manager.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "pm2",
+    "dashboard",
+    "installer",
+    "cli"
+  ]
+}
