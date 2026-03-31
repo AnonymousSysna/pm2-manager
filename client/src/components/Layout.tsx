@@ -42,7 +42,7 @@ function NavLinks({ pathname, links, onNavigate }) {
               active ? "bg-brand-500/20 text-brand-300" : "text-text-2 hover:bg-surface-2"
             }`}
           >
-            <Icon size={17} />
+            <Icon size={16} />
             {label}
           </Link>
         );
@@ -120,12 +120,12 @@ export default function Layout() {
             <button
               type="button"
               onClick={() => setMobileOpen(true)}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-surface-2 md:hidden"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface-2 md:hidden"
               aria-label="Open navigation"
             >
               <Menu size={18} />
             </button>
-            <div className="hidden h-9 w-9 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-bg md:flex">PM2</div>
+            <div className="hidden h-8 w-8 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-bg md:flex">PM2</div>
             <div>
               <p className="text-xs uppercase tracking-wide text-text-3">PM2 Manager</p>
               <h1 className="page-title">{title}</h1>
@@ -192,4 +192,5 @@ export default function Layout() {
     </div>
   );
 }
+
 

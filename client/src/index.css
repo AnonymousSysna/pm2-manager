@@ -12,9 +12,9 @@
   --color-text-1: 226 232 240;
   --color-text-2: 203 213 225;
   --color-text-3: 148 163 184;
-  --color-brand-400: 74 222 128;
-  --color-brand-500: 34 197 94;
-  --color-brand-600: 22 163 74;
+  --color-brand-400: 165 180 252;
+  --color-brand-500: 129 140 248;
+  --color-brand-600: 99 102 241;
   --color-success-300: 134 239 172;
   --color-success-500: 34 197 94;
   --color-success-600: 22 163 74;
@@ -38,20 +38,20 @@
   --color-text-1: 17 24 39;
   --color-text-2: 55 65 81;
   --color-text-3: 107 114 128;
-  --color-brand-400: 16 185 129;
-  --color-brand-500: 5 150 105;
-  --color-brand-600: 4 120 87;
+  --color-brand-400: 99 102 241;
+  --color-brand-500: 79 70 229;
+  --color-brand-600: 67 56 202;
   --color-success-300: 21 128 61;
   --color-success-500: 22 163 74;
   --color-success-600: 21 128 61;
-  --color-danger-300: 190 24 93;
-  --color-danger-500: 225 29 72;
-  --color-danger-600: 190 24 93;
-  --color-warning-300: 202 138 4;
+  --color-danger-300: 185 28 28;
+  --color-danger-500: 220 38 38;
+  --color-danger-600: 185 28 28;
+  --color-warning-300: 180 83 9;
   --color-warning-500: 217 119 6;
   --color-warning-600: 180 83 9;
   --color-info-300: 30 64 175;
-  --color-info-500: 29 78 216;
+  --color-info-500: 37 99 235;
   --color-info-600: 30 64 175;
 }
 

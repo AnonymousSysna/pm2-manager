@@ -1,5 +1,6 @@
-// @ts-nocheck
-export function cn(...parts) {
-  return parts.filter(Boolean).join(" ");
-}
+import { clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
 
+export function cn(...parts) {
+  return twMerge(clsx(parts));
+}

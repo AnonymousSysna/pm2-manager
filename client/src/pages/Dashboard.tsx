@@ -1,23 +1,6 @@
 // @ts-nocheck
 import { useEffect, useMemo, useState } from "react";
-import {
-  Play,
-  Square,
-  RefreshCw,
-  RotateCcw,
-  Undo2,
-  ScrollText,
-  Trash2,
-  Download,
-  Hammer,
-  AlertTriangle,
-  Rocket,
-  ListChecks,
-  X,
-  ExternalLink,
-  Copy,
-  AlarmClock
-} from "lucide-react";
+import { X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import toast, { getErrorMessage } from "../lib/toast";
 import { alerts as alertsApi, caddy as caddyApi, processes as processApi } from "../api";
@@ -27,9 +10,14 @@ import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
 import Checkbox from "../components/ui/Checkbox";
 import Input from "../components/ui/Input";
-import ProgressBar from "../components/ui/ProgressBar";
 import Select from "../components/ui/Select";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
+import StatCardsSection from "../components/dashboard/StatCardsSection";
+import SystemResourcesPanel from "../components/dashboard/SystemResourcesPanel";
+import DependencyGraphPanel from "../components/dashboard/DependencyGraphPanel";
+import MetricsHistoryPanel from "../components/dashboard/MetricsHistoryPanel";
+import ThresholdAlertsPanel from "../components/dashboard/ThresholdAlertsPanel";
+import ProcessListPanel from "../components/dashboard/ProcessListPanel";
 
 function bytesToMB(value) {
   return `${(Number(value || 0) / 1024 / 1024).toFixed(1)} MB`;
@@ -67,38 +55,6 @@ const SENSITIVE_ENV_KEY_PATTERN = /(pass(word)?|secret|token|api[_-]?key|private
 
 function isSensitiveEnvKey(key) {
   return SENSITIVE_ENV_KEY_PATTERN.test(String(key || ""));
-}
-
-function toPath(points, width, height, accessor) {
-  if (!Array.isArray(points) || points.length === 0) {
-    return "";
-  }
-
-  const values = points.map(accessor);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-
-  return points
-    .map((point, index) => {
-      const x = (index / Math.max(1, points.length - 1)) * width;
-      const rawY = accessor(point);
-      const y = height - ((rawY - min) / range) * height;
-      return `${index === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`;
-    })
-    .join(" ");
-}
-
-function SparkLine({ points, accessor, stroke }) {
-  const width = 420;
-  const height = 120;
-  const path = toPath(points, width, height, accessor);
-
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-28 w-full rounded border border-border bg-surface-2">
-      <path d={path} fill="none" stroke={stroke} strokeWidth="2" />
-    </svg>
-  );
 }
 
 export default function Dashboard() {
@@ -800,6 +756,18 @@ export default function Dashboard() {
     );
   };
 
+  const openLogsForProcess = (name) => {
+    navigate(`/dashboard/logs?process=${encodeURIComponent(name)}`);
+  };
+
+  const openAppForPort = (port) => {
+    try {
+      openProcessUrl(port);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Unable to open app URL"));
+    }
+  };
+
   return (
     <div className="space-y-4">
       <PageIntro
@@ -818,12 +786,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-4">
-        <StatCard label="Total Processes" value={stats.total} tone="neutral" />
-        <StatCard label="Online" value={stats.online} tone="success" />
-        <StatCard label="Stopped" value={stats.stopped} tone="danger" />
-        <StatCard label="Errored" value={stats.errored} tone="warning" />
-      </section>
+            <StatCardsSection stats={stats} />
 
       {!checklist.dismissed && (
         <section className="page-panel">
@@ -859,520 +822,43 @@ export default function Dashboard() {
         </section>
       )}
 
-      <section className="page-panel">
-        <PanelHeader title="System Resources" className="mb-2" />
-        {!systemResources ? (
-          <p className="text-sm text-text-3">Loading system resources...</p>
-        ) : (
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
-              <div className="rounded border border-border bg-surface-2 p-2">
-                <p className="text-xs text-text-3">CPU</p>
-                <p>{systemResources.cpu?.cores || 0} cores</p>
-                <p className="text-xs text-text-3">load avg: {(systemResources.loadAverage || []).map((v) => Number(v).toFixed(2)).join(", ")}</p>
-              </div>
-              <div className="rounded border border-border bg-surface-2 p-2">
-                <p className="text-xs text-text-3">Memory</p>
-                <p>{bytesToGB(systemResources.memory?.usedBytes || 0)} / {bytesToGB(systemResources.memory?.totalBytes || 0)}</p>
-                <p className="text-xs text-text-3">{Number(systemResources.memory?.usedPercent || 0).toFixed(1)}% used</p>
-              </div>
-              <div className="rounded border border-border bg-surface-2 p-2">
-                <p className="text-xs text-text-3">Disk</p>
-                <p>{bytesToGB(systemResources.disk?.usedBytes || 0)} / {bytesToGB(systemResources.disk?.totalBytes || 0)}</p>
-                <p className="text-xs text-text-3">{Number(systemResources.disk?.usedPercent || 0).toFixed(1)}% used</p>
-              </div>
-            </div>
-            {Array.isArray(systemResources.disk?.mounts) && systemResources.disk.mounts.length > 0 && (
-              <div className="max-h-32 space-y-1 overflow-y-auto rounded border border-border bg-surface-2 p-2 text-xs text-text-3">
-                {systemResources.disk.mounts.slice(0, 12).map((mount) => (
-                  <p key={`${mount.mount}-${mount.filesystem || ""}`}>
-                    {mount.mount}: {bytesToGB(mount.usedBytes || 0)} / {bytesToGB(mount.totalBytes || 0)} ({Number(mount.usedPercent || 0).toFixed(1)}%)
-                  </p>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </section>
+      <SystemResourcesPanel systemResources={systemResources} bytesToGB={bytesToGB} />
 
-      <section>
-        <div className="page-panel space-y-3">
-          <PanelHeader title="Dependency Graph" />
-          {dependencyEdges.length === 0 ? (
-            <p className="text-sm text-text-3">No declared process dependencies.</p>
-          ) : (
-            <div className="space-y-2">
-              {dependencyEdges.map((edge) => (
-                <div
-                  key={`${edge.from}->${edge.to}`}
-                  className="flex items-center gap-2 rounded-md border border-border bg-surface-2 px-3 py-2 text-sm"
-                >
-                  <Badge tone="info">{edge.from}</Badge>
-                  <span className="text-text-3">depends on</span>
-                  <Badge tone="warning">{edge.to}</Badge>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
+      <DependencyGraphPanel dependencyEdges={dependencyEdges} />
 
-      <section>
-        <div className="page-panel space-y-3">
-          <PanelHeader title="CPU / Memory History" />
-          <Select
-            value={chartProcess}
-            onChange={(e) => setChartProcess(e.target.value)}
-            className="w-full"
-          >
-            {processes.map((proc) => (
-              <option key={proc.name} value={proc.name}>
-                {proc.name}
-              </option>
-            ))}
-          </Select>
-          <div>
-            <p className="mb-1 text-xs text-text-3">CPU %</p>
-            <SparkLine points={historyPoints} accessor={(point) => Number(point.cpu || 0)} stroke="rgb(var(--color-brand-500))" />
-          </div>
-          <div>
-            <p className="mb-1 text-xs text-text-3">Memory MB</p>
-            <SparkLine
-              points={historyPoints}
-              accessor={(point) => Number(point.memory || 0) / 1024 / 1024}
-              stroke="rgb(var(--color-info-500))"
-            />
-          </div>
-        </div>
-      </section>
+      <MetricsHistoryPanel
+        chartProcess={chartProcess}
+        onChartProcessChange={setChartProcess}
+        processes={processes}
+        historyPoints={historyPoints}
+      />
 
-      <section className="page-panel">
-        <PanelHeader title="Threshold Alerts" className="mb-2" />
-        {alerts.length === 0 && <p className="text-sm text-text-3">No alerts yet.</p>}
-        <div className="max-h-40 space-y-1 overflow-y-auto text-sm">
-          {alerts
-            .slice()
-            .reverse()
-            .slice(0, 20)
-            .map((item, index) => (
-              <div key={`${item.ts}-${index}`} className="flex items-center gap-2 rounded border border-border px-2 py-1">
-                <AlertTriangle size={14} className={item.severity === "danger" ? "text-danger-300" : "text-warning-300"} />
-                <span className="text-text-2">
-                  {item.processName}: {item.metric}={item.value} (threshold {item.threshold})
-                </span>
-                <span className="ml-auto text-xs text-text-3">{new Date(item.ts).toLocaleTimeString()}</span>
-              </div>
-            ))}
-        </div>
-      </section>
+      <ThresholdAlertsPanel alerts={alerts} />
 
-      <section className="page-panel">
-        <div className="mb-4 panel-title-row">
-          <h2 className="section-title">Process List</h2>
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by name or status"
-            className="w-full md:w-80"
-          />
-        </div>
-
-        <div className="mb-3 flex flex-wrap items-center gap-2 rounded border border-border bg-surface-2 p-2 text-xs text-text-2">
-          <ListChecks size={14} />
-          <span>{selectedCount} selected</span>
-          <Button type="button" size="sm" variant="secondary" onClick={() => toggleSelectAllFiltered(true)}>
-            Select filtered
-          </Button>
-          <Button type="button" size="sm" variant="secondary" onClick={() => toggleSelectAllFiltered(false)}>
-            Clear
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            className="border border-success-400/60 bg-transparent text-success-300 hover:bg-success-500/10"
-            onClick={() => runBulkAction("start")}
-            disabled={selectedCount === 0}
-          >
-            Start selected
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            className="border border-danger-400/60 bg-transparent text-danger-300 hover:bg-danger-500/10"
-            onClick={() => runBulkAction("stop")}
-            disabled={selectedCount === 0}
-          >
-            Stop selected
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            className="border border-info-400/60 bg-transparent text-info-300 hover:bg-info-500/10"
-            onClick={() => runBulkAction("restart")}
-            disabled={selectedCount === 0}
-          >
-            Restart selected
-          </Button>
-        </div>
-
-        <div className="space-y-3 md:hidden">
-          {filtered.map((proc) => {
-            const summary = monitoringSummary[proc.name] || {};
-            const anomaly = summary.anomaly || { isAnomaly: false, score: 0 };
-
-            return (
-              <article key={proc.name} className="rounded-lg border border-border bg-surface-2 p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      checked={Boolean(selectedNames[proc.name])}
-                      onChange={(e) => toggleSelected(proc.name, e.target.checked)}
-                    />
-                    <button
-                      type="button"
-                      className="text-left font-semibold text-info-300 underline-offset-2 hover:underline"
-                      onClick={() => openDetails(proc)}
-                    >
-                      {proc.name}
-                    </button>
-                  </div>
-                  <StatusBadge status={proc.status} />
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-xs text-text-3">
-                  <p>CPU: {proc.cpu}%</p>
-                  <p>Memory: {bytesToMB(proc.memory)}</p>
-                  <p>Uptime: {durationLabel(summary.upMs || proc.uptime || 0)}</p>
-                  <p>Restarts: {proc.restarts ?? 0}</p>
-                  <p>Cron: {proc.cronRestart || "-"}</p>
-                  <p className="col-span-2">
-                    Anomaly: {anomaly.isAnomaly ? `score ${anomaly.score}` : "-"}
-                  </p>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-1">
-                  <ActionButton
-                    title="Logs"
-                    variant="secondary"
-                    onClick={() => navigate(`/dashboard/logs?process=${encodeURIComponent(proc.name)}`)}
-                    icon={<ScrollText size={14} />}
-                  />
-                  {Number(proc.port) > 0 && (
-                    <ActionButton
-                      title="Open App"
-                      variant="info"
-                      onClick={() => {
-                        try {
-                          openProcessUrl(proc.port);
-                        } catch (error) {
-                          toast.error(getErrorMessage(error, "Unable to open app URL"));
-                        }
-                      }}
-                      icon={<ExternalLink size={14} />}
-                    />
-                  )}
-                  <ActionButton
-                    title="Meta"
-                    variant="secondary"
-                    onClick={() => openMetaModal(proc)}
-                    icon={<ListChecks size={14} />}
-                  />
-                  {dotEnvByProcess[proc.name] && (
-                    <ActionButton
-                      title="Edit .env"
-                      variant="secondary"
-                      onClick={() => openDotEnvModal(proc)}
-                      icon={<ScrollText size={14} />}
-                    />
-                  )}
-                  <ActionButton
-                    title="Start"
-                    variant="success"
-                    disabled={proc.status === "online" || loadingAction[`${proc.name}:start`]}
-                    onClick={() => callAction("start", proc.name)}
-                    icon={<Play size={14} />}
-                  />
-                  <ActionButton
-                    title="Stop"
-                    variant="danger"
-                    disabled={proc.status === "stopped" || loadingAction[`${proc.name}:stop`]}
-                    onClick={() => callAction("stop", proc.name)}
-                    icon={<Square size={14} />}
-                  />
-                  <ActionButton
-                    title="Restart"
-                    variant="info"
-                    disabled={loadingAction[`${proc.name}:restart`]}
-                    onClick={() => callAction("restart", proc.name)}
-                    icon={<RefreshCw size={14} />}
-                  />
-                  <ActionButton
-                    title="Schedule"
-                    variant="secondary"
-                    disabled={loadingAction[`${proc.name}:schedule`]}
-                    onClick={() => callAction("schedule", proc.name)}
-                    icon={<AlarmClock size={14} />}
-                  />
-                  <ActionButton
-                    title="Duplicate"
-                    variant="secondary"
-                    disabled={loadingAction[`${proc.name}:duplicate`]}
-                    onClick={() => callAction("duplicate", proc.name)}
-                    icon={<Copy size={14} />}
-                  />
-                  <ActionButton
-                    title="Deploy"
-                    variant="info"
-                    disabled={loadingAction[`${proc.name}:deploy`]}
-                    onClick={() => openDeployModal(proc)}
-                    icon={<Rocket size={14} />}
-                  />
-                  <ActionButton
-                    title="Deploy History"
-                    variant="secondary"
-                    onClick={() => openDeploymentHistoryForProcess(proc.name)}
-                    icon={<ListChecks size={14} />}
-                  />
-                  <ActionButton
-                    title="Rollback"
-                    variant="warning"
-                    disabled={loadingAction[`${proc.name}:rollback`]}
-                    onClick={() => callAction("rollback", proc.name)}
-                    icon={<Undo2 size={14} />}
-                  />
-                  <ActionButton
-                    title="Git Pull"
-                    variant="secondary"
-                    disabled={loadingAction[`${proc.name}:gitPull`]}
-                    onClick={() => callAction("gitPull", proc.name)}
-                    icon={<Download size={14} />}
-                  />
-                  <ActionButton
-                    title="Delete"
-                    variant="danger"
-                    disabled={loadingAction[`${proc.name}:delete`]}
-                    onClick={() => callAction("delete", proc.name)}
-                    icon={<Trash2 size={14} />}
-                  />
-                </div>
-              </article>
-            );
-          })}
-          {filtered.length === 0 && <p className="text-center text-sm text-text-3">No processes found.</p>}
-        </div>
-
-        <div className="hidden overflow-x-auto md:block">
-          <table className="min-w-full text-sm">
-            <thead className="text-left text-text-3">
-              <tr>
-                <th className="px-2 py-2">
-                  <Checkbox
-                    checked={filtered.length > 0 && filtered.every((proc) => Boolean(selectedNames[proc.name]))}
-                    onChange={(e) => toggleSelectAllFiltered(e.target.checked)}
-                  />
-                </th>
-                <th className="px-2 py-2">ID</th>
-                <th className="px-2 py-2">Name</th>
-                <th className="px-2 py-2">Status</th>
-                <th className="px-2 py-2">CPU%</th>
-                <th className="px-2 py-2">Memory</th>
-                <th className="px-2 py-2">Uptime</th>
-                <th className="px-2 py-2">Downtime</th>
-                <th className="px-2 py-2">Restarts</th>
-                <th className="px-2 py-2">Anomaly</th>
-                <th className="px-2 py-2">Schedule</th>
-                <th className="px-2 py-2">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((proc) => {
-                const summary = monitoringSummary[proc.name] || {};
-                const anomaly = summary.anomaly || { isAnomaly: false, score: 0 };
-
-                return (
-                  <tr key={proc.name} className="border-t border-border">
-                    <td className="px-2 py-3">
-                      <Checkbox
-                        checked={Boolean(selectedNames[proc.name])}
-                        onChange={(e) => toggleSelected(proc.name, e.target.checked)}
-                      />
-                    </td>
-                    <td className="px-2 py-3">{proc.id ?? "-"}</td>
-                    <td className="px-2 py-3">
-                      <button
-                        type="button"
-                        className="font-medium text-info-300 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info-300"
-                        onClick={() => openDetails(proc)}
-                      >
-                        {proc.name}
-                      </button>
-                    </td>
-                    <td className="px-2 py-3">
-                      <StatusBadge status={proc.status} />
-                    </td>
-                    <td className="px-2 py-3">
-                      <div className="w-28">
-                        <div className="mb-1 text-xs text-text-3">{proc.cpu}%</div>
-                        <ProgressBar value={proc.cpu} tone="success" />
-                      </div>
-                    </td>
-                    <td className="px-2 py-3">{bytesToMB(proc.memory)}</td>
-                    <td className="px-2 py-3">{durationLabel(summary.upMs || proc.uptime || 0)}</td>
-                    <td className="px-2 py-3">{durationLabel(summary.downMs || 0)}</td>
-                    <td className="px-2 py-3">{proc.restarts ?? 0}</td>
-                    <td className="px-2 py-3">
-                      {anomaly.isAnomaly ? <Badge tone="warning">score {anomaly.score}</Badge> : <span className="text-xs text-text-3">-</span>}
-                    </td>
-                    <td className="px-2 py-3">
-                      {proc.cronRestart ? <Badge tone="info">{proc.cronRestart}</Badge> : <span className="text-xs text-text-3">-</span>}
-                    </td>
-                    <td className="px-2 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        <ActionButton
-                          title="Logs"
-                          variant="secondary"
-                          onClick={() => navigate(`/dashboard/logs?process=${encodeURIComponent(proc.name)}`)}
-                          icon={<ScrollText size={14} />}
-                        />
-                        {Number(proc.port) > 0 && (
-                          <ActionButton
-                            title="Open App"
-                            variant="info"
-                            onClick={() => {
-                              try {
-                                openProcessUrl(proc.port);
-                              } catch (error) {
-                                toast.error(getErrorMessage(error, "Unable to open app URL"));
-                              }
-                            }}
-                            icon={<ExternalLink size={14} />}
-                          />
-                        )}
-                        <ActionButton
-                          title="Edit Meta"
-                          variant="secondary"
-                          onClick={() => openMetaModal(proc)}
-                          icon={<ListChecks size={14} />}
-                        />
-                        {dotEnvByProcess[proc.name] && (
-                          <ActionButton
-                            title="Edit .env"
-                            variant="secondary"
-                            onClick={() => openDotEnvModal(proc)}
-                            icon={<ScrollText size={14} />}
-                          />
-                        )}
-                        <ActionButton
-                          title="Start"
-                          variant="success"
-                          disabled={proc.status === "online" || loadingAction[`${proc.name}:start`]}
-                          onClick={() => callAction("start", proc.name)}
-                          icon={<Play size={14} />}
-                        />
-                        <ActionButton
-                          title="Stop"
-                          variant="danger"
-                          disabled={proc.status === "stopped" || loadingAction[`${proc.name}:stop`]}
-                          onClick={() => callAction("stop", proc.name)}
-                          icon={<Square size={14} />}
-                        />
-                        <ActionButton
-                          title="Restart"
-                          variant="info"
-                          disabled={loadingAction[`${proc.name}:restart`]}
-                          onClick={() => callAction("restart", proc.name)}
-                          icon={<RefreshCw size={14} />}
-                        />
-                        <ActionButton
-                          title="Reload"
-                          variant="warning"
-                          disabled={proc.mode !== "cluster" || loadingAction[`${proc.name}:reload`]}
-                          onClick={() => callAction("reload", proc.name)}
-                          icon={<RotateCcw size={14} />}
-                        />
-                        {Boolean(npmCapabilitiesByProcess[proc.name]?.hasPackageJson) && (
-                          <ActionButton
-                            title="NPM Install"
-                            variant="secondary"
-                            disabled={loadingAction[`${proc.name}:npmInstall`]}
-                            onClick={() => callAction("npmInstall", proc.name)}
-                            icon={<Download size={14} />}
-                          />
-                        )}
-                        {Boolean(npmCapabilitiesByProcess[proc.name]?.hasBuildScript) && (
-                          <ActionButton
-                            title="NPM Build"
-                            variant="secondary"
-                            disabled={loadingAction[`${proc.name}:npmBuild`]}
-                            onClick={() => callAction("npmBuild", proc.name)}
-                            icon={<Hammer size={14} />}
-                          />
-                        )}
-                        <ActionButton
-                          title="Schedule"
-                          variant="secondary"
-                          disabled={loadingAction[`${proc.name}:schedule`]}
-                          onClick={() => callAction("schedule", proc.name)}
-                          icon={<AlarmClock size={14} />}
-                        />
-                        <ActionButton
-                          title="Duplicate"
-                          variant="secondary"
-                          disabled={loadingAction[`${proc.name}:duplicate`]}
-                          onClick={() => callAction("duplicate", proc.name)}
-                          icon={<Copy size={14} />}
-                        />
-                        <ActionButton
-                          title="Deploy"
-                          variant="info"
-                          disabled={loadingAction[`${proc.name}:deploy`]}
-                          onClick={() => openDeployModal(proc)}
-                          icon={<Rocket size={14} />}
-                        />
-                        <ActionButton
-                          title="Deploy History"
-                          variant="secondary"
-                          onClick={() => openDeploymentHistoryForProcess(proc.name)}
-                          icon={<ListChecks size={14} />}
-                        />
-                        <ActionButton
-                          title="Rollback"
-                          variant="warning"
-                          disabled={loadingAction[`${proc.name}:rollback`]}
-                          onClick={() => callAction("rollback", proc.name)}
-                          icon={<Undo2 size={14} />}
-                        />
-                        <ActionButton
-                          title="Git Pull"
-                          variant="secondary"
-                          disabled={loadingAction[`${proc.name}:gitPull`]}
-                          onClick={() => callAction("gitPull", proc.name)}
-                          icon={<Download size={14} />}
-                        />
-                        <ActionButton
-                          title="Delete"
-                          variant="danger"
-                          disabled={loadingAction[`${proc.name}:delete`]}
-                          onClick={() => callAction("delete", proc.name)}
-                          icon={<Trash2 size={14} />}
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {filtered.length === 0 && (
-                <tr>
-                  <td className="px-2 py-8 text-center text-text-3" colSpan={12}>
-                    No processes found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <ProcessListPanel
+        filtered={filtered}
+        monitoringSummary={monitoringSummary}
+        selectedNames={selectedNames}
+        toggleSelected={toggleSelected}
+        toggleSelectAllFiltered={toggleSelectAllFiltered}
+        selectedCount={selectedCount}
+        runBulkAction={runBulkAction}
+        query={query}
+        setQuery={setQuery}
+        openDetails={openDetails}
+        openMetaModal={openMetaModal}
+        openDotEnvModal={openDotEnvModal}
+        openDeployModal={openDeployModal}
+        openDeploymentHistoryForProcess={openDeploymentHistoryForProcess}
+        dotEnvByProcess={dotEnvByProcess}
+        npmCapabilitiesByProcess={npmCapabilitiesByProcess}
+        loadingAction={loadingAction}
+        callAction={callAction}
+        onOpenLogs={openLogsForProcess}
+        onOpenApp={openAppForPort}
+        bytesToMB={bytesToMB}
+        durationLabel={durationLabel}
+      />
 
       {selectedProcess && (
         <ProcessDetailModal
@@ -1693,46 +1179,6 @@ function openProcessUrl(port) {
   window.open(target, "_blank", "noopener,noreferrer");
 }
 
-function StatCard({ label, value, tone }) {
-  const toneClass = {
-    success: "text-success-300",
-    danger: "text-danger-300",
-    warning: "text-warning-300",
-    neutral: "text-text-1"
-  };
-
-  return (
-    <div className="page-panel">
-      <p className="text-sm text-text-3">{label}</p>
-      <p className={`mt-2 text-2xl font-semibold ${toneClass[tone] || toneClass.neutral}`}>{value}</p>
-    </div>
-  );
-}
-
-function ActionButton({ title, icon, variant, onClick, disabled }) {
-  const outlineClass = {
-    success: "border border-success-400/60 bg-transparent text-success-300 hover:bg-success-500/10",
-    danger: "border border-danger-400/60 bg-transparent text-danger-300 hover:bg-danger-500/10",
-    warning: "border border-warning-400/60 bg-transparent text-warning-300 hover:bg-warning-500/10",
-    info: "border border-info-400/60 bg-transparent text-info-300 hover:bg-info-500/10",
-    secondary: "border border-border bg-transparent text-text-2 hover:bg-surface-2"
-  }[variant] || "border border-border bg-transparent text-text-2 hover:bg-surface-2";
-
-  return (
-    <Button
-      type="button"
-      title={title}
-      size="sm-icon"
-      variant="secondary"
-      className={outlineClass}
-      disabled={disabled}
-      onClick={onClick}
-    >
-      {icon}
-    </Button>
-  );
-}
-
 function DotEnvValueInput({ valueType, value, onChange, disabled, sensitive = false, revealed = false }) {
   if (valueType === "boolean") {
     return (
@@ -1769,13 +1215,4 @@ function DotEnvValueInput({ valueType, value, onChange, disabled, sensitive = fa
   );
 }
 
-function StatusBadge({ status }) {
-  const map = {
-    online: "success",
-    stopped: "danger",
-    errored: "warning"
-  };
-
-  return <Badge tone={map[status] || "neutral"}>{status || "unknown"}</Badge>;
-}
 

@@ -384,7 +384,7 @@ export default function Logs() {
       />
 
       {showCreateHint && (
-        <section className="rounded-md border border-info-500/40 bg-info-500/10 p-3 text-sm text-info-300">
+        <section className="rounded-md border border-info-500/40 bg-info-500/10 p-3 text-base text-info-300">
           <p>Process creation request was accepted for <span className="font-semibold">{selected || defaultProcess}</span>. Waiting for first logs...</p>
           <p className="mt-1 text-xs text-text-3">
             If this stays empty, click Refresh Logs and check process status on Dashboard.
@@ -393,7 +393,7 @@ export default function Logs() {
       )}
 
       {launchSource === "create" && selected && (
-        <section className="rounded-md border border-border bg-surface p-3 text-sm">
+        <section className="rounded-md border border-border bg-surface p-3 text-base">
           <p className="text-text-2">
             Socket:{" "}
             <span className={connected ? "text-success-300" : "text-warning-300"}>
@@ -518,8 +518,8 @@ export default function Logs() {
         </section>
       )}
 
-      <section ref={containerRef} className="h-log-viewer overflow-y-auto rounded-lg border border-border bg-surface p-3 font-mono text-xs sm:p-4 sm:text-sm">
-        <PanelHeader title="Log Stream" className="mb-3 font-sans" />
+      <section ref={containerRef} className="h-log-viewer overflow-y-auto rounded-xl border border-border bg-surface p-3 font-mono text-sm sm:p-4 sm:text-base">
+        <PanelHeader title="Log Stream" className="mb-3 font-sans text-xl" />
         {!selected && !combinedView && (
           <div className="flex h-full flex-col items-center justify-center text-text-3">
             <Terminal size={36} />
@@ -557,4 +557,5 @@ export default function Logs() {
     </div>
   );
 }
+
 

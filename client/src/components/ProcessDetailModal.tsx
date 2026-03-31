@@ -4,7 +4,9 @@ import { X, Copy, Play, Square, RefreshCw, RotateCcw, Trash2, Download, Hammer, 
 import toast from "../lib/toast";
 import { processes as processApi } from "../api";
 import Button from "./ui/Button";
+import Badge from "./ui/Badge";
 import ProgressBar from "./ui/ProgressBar";
+import TabGroup from "./ui/TabGroup";
 
 const tabs = ["Overview", "Environment", "Resource Graph", "Quick Actions"];
 
@@ -148,13 +150,7 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
           </Button>
         </div>
 
-        <div className="mb-4 flex gap-2 overflow-x-auto">
-          {tabs.map((item) => (
-            <Button key={item} type="button" onClick={() => setTab(item)} variant={tab === item ? "success" : "secondary"} size="sm">
-              {item}
-            </Button>
-          ))}
-        </div>
+        <TabGroup items={tabs} value={tab} onChange={setTab} className="mb-4" />
 
         {tab === "Overview" && (
           <div className="space-y-3">
@@ -188,14 +184,14 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
                 <span className="flex items-center gap-1 text-text-2">
                   <span>{key}</span>
                   {isSensitiveEnvKey(key) && (
-                    <span className="inline-flex items-center gap-1 rounded border border-warning-500/40 bg-warning-500/10 px-1.5 py-0.5 text-[10px] text-warning-300">
+                    <Badge tone="warning" className="gap-1">
                       <ShieldAlert size={11} />
                       Sensitive
-                    </span>
+                    </Badge>
                   )}
                 </span>
                 <span className="truncate text-text-1">
-                  {isSensitiveEnvKey(key) && !revealSensitiveEnv ? "••••••••" : String(value)}
+                  {isSensitiveEnvKey(key) && !revealSensitiveEnv ? "********" : String(value)}
                 </span>
                 <Button
                   type="button"
@@ -338,4 +334,5 @@ function QuickAction({ label, icon: Icon, variant, onClick, disabled }) {
     </Button>
   );
 }
+
 

@@ -155,7 +155,7 @@ export default function History() {
 
       <section className="page-panel">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="section-title">Deployment History</h2>
+          <h2 className="text-xl font-semibold text-text-1">Deployment History</h2>
           <div className="flex items-center gap-2">
             <Button
               type="button"
@@ -184,7 +184,7 @@ export default function History() {
         <p className="mb-2 border-b border-border pb-2 text-xs text-text-3">
           Page {deploymentPagination.page} of {deploymentPagination.totalPages} ({deploymentPagination.totalItems} items)
         </p>
-        <div className="max-h-60 space-y-2 overflow-y-auto text-sm">
+        <div className="max-h-60 space-y-2 overflow-y-auto text-base">
           {deploymentHistoryLoading && <p className="text-text-3">Loading deployment history...</p>}
           {!deploymentHistoryLoading && deploymentHistory.length === 0 && <p className="text-text-3">No deployments yet.</p>}
           {deploymentHistory.map((item, idx) => (
@@ -237,7 +237,7 @@ export default function History() {
 
       <section className="page-panel">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="section-title">Restart History</h2>
+          <h2 className="text-xl font-semibold text-text-1">Restart History</h2>
           <Button
             type="button"
             variant="secondary"
@@ -252,7 +252,7 @@ export default function History() {
         <p className="mb-2 border-b border-border pb-2 text-xs text-text-3">
           Page {restartPagination.page} of {restartPagination.totalPages} ({restartPagination.totalItems} items)
         </p>
-        <div className="max-h-60 space-y-2 overflow-y-auto text-sm">
+        <div className="max-h-60 space-y-2 overflow-y-auto text-base">
           {restartHistoryLoading && <p className="text-text-3">Loading restart history...</p>}
           {!restartHistoryLoading && restartHistory.length === 0 && <p className="text-text-3">No restart history yet.</p>}
           {restartHistory.map((item, idx) => (
@@ -297,7 +297,7 @@ export default function History() {
 
       <section className="page-panel">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="section-title">Audit Trail</h2>
+          <h2 className="text-xl font-semibold text-text-1">Audit Trail</h2>
           <Button
             type="button"
             variant="secondary"
@@ -330,7 +330,7 @@ export default function History() {
         <p className="mb-2 border-b border-border pb-2 text-xs text-text-3">
           Page {auditPagination.page} of {auditPagination.totalPages} ({auditPagination.totalItems} items)
         </p>
-        <div className="max-h-72 space-y-2 overflow-y-auto text-sm">
+        <div className="max-h-72 space-y-2 overflow-y-auto text-base">
           {auditHistoryLoading && <p className="text-text-3">Loading audit trail...</p>}
           {!auditHistoryLoading && auditHistory.length === 0 && <p className="text-text-3">No audit entries yet.</p>}
           {auditHistory.map((item, idx) => (
@@ -369,3 +369,4 @@ export default function History() {
     </div>
   );
 }
+

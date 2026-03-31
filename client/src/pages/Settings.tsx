@@ -259,7 +259,7 @@ export default function Settings() {
       />
 
       <section className="page-panel">
-        <h2 className="section-title mb-3">PM2 Daemon Controls</h2>
+        <h2 className="mb-3 text-xl font-semibold text-text-1">PM2 Daemon Controls</h2>
         <div className="flex flex-wrap gap-2">
           <Button
             variant="outlineInfo"
@@ -290,8 +290,8 @@ export default function Settings() {
 
 
       <section className="page-panel">
-        <h2 className="section-title mb-3">Dashboard Settings</h2>
-        <div className="space-y-3 text-sm text-text-2">
+        <h2 className="mb-3 text-xl font-semibold text-text-1">Dashboard Settings</h2>
+        <div className="space-y-3 text-base text-text-2">
           <label className="block">
             Poll interval: {pollSeconds}s
             <input
@@ -321,7 +321,7 @@ export default function Settings() {
       </section>
 
       <section className="page-panel">
-        <h2 className="section-title mb-3">Process Config Export / Import</h2>
+        <h2 className="mb-3 text-xl font-semibold text-text-1">Process Config Export / Import</h2>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" onClick={exportConfig}>
             Export Config JSON
@@ -332,7 +332,7 @@ export default function Settings() {
 
       <section className="page-panel">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="section-title">External Alert Channels</h2>
+          <h2 className="text-xl font-semibold text-text-1">External Alert Channels</h2>
           {channelsWithFailures.length > 0 && (
             <span className="inline-flex items-center gap-1 rounded border border-warning-500/40 bg-warning-500/10 px-2 py-1 text-xs text-warning-300">
               <AlertTriangle size={12} />
@@ -392,7 +392,7 @@ export default function Settings() {
       </section>
 
       <section className="page-panel">
-        <h2 className="section-title mb-3">Change Password</h2>
+        <h2 className="mb-3 text-xl font-semibold text-text-1">Change Password</h2>
         <div className="grid gap-2 md:max-w-md">
           <Input
             type="password"
@@ -415,3 +415,4 @@ export default function Settings() {
     </div>
   );
 }
+

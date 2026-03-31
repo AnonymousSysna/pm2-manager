@@ -9,10 +9,11 @@ const variants = {
   warning: "bg-warning-600 text-white hover:bg-warning-500 focus-visible:ring-warning-300",
   info: "bg-info-600 text-white hover:bg-info-500 focus-visible:ring-info-300",
   outline: "border border-border bg-transparent text-text-2 hover:bg-surface-2 focus-visible:ring-brand-400",
-  outlineSuccess: "border border-success-400/60 bg-transparent text-success-300 hover:bg-success-500/10 focus-visible:ring-success-300",
-  outlineDanger: "border border-danger-400/60 bg-transparent text-danger-300 hover:bg-danger-500/10 focus-visible:ring-danger-300",
-  outlineWarning: "border border-warning-400/60 bg-transparent text-warning-300 hover:bg-warning-500/10 focus-visible:ring-warning-300",
-  outlineInfo: "border border-info-400/60 bg-transparent text-info-300 hover:bg-info-500/10 focus-visible:ring-info-300",
+  outlinePrimary: "border border-brand-500/60 bg-transparent text-brand-400 hover:bg-brand-500/10 focus-visible:ring-brand-400",
+  outlineSuccess: "border border-success-500/60 bg-transparent text-success-300 hover:bg-success-500/10 focus-visible:ring-success-300",
+  outlineDanger: "border border-danger-500/60 bg-transparent text-danger-300 hover:bg-danger-500/10 focus-visible:ring-danger-300",
+  outlineWarning: "border border-warning-500/60 bg-transparent text-warning-300 hover:bg-warning-500/10 focus-visible:ring-warning-300",
+  outlineInfo: "border border-info-500/60 bg-transparent text-info-300 hover:bg-info-500/10 focus-visible:ring-info-300",
   ghost: "text-text-2 hover:bg-surface-2 focus-visible:ring-brand-400"
 };
 
@@ -46,4 +47,3 @@ export default function Button({
     />
   );
 }
-

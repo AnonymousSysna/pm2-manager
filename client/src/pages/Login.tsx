@@ -44,7 +44,7 @@ export default function Login() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg p-4">
-      <div className="w-full max-w-md rounded-lg border border-border bg-surface p-8 shadow-2xl shadow-black/30">
+      <div className="w-full max-w-md rounded-xl border border-border bg-surface p-8 shadow-2xl shadow-black/30">
         <div className="mb-6 flex flex-col items-center gap-3">
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-500 text-lg font-bold text-bg">PM2</div>
           <h1 className="page-title">PM2 Manager</h1>
@@ -53,7 +53,7 @@ export default function Login() {
         <form className="space-y-4" onSubmit={handleSubmit}>
           <Input type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Username" required />
           <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" required />
-          <Button type="submit" variant="success" disabled={loading} className="w-full">
+          <Button type="submit" variant="primary" disabled={loading} className="w-full">
             {loading ? <span className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" /> : "Sign In"}
           </Button>
         </form>
@@ -61,4 +61,5 @@ export default function Login() {
     </div>
   );
 }
+
 
