@@ -6,6 +6,7 @@ const path = require("path");
 const { spawn } = require("child_process");
 const pm2 = require("pm2");
 const { withPM2 } = require("../utils/pm2Client");
+const { withPermissionHint } = require("../utils/permissionHints");
 const {
   ENV_KEY_PATTERN,
   sanitizeProcessName,
@@ -533,13 +534,10 @@ function runCommand(command, args, cwd, options = {}) {
         resolve({ code, stdout, stderr });
         return;
       }
-      reject(
-        new Error(
-          `Command failed (${command} ${args.join(" ")}), exit code ${code}${
-            stderr ? `: ${stderr.trim()}` : ""
-          }`
-        )
-      );
+      const baseMessage = `Command failed (${command} ${args.join(" ")}), exit code ${code}${
+        stderr ? `: ${stderr.trim()}` : ""
+      }`;
+      reject(new Error(withPermissionHint(baseMessage, { command, args })));
     });
   });
 }

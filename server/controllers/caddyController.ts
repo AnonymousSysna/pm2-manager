@@ -4,6 +4,7 @@ const os = require("os");
 const path = require("path");
 const tls = require("tls");
 const { spawn } = require("child_process");
+const { withPermissionHint } = require("../utils/permissionHints");
 
 const COMMAND_TIMEOUT_MS = Number.isFinite(Number(process.env.COMMAND_TIMEOUT_MS))
   ? Math.max(5000, Math.floor(Number(process.env.COMMAND_TIMEOUT_MS)))
@@ -73,13 +74,10 @@ function runCommand(command, args, options = {}) {
         return;
       }
       if (code !== 0 && !allowNonZero) {
-        reject(
-          new Error(
-            `Command failed (${command} ${args.join(" ")}), exit code ${code}${
-              stderr ? `: ${stderr.trim()}` : ""
-            }`
-          )
-        );
+        const baseMessage = `Command failed (${command} ${args.join(" ")}), exit code ${code}${
+          stderr ? `: ${stderr.trim()}` : ""
+        }`;
+        reject(new Error(withPermissionHint(baseMessage, { command, args })));
         return;
       }
       resolve({ code, stdout, stderr });
@@ -496,228 +494,267 @@ async function getCaddyStatus() {
 }
 
 async function installCaddy() {
-  const caddyStatus = await detectCaddy();
-  if (caddyStatus.installed) {
-    return {
-      success: true,
-      data: { alreadyInstalled: true, status: caddyStatus },
-      error: null
-    };
-  }
-
-  const installInfo = await getInstallInfo();
-  const commands = installInfo.installCommands;
-  if (!commands.length) {
-    return {
-      success: false,
-      data: null,
-      error: `No supported install command found for ${installInfo.platform}`
-    };
-  }
-
-  const attempts = [];
-  for (const entry of commands) {
-    try {
-      const result = await runCommand(entry.command, entry.args);
-      attempts.push({
-        command: `${entry.command} ${entry.args.join(" ")}`,
+  try {
+    const caddyStatus = await detectCaddy();
+    if (caddyStatus.installed) {
+      return {
         success: true,
-        output: String(result.stdout || result.stderr || "").trim().slice(-2000)
-      });
-    } catch (error) {
-      attempts.push({
-        command: `${entry.command} ${entry.args.join(" ")}`,
+        data: { alreadyInstalled: true, status: caddyStatus },
+        error: null
+      };
+    }
+
+    const installInfo = await getInstallInfo();
+    const commands = installInfo.installCommands;
+    if (!commands.length) {
+      return {
         success: false,
-        error: error.message
-      });
+        data: null,
+        error: `No supported install command found for ${installInfo.platform}`
+      };
+    }
+
+    const attempts = [];
+    for (const entry of commands) {
+      try {
+        const result = await runCommand(entry.command, entry.args);
+        attempts.push({
+          command: `${entry.command} ${entry.args.join(" ")}`,
+          success: true,
+          output: String(result.stdout || result.stderr || "").trim().slice(-2000)
+        });
+      } catch (error) {
+        const hinted = withPermissionHint(error?.message || "Install command failed", {
+          command: entry.command,
+          args: entry.args
+        });
+        attempts.push({
+          command: `${entry.command} ${entry.args.join(" ")}`,
+          success: false,
+          error: hinted
+        });
+        return {
+          success: false,
+          data: { attempts },
+          error: `Caddy install failed. ${hinted}`
+        };
+      }
+    }
+
+    const after = await detectCaddy();
+    if (!after.installed) {
       return {
         success: false,
         data: { attempts },
-        error: `Caddy install failed. ${error.message}`
+        error: "Install commands completed but caddy is still not available in PATH"
       };
     }
-  }
 
-  const after = await detectCaddy();
-  if (!after.installed) {
     return {
-      success: false,
-      data: { attempts },
-      error: "Install commands completed but caddy is still not available in PATH"
+      success: true,
+      data: { attempts, status: after },
+      error: null
     };
-  }
-
-  return {
-    success: true,
-    data: { attempts, status: after },
-    error: null
-  };
-}
-
-async function addReverseProxy(payload = {}) {
-  const domain = sanitizeDomain(payload.domain);
-  const upstream = sanitizeUpstream(payload.upstream);
-
-  const status = await detectCaddy();
-
-  const caddyfilePath = getCaddyfilePath();
-  const sites = await readManagedSites();
-  sites[domain] = upstream;
-  await writeManagedSites(sites);
-  await removeDomainBlocksFromCaddyfile(caddyfilePath, domain);
-  await updateCaddyfileManagedSection(caddyfilePath, sites);
-
-  let validation = { success: false, skipped: true, error: "Caddy is not installed or unavailable in PATH" };
-  let reload = { success: false, skipped: true, error: "Caddy is not installed or unavailable in PATH" };
-  if (status.installed && status.available) {
-    try {
-      await runCommand("caddy", ["validate", "--config", caddyfilePath, "--adapter", "caddyfile"]);
-      validation = { success: true, skipped: false, error: null };
-    } catch (error) {
-      validation = { success: false, skipped: false, error: error.message };
-    }
-
-    try {
-      await runCommand("caddy", ["reload", "--config", caddyfilePath, "--adapter", "caddyfile"]);
-      reload = { success: true, skipped: false, error: null };
-    } catch (error) {
-      reload = { success: false, skipped: false, error: error.message };
-    }
-  }
-
-  const warnings = [];
-  if (!validation.success) {
-    warnings.push(validation.error);
-  }
-  if (!reload.success) {
-    warnings.push(reload.error);
-  }
-  const operationSuccess = validation.success && reload.success;
-
-  return {
-    success: operationSuccess,
-    data: {
-      domain,
-      upstream,
-      caddyfilePath,
-      validation,
-      reload,
-      warnings
-    },
-    error: operationSuccess ? null : "Caddy validate/reload failed"
-  };
-}
-
-async function deleteReverseProxy(payload = {}) {
-  const domain = sanitizeDomain(payload.domain);
-
-  const status = await detectCaddy();
-
-  const caddyfilePath = getCaddyfilePath();
-  const sites = await readManagedSites();
-  delete sites[domain];
-  await writeManagedSites(sites);
-  await removeDomainBlocksFromCaddyfile(caddyfilePath, domain);
-  await updateCaddyfileManagedSection(caddyfilePath, sites);
-
-  let validation = { success: false, skipped: true, error: "Caddy is not installed or unavailable in PATH" };
-  let reload = { success: false, skipped: true, error: "Caddy is not installed or unavailable in PATH" };
-  if (status.installed && status.available) {
-    try {
-      await runCommand("caddy", ["validate", "--config", caddyfilePath, "--adapter", "caddyfile"]);
-      validation = { success: true, skipped: false, error: null };
-    } catch (error) {
-      validation = { success: false, skipped: false, error: error.message };
-    }
-
-    try {
-      await runCommand("caddy", ["reload", "--config", caddyfilePath, "--adapter", "caddyfile"]);
-      reload = { success: true, skipped: false, error: null };
-    } catch (error) {
-      reload = { success: false, skipped: false, error: error.message };
-    }
-  }
-
-  const warnings = [];
-  if (!validation.success) {
-    warnings.push(validation.error);
-  }
-  if (!reload.success) {
-    warnings.push(reload.error);
-  }
-  const operationSuccess = validation.success && reload.success;
-
-  return {
-    success: operationSuccess,
-    data: {
-      domain,
-      caddyfilePath,
-      validation,
-      reload,
-      warnings
-    },
-    error: operationSuccess ? null : "Caddy validate/reload failed"
-  };
-}
-
-async function restartCaddyService() {
-  const status = await detectCaddy();
-  if (!status.installed) {
+  } catch (error) {
     return {
       success: false,
       data: null,
-      error: "Caddy is not installed"
+      error: withPermissionHint(error?.message || "Caddy install failed")
     };
   }
+}
 
-  const platform = getPlatformName();
-  const attempts = [];
-  const restartCommands = [];
+async function addReverseProxy(payload = {}) {
+  try {
+    const domain = sanitizeDomain(payload.domain);
+    const upstream = sanitizeUpstream(payload.upstream);
 
-  if (platform === "linux") {
-    restartCommands.push({ command: "systemctl", args: ["restart", "caddy"] });
-    restartCommands.push({ command: "service", args: ["caddy", "restart"] });
-  } else if (platform === "macos") {
-    restartCommands.push({ command: "brew", args: ["services", "restart", "caddy"] });
-  } else if (platform === "windows") {
-    restartCommands.push({ command: "sc", args: ["stop", "caddy"] });
-    restartCommands.push({ command: "sc", args: ["start", "caddy"] });
-  }
+    const status = await detectCaddy();
 
-  restartCommands.push({
-    command: "caddy",
-    args: ["reload", "--config", getCaddyfilePath(), "--adapter", "caddyfile"]
-  });
+    const caddyfilePath = getCaddyfilePath();
+    const sites = await readManagedSites();
+    sites[domain] = upstream;
+    await writeManagedSites(sites);
+    await removeDomainBlocksFromCaddyfile(caddyfilePath, domain);
+    await updateCaddyfileManagedSection(caddyfilePath, sites);
 
-  for (const entry of restartCommands) {
-    try {
-      const result = await runCommand(entry.command, entry.args);
-      attempts.push({
-        command: `${entry.command} ${entry.args.join(" ")}`,
-        success: true,
-        output: String(result.stdout || result.stderr || "").trim().slice(-2000)
-      });
-      if (entry.command !== "sc" || entry.args[0] !== "stop") {
-        return {
-          success: true,
-          data: { attempts, platform },
-          error: null
-        };
+    let validation = { success: false, skipped: true, error: "Caddy is not installed or unavailable in PATH" };
+    let reload = { success: false, skipped: true, error: "Caddy is not installed or unavailable in PATH" };
+    if (status.installed && status.available) {
+      try {
+        await runCommand("caddy", ["validate", "--config", caddyfilePath, "--adapter", "caddyfile"]);
+        validation = { success: true, skipped: false, error: null };
+      } catch (error) {
+        validation = { success: false, skipped: false, error: error.message };
       }
-    } catch (error) {
-      attempts.push({
-        command: `${entry.command} ${entry.args.join(" ")}`,
-        success: false,
-        error: error.message
-      });
-    }
-  }
 
-  return {
-    success: false,
-    data: { attempts, platform },
-    error: "Unable to restart Caddy service with available commands"
-  };
+      try {
+        await runCommand("caddy", ["reload", "--config", caddyfilePath, "--adapter", "caddyfile"]);
+        reload = { success: true, skipped: false, error: null };
+      } catch (error) {
+        reload = { success: false, skipped: false, error: error.message };
+      }
+    }
+
+    const warnings = [];
+    if (!validation.success) {
+      warnings.push(validation.error);
+    }
+    if (!reload.success) {
+      warnings.push(reload.error);
+    }
+    const operationSuccess = validation.success && reload.success;
+
+    return {
+      success: operationSuccess,
+      data: {
+        domain,
+        upstream,
+        caddyfilePath,
+        validation,
+        reload,
+        warnings
+      },
+      error: operationSuccess ? null : "Caddy validate/reload failed"
+    };
+  } catch (error) {
+    return {
+      success: false,
+      data: null,
+      error: withPermissionHint(error?.message || "Failed to add reverse proxy")
+    };
+  }
+}
+
+async function deleteReverseProxy(payload = {}) {
+  try {
+    const domain = sanitizeDomain(payload.domain);
+
+    const status = await detectCaddy();
+
+    const caddyfilePath = getCaddyfilePath();
+    const sites = await readManagedSites();
+    delete sites[domain];
+    await writeManagedSites(sites);
+    await removeDomainBlocksFromCaddyfile(caddyfilePath, domain);
+    await updateCaddyfileManagedSection(caddyfilePath, sites);
+
+    let validation = { success: false, skipped: true, error: "Caddy is not installed or unavailable in PATH" };
+    let reload = { success: false, skipped: true, error: "Caddy is not installed or unavailable in PATH" };
+    if (status.installed && status.available) {
+      try {
+        await runCommand("caddy", ["validate", "--config", caddyfilePath, "--adapter", "caddyfile"]);
+        validation = { success: true, skipped: false, error: null };
+      } catch (error) {
+        validation = { success: false, skipped: false, error: error.message };
+      }
+
+      try {
+        await runCommand("caddy", ["reload", "--config", caddyfilePath, "--adapter", "caddyfile"]);
+        reload = { success: true, skipped: false, error: null };
+      } catch (error) {
+        reload = { success: false, skipped: false, error: error.message };
+      }
+    }
+
+    const warnings = [];
+    if (!validation.success) {
+      warnings.push(validation.error);
+    }
+    if (!reload.success) {
+      warnings.push(reload.error);
+    }
+    const operationSuccess = validation.success && reload.success;
+
+    return {
+      success: operationSuccess,
+      data: {
+        domain,
+        caddyfilePath,
+        validation,
+        reload,
+        warnings
+      },
+      error: operationSuccess ? null : "Caddy validate/reload failed"
+    };
+  } catch (error) {
+    return {
+      success: false,
+      data: null,
+      error: withPermissionHint(error?.message || "Failed to delete reverse proxy")
+    };
+  }
+}
+
+async function restartCaddyService() {
+  try {
+    const status = await detectCaddy();
+    if (!status.installed) {
+      return {
+        success: false,
+        data: null,
+        error: "Caddy is not installed"
+      };
+    }
+
+    const platform = getPlatformName();
+    const attempts = [];
+    const restartCommands = [];
+
+    if (platform === "linux") {
+      restartCommands.push({ command: "systemctl", args: ["restart", "caddy"] });
+      restartCommands.push({ command: "service", args: ["caddy", "restart"] });
+    } else if (platform === "macos") {
+      restartCommands.push({ command: "brew", args: ["services", "restart", "caddy"] });
+    } else if (platform === "windows") {
+      restartCommands.push({ command: "sc", args: ["stop", "caddy"] });
+      restartCommands.push({ command: "sc", args: ["start", "caddy"] });
+    }
+
+    restartCommands.push({
+      command: "caddy",
+      args: ["reload", "--config", getCaddyfilePath(), "--adapter", "caddyfile"]
+    });
+
+    for (const entry of restartCommands) {
+      try {
+        const result = await runCommand(entry.command, entry.args);
+        attempts.push({
+          command: `${entry.command} ${entry.args.join(" ")}`,
+          success: true,
+          output: String(result.stdout || result.stderr || "").trim().slice(-2000)
+        });
+        if (entry.command !== "sc" || entry.args[0] !== "stop") {
+          return {
+            success: true,
+            data: { attempts, platform },
+            error: null
+          };
+        }
+      } catch (error) {
+        attempts.push({
+          command: `${entry.command} ${entry.args.join(" ")}`,
+          success: false,
+          error: withPermissionHint(error?.message || "Restart command failed", {
+            command: entry.command,
+            args: entry.args
+          })
+        });
+      }
+    }
+
+    return {
+      success: false,
+      data: { attempts, platform },
+      error: "Unable to restart Caddy service with available commands"
+    };
+  } catch (error) {
+    return {
+      success: false,
+      data: null,
+      error: withPermissionHint(error?.message || "Unable to restart Caddy service")
+    };
+  }
 }
 
 module.exports = {

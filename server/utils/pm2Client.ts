@@ -1,5 +1,6 @@
 // @ts-nocheck
 const pm2 = require("pm2");
+const { withPermissionHint } = require("./permissionHints");
 
 function withPM2(action) {
   return new Promise((resolve) => {
@@ -20,10 +21,11 @@ function withPM2(action) {
           closeAndResolve({ success: true, data, error: null });
         })
         .catch((error) => {
+          const raw = error?.message || "Unknown PM2 error";
           closeAndResolve({
             success: false,
             data: null,
-            error: error.message || "Unknown PM2 error"
+            error: withPermissionHint(raw)
           });
         });
     });
