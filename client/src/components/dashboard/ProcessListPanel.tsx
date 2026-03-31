@@ -100,13 +100,13 @@ export default function ProcessListPanel({
                 </div>
                 <StatusBadge status={proc.status} />
               </div>
-              <div className="grid grid-cols-2 gap-2 text-xs text-text-3">
-                <p>CPU: {proc.cpu}%</p>
-                <p>Memory: {bytesToMB(proc.memory)}</p>
-                <p>Uptime: {durationLabel(summary.upMs || proc.uptime || 0)}</p>
-                <p>Restarts: {proc.restarts ?? 0}</p>
-                <p>Cron: {proc.cronRestart || "-"}</p>
-                <p className="col-span-2">
+              <div className="grid grid-cols-2 gap-2 overflow-x-auto text-xs text-text-3">
+                <p className="whitespace-nowrap">CPU: {proc.cpu}%</p>
+                <p className="whitespace-nowrap">Memory: {bytesToMB(proc.memory)}</p>
+                <p className="whitespace-nowrap">Uptime: {durationLabel(summary.upMs || proc.uptime || 0)}</p>
+                <p className="whitespace-nowrap">Restarts: {proc.restarts ?? 0}</p>
+                <p className="whitespace-nowrap">Cron: {proc.cronRestart || "-"}</p>
+                <p className="col-span-2 whitespace-nowrap">
                   Anomaly: {anomaly.isAnomaly ? `score ${anomaly.score}` : "-"}
                 </p>
               </div>
@@ -210,17 +210,17 @@ export default function ProcessListPanel({
                   onChange={(e) => toggleSelectAllFiltered(e.target.checked)}
                 />
               </th>
-              <th className="px-2 py-2">ID</th>
-              <th className="px-2 py-2">Name</th>
-              <th className="px-2 py-2">Status</th>
-              <th className="px-2 py-2">CPU%</th>
-              <th className="px-2 py-2">Memory</th>
-              <th className="px-2 py-2">Uptime</th>
-              <th className="px-2 py-2">Downtime</th>
-              <th className="px-2 py-2">Restarts</th>
-              <th className="px-2 py-2">Anomaly</th>
-              <th className="px-2 py-2">Schedule</th>
-              <th className="px-2 py-2">Actions</th>
+              <th className="whitespace-nowrap px-2 py-2">ID</th>
+              <th className="whitespace-nowrap px-2 py-2">Name</th>
+              <th className="whitespace-nowrap px-2 py-2">Status</th>
+              <th className="whitespace-nowrap px-2 py-2">CPU%</th>
+              <th className="whitespace-nowrap px-2 py-2">Memory</th>
+              <th className="whitespace-nowrap px-2 py-2">Uptime</th>
+              <th className="whitespace-nowrap px-2 py-2">Downtime</th>
+              <th className="whitespace-nowrap px-2 py-2">Restarts</th>
+              <th className="whitespace-nowrap px-2 py-2">Anomaly</th>
+              <th className="whitespace-nowrap px-2 py-2">Schedule</th>
+              <th className="whitespace-nowrap px-2 py-2">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -236,8 +236,8 @@ export default function ProcessListPanel({
                       onChange={(e) => toggleSelected(proc.name, e.target.checked)}
                     />
                   </td>
-                  <td className="px-2 py-3">{proc.id ?? "-"}</td>
-                  <td className="px-2 py-3">
+                  <td className="whitespace-nowrap px-2 py-3">{proc.id ?? "-"}</td>
+                  <td className="whitespace-nowrap px-2 py-3">
                     <button
                       type="button"
                       className="whitespace-nowrap font-medium text-info-300 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info-300"
@@ -246,23 +246,23 @@ export default function ProcessListPanel({
                       {proc.name}
                     </button>
                   </td>
-                  <td className="px-2 py-3">
+                  <td className="whitespace-nowrap px-2 py-3">
                     <StatusBadge status={proc.status} />
                   </td>
-                  <td className="px-2 py-3">
+                  <td className="whitespace-nowrap px-2 py-3">
                     <div className="w-28">
                       <div className="mb-1 text-xs text-text-3">{proc.cpu}%</div>
                       <ProgressBar value={proc.cpu} tone="success" />
                     </div>
                   </td>
-                  <td className="px-2 py-3">{bytesToMB(proc.memory)}</td>
-                  <td className="px-2 py-3">{durationLabel(summary.upMs || proc.uptime || 0)}</td>
-                  <td className="px-2 py-3">{durationLabel(summary.downMs || 0)}</td>
-                  <td className="px-2 py-3">{proc.restarts ?? 0}</td>
-                  <td className="px-2 py-3">
+                  <td className="whitespace-nowrap px-2 py-3">{bytesToMB(proc.memory)}</td>
+                  <td className="whitespace-nowrap px-2 py-3">{durationLabel(summary.upMs || proc.uptime || 0)}</td>
+                  <td className="whitespace-nowrap px-2 py-3">{durationLabel(summary.downMs || 0)}</td>
+                  <td className="whitespace-nowrap px-2 py-3">{proc.restarts ?? 0}</td>
+                  <td className="whitespace-nowrap px-2 py-3">
                     {anomaly.isAnomaly ? <Badge tone="warning">score {anomaly.score}</Badge> : <span className="text-xs text-text-3">-</span>}
                   </td>
-                  <td className="px-2 py-3">
+                  <td className="whitespace-nowrap px-2 py-3">
                     {proc.cronRestart ? <Badge tone="info">{proc.cronRestart}</Badge> : <span className="text-xs text-text-3">-</span>}
                   </td>
                   <td className="px-2 py-3">
