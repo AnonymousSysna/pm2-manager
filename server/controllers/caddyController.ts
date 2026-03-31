@@ -2,6 +2,7 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const tls = require("tls");
 const { spawn } = require("child_process");
 
 const COMMAND_TIMEOUT_MS = Number.isFinite(Number(process.env.COMMAND_TIMEOUT_MS))
@@ -416,6 +417,54 @@ function getStatusPayload(caddyStatus, installInfo, sites, caddyfileSites) {
   };
 }
 
+function isWildcardDomain(domain) {
+  return String(domain || "").trim().startsWith("*.");
+}
+
+async function checkHttpsStatus(domain) {
+  const trimmed = String(domain || "").trim().toLowerCase();
+  if (!trimmed) {
+    return { state: "unknown", message: "Empty domain" };
+  }
+  if (isWildcardDomain(trimmed)) {
+    return { state: "unknown", message: "Wildcard domain cannot be probed directly" };
+  }
+
+  return new Promise((resolve) => {
+    const socket = tls.connect(
+      {
+        host: trimmed,
+        port: 443,
+        servername: trimmed,
+        rejectUnauthorized: false,
+        timeout: 5000
+      },
+      () => {
+        const certificate = socket.getPeerCertificate(true);
+        const validTo = certificate?.valid_to ? new Date(certificate.valid_to).toISOString() : null;
+        const now = Date.now();
+        const expiresAt = validTo ? Date.parse(validTo) : NaN;
+        const expired = Number.isFinite(expiresAt) ? expiresAt <= now : false;
+        resolve({
+          state: expired ? "warning" : "active",
+          message: expired ? "Certificate is expired" : "TLS certificate detected",
+          validTo,
+          issuer: certificate?.issuer?.O || certificate?.issuer?.CN || null
+        });
+        socket.end();
+      }
+    );
+
+    socket.on("timeout", () => {
+      resolve({ state: "inactive", message: "TLS probe timed out on port 443" });
+      socket.destroy();
+    });
+    socket.on("error", (error) => {
+      resolve({ state: "inactive", message: error?.message || "TLS probe failed" });
+    });
+  });
+}
+
 async function getCaddyStatus() {
   const caddyfilePath = getCaddyfilePath();
   const [caddyStatus, installInfo, sites] = await Promise.all([
@@ -424,9 +473,24 @@ async function getCaddyStatus() {
     readManagedSites()
   ]);
   const caddyfileSites = await readCaddyfileSites(caddyfilePath);
+  const mergedSites = {
+    ...(caddyfileSites || {}),
+    ...(sites || {})
+  };
+  const sslStatusByDomain = {};
+  await Promise.all(
+    Object.keys(mergedSites).map(async (domain) => {
+      sslStatusByDomain[domain] = await checkHttpsStatus(domain);
+    })
+  );
+  const payload = getStatusPayload(caddyStatus, installInfo, sites, caddyfileSites);
+  payload.managedSites = payload.managedSites.map((site) => ({
+    ...site,
+    https: sslStatusByDomain[site.domain] || { state: "unknown", message: "No TLS data" }
+  }));
   return {
     success: true,
-    data: getStatusPayload(caddyStatus, installInfo, sites, caddyfileSites),
+    data: payload,
     error: null
   };
 }

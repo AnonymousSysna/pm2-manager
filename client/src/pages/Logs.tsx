@@ -117,6 +117,7 @@ export default function Logs() {
   const [filter, setFilter] = useState("both");
   const [keyword, setKeyword] = useState("");
   const [combinedView, setCombinedView] = useState(false);
+  const [combinedTargets, setCombinedTargets] = useState([]);
   const [processOptions, setProcessOptions] = useState([]);
   const [entries, setEntries] = useState([]);
   const [logsLoading, setLogsLoading] = useState(false);
@@ -173,7 +174,7 @@ export default function Logs() {
       setLogsLoading(true);
       try {
         const targets = combinedView
-          ? processOptions.map((item) => item.name).slice(0, 8)
+          ? (combinedTargets.length > 0 ? combinedTargets : processOptions.map((item) => item.name)).slice(0, 12)
           : [selected];
 
         const responses = await Promise.all(targets.map((name) => processApi.logs(name, lineCount)));
@@ -226,7 +227,7 @@ export default function Logs() {
     };
 
     loadLogs();
-  }, [selected, lineCount, combinedView, processOptions, refreshNonce]);
+  }, [selected, lineCount, combinedView, combinedTargets, processOptions, refreshNonce]);
 
   useEffect(() => {
     if (showCreateHint && entries.length > 0) {
@@ -240,7 +241,7 @@ export default function Logs() {
 
   useEffect(() => {
     const targetNames = combinedView
-      ? processOptions.map((item) => item.name)
+      ? combinedTargets.length > 0 ? combinedTargets : processOptions.map((item) => item.name)
       : selected
         ? [selected]
         : [];
@@ -287,7 +288,7 @@ export default function Logs() {
     }
 
     setEntries((prev) => [...prev, ...incoming].slice(-2000));
-  }, [logsByProcess, selected, combinedView, processOptions]);
+  }, [logsByProcess, selected, combinedView, combinedTargets, processOptions]);
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -479,6 +480,43 @@ export default function Logs() {
           Refresh Logs
         </Button>
       </section>
+
+      {combinedView && (
+        <section className="page-panel">
+          <PanelHeader title="Combined Targets (up to 12)" className="mb-2" />
+          <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
+            {processOptions.map((proc) => (
+              <label key={proc.name} className="flex items-center gap-2 text-text-2">
+                <Checkbox
+                  checked={combinedTargets.includes(proc.name)}
+                  onChange={(e) => {
+                    setCombinedTargets((prev) => {
+                      if (e.target.checked) {
+                        return Array.from(new Set([...prev, proc.name])).slice(0, 12);
+                      }
+                      return prev.filter((name) => name !== proc.name);
+                    });
+                  }}
+                />
+                {proc.name}
+              </label>
+            ))}
+          </div>
+          <div className="mt-2 flex gap-2">
+            <Button type="button" size="sm" variant="secondary" onClick={() => setCombinedTargets([])}>
+              Use all
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => setCombinedTargets(processOptions.map((item) => item.name).slice(0, 12))}
+            >
+              Select first 12
+            </Button>
+          </div>
+        </section>
+      )}
 
       <section ref={containerRef} className="h-log-viewer overflow-y-auto rounded-lg border border-border bg-surface p-3 font-mono text-xs sm:p-4 sm:text-sm">
         <PanelHeader title="Log Stream" className="mb-3 font-sans" />

@@ -21,6 +21,7 @@ export type ProcessSummary = {
   memory: number;
   uptime: number;
   restarts: number;
+  cronRestart?: string | null;
   port: number | string | null;
   mode: "fork" | "cluster";
 };

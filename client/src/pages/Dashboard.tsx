@@ -14,11 +14,13 @@ import {
   Rocket,
   ListChecks,
   X,
-  ExternalLink
+  ExternalLink,
+  Copy,
+  AlarmClock
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import toast, { getErrorMessage } from "../lib/toast";
-import { processes as processApi } from "../api";
+import { alerts as alertsApi, caddy as caddyApi, processes as processApi } from "../api";
 import { useSocket } from "../hooks/useSocket";
 import ProcessDetailModal from "../components/ProcessDetailModal";
 import Badge from "../components/ui/Badge";
@@ -31,6 +33,10 @@ import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 
 function bytesToMB(value) {
   return `${(Number(value || 0) / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function bytesToGB(value) {
+  return `${(Number(value || 0) / 1024 / 1024 / 1024).toFixed(1)} GB`;
 }
 
 function uptimeLabel(ms) {
@@ -134,6 +140,14 @@ export default function Dashboard() {
   const [deploySubmitting, setDeploySubmitting] = useState(false);
   const [deployStartedAt, setDeployStartedAt] = useState(0);
   const [deployElapsedSec, setDeployElapsedSec] = useState(0);
+  const [systemResources, setSystemResources] = useState(null);
+  const [checklist, setChecklist] = useState({
+    hasProcess: false,
+    hasAlertChannel: false,
+    hasStartupPersistence: localStorage.getItem("pm2_onboarding_startup_checked") === "true",
+    hasDomain: false,
+    dismissed: localStorage.getItem("pm2_onboarding_checklist_dismissed") === "true"
+  });
 
   const refreshCatalog = async () => {
     try {
@@ -169,10 +183,48 @@ export default function Dashboard() {
     }
   };
 
+  const refreshSystemResources = async () => {
+    try {
+      const result = await processApi.systemResources();
+      if (result.success) {
+        setSystemResources(result.data || null);
+      }
+    } catch (_error) {
+      // Optional panel; keep previous values.
+    }
+  };
+
+  const refreshOnboardingChecklist = async () => {
+    try {
+      const [processResult, channelResult, caddyResult] = await Promise.all([
+        processApi.list(),
+        alertsApi.listChannels(),
+        caddyApi.status()
+      ]);
+      setChecklist((prev) => ({
+        ...prev,
+        hasProcess: Boolean(processResult?.success && Array.isArray(processResult.data) && processResult.data.length > 0),
+        hasAlertChannel: Boolean(channelResult?.success && Array.isArray(channelResult.data) && channelResult.data.length > 0),
+        hasDomain: Boolean(caddyResult?.success && Array.isArray(caddyResult.data?.managedSites) && caddyResult.data.managedSites.length > 0),
+        hasStartupPersistence: prev.hasStartupPersistence || localStorage.getItem("pm2_onboarding_startup_checked") === "true"
+      }));
+    } catch (_error) {
+      // Keep checklist best-effort.
+    }
+  };
+
   useEffect(() => {
     refreshCatalog();
+    refreshSystemResources();
+    refreshOnboardingChecklist();
     const timer = setInterval(refreshCatalog, 15000);
-    return () => clearInterval(timer);
+    const systemTimer = setInterval(refreshSystemResources, 20000);
+    const checklistTimer = setInterval(refreshOnboardingChecklist, 30000);
+    return () => {
+      clearInterval(timer);
+      clearInterval(systemTimer);
+      clearInterval(checklistTimer);
+    };
   }, []);
 
   useEffect(() => {
@@ -297,6 +349,15 @@ export default function Dashboard() {
     [selectedNames]
   );
 
+  const checklistItems = useMemo(() => ([
+    { key: "hasProcess", label: "Create your first process", done: checklist.hasProcess, to: "/dashboard/create" },
+    { key: "hasAlertChannel", label: "Add an alert channel", done: checklist.hasAlertChannel, to: "/dashboard/settings" },
+    { key: "hasStartupPersistence", label: "Enable startup persistence", done: checklist.hasStartupPersistence, to: "/dashboard/settings" },
+    { key: "hasDomain", label: "Configure a domain in Caddy", done: checklist.hasDomain, to: "/dashboard/caddy" }
+  ]), [checklist]);
+
+  const checklistDoneCount = checklistItems.filter((item) => item.done).length;
+
   const dependencyEdges = useMemo(() => {
     const edges = [];
     const seen = new Set();
@@ -346,6 +407,24 @@ export default function Dashboard() {
         ) ?? "").trim();
         actionPayload = { targetCommit, restartMode: "restart" };
       }
+      if (action === "duplicate") {
+        const targetName = (window.prompt(`Duplicate ${name} as`, `${name}-copy`) ?? "").trim();
+        if (!targetName) {
+          return;
+        }
+        actionPayload = { targetName };
+      }
+      if (action === "schedule") {
+        const current = processes.find((item) => item.name === name)?.cronRestart || "";
+        const nextCron = window.prompt(
+          "Set cron restart expression. Leave blank to disable.\nExample: 0 4 * * *",
+          current
+        );
+        if (nextCron === null) {
+          return;
+        }
+        actionPayload = { cron_restart: String(nextCron || "").trim() || null };
+      }
 
       const handlers = {
         start: processApi.start,
@@ -355,6 +434,8 @@ export default function Dashboard() {
         npmInstall: processApi.npmInstall,
         npmBuild: processApi.npmBuild,
         gitPull: processApi.gitPull,
+        schedule: (processName) => processApi.updateSchedule(processName, actionPayload?.cron_restart ?? null),
+        duplicate: (processName) => processApi.duplicate(processName, actionPayload?.targetName || ""),
         deploy: (processName) => processApi.deploy(processName, actionPayload || {}),
         rollback: (processName) => processApi.rollback(processName, actionPayload || {}),
         delete: processApi.delete
@@ -367,6 +448,8 @@ export default function Dashboard() {
         npmInstall: "NPM install",
         npmBuild: "NPM build",
         gitPull: "Git pull",
+        schedule: "Schedule restart",
+        duplicate: "Duplicate",
         deploy: "Deploy",
         rollback: "Rollback",
         delete: "Delete"
@@ -742,6 +825,76 @@ export default function Dashboard() {
         <StatCard label="Errored" value={stats.errored} tone="warning" />
       </section>
 
+      {!checklist.dismissed && (
+        <section className="page-panel">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <PanelHeader title={`Setup Checklist (${checklistDoneCount}/${checklistItems.length})`} />
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                localStorage.setItem("pm2_onboarding_checklist_dismissed", "true");
+                setChecklist((prev) => ({ ...prev, dismissed: true }));
+              }}
+            >
+              Dismiss
+            </Button>
+          </div>
+          <div className="space-y-2">
+            {checklistItems.map((item) => (
+              <div key={item.key} className="flex items-center justify-between gap-2 rounded border border-border bg-surface-2 px-3 py-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <Badge tone={item.done ? "success" : "warning"}>{item.done ? "Done" : "Todo"}</Badge>
+                  <span className="text-text-2">{item.label}</span>
+                </div>
+                {!item.done && (
+                  <Button type="button" size="sm" variant="outlineInfo" onClick={() => navigate(item.to)}>
+                    Open
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="page-panel">
+        <PanelHeader title="System Resources" className="mb-2" />
+        {!systemResources ? (
+          <p className="text-sm text-text-3">Loading system resources...</p>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
+              <div className="rounded border border-border bg-surface-2 p-2">
+                <p className="text-xs text-text-3">CPU</p>
+                <p>{systemResources.cpu?.cores || 0} cores</p>
+                <p className="text-xs text-text-3">load avg: {(systemResources.loadAverage || []).map((v) => Number(v).toFixed(2)).join(", ")}</p>
+              </div>
+              <div className="rounded border border-border bg-surface-2 p-2">
+                <p className="text-xs text-text-3">Memory</p>
+                <p>{bytesToGB(systemResources.memory?.usedBytes || 0)} / {bytesToGB(systemResources.memory?.totalBytes || 0)}</p>
+                <p className="text-xs text-text-3">{Number(systemResources.memory?.usedPercent || 0).toFixed(1)}% used</p>
+              </div>
+              <div className="rounded border border-border bg-surface-2 p-2">
+                <p className="text-xs text-text-3">Disk</p>
+                <p>{bytesToGB(systemResources.disk?.usedBytes || 0)} / {bytesToGB(systemResources.disk?.totalBytes || 0)}</p>
+                <p className="text-xs text-text-3">{Number(systemResources.disk?.usedPercent || 0).toFixed(1)}% used</p>
+              </div>
+            </div>
+            {Array.isArray(systemResources.disk?.mounts) && systemResources.disk.mounts.length > 0 && (
+              <div className="max-h-32 space-y-1 overflow-y-auto rounded border border-border bg-surface-2 p-2 text-xs text-text-3">
+                {systemResources.disk.mounts.slice(0, 12).map((mount) => (
+                  <p key={`${mount.mount}-${mount.filesystem || ""}`}>
+                    {mount.mount}: {bytesToGB(mount.usedBytes || 0)} / {bytesToGB(mount.totalBytes || 0)} ({Number(mount.usedPercent || 0).toFixed(1)}%)
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
       <section>
         <div className="page-panel space-y-3">
           <PanelHeader title="Dependency Graph" />
@@ -893,6 +1046,7 @@ export default function Dashboard() {
                   <p>Memory: {bytesToMB(proc.memory)}</p>
                   <p>Uptime: {durationLabel(summary.upMs || proc.uptime || 0)}</p>
                   <p>Restarts: {proc.restarts ?? 0}</p>
+                  <p>Cron: {proc.cronRestart || "-"}</p>
                   <p className="col-span-2">
                     Anomaly: {anomaly.isAnomaly ? `score ${anomaly.score}` : "-"}
                   </p>
@@ -954,6 +1108,20 @@ export default function Dashboard() {
                     icon={<RefreshCw size={14} />}
                   />
                   <ActionButton
+                    title="Schedule"
+                    variant="secondary"
+                    disabled={loadingAction[`${proc.name}:schedule`]}
+                    onClick={() => callAction("schedule", proc.name)}
+                    icon={<AlarmClock size={14} />}
+                  />
+                  <ActionButton
+                    title="Duplicate"
+                    variant="secondary"
+                    disabled={loadingAction[`${proc.name}:duplicate`]}
+                    onClick={() => callAction("duplicate", proc.name)}
+                    icon={<Copy size={14} />}
+                  />
+                  <ActionButton
                     title="Deploy"
                     variant="info"
                     disabled={loadingAction[`${proc.name}:deploy`]}
@@ -979,6 +1147,13 @@ export default function Dashboard() {
                     disabled={loadingAction[`${proc.name}:gitPull`]}
                     onClick={() => callAction("gitPull", proc.name)}
                     icon={<Download size={14} />}
+                  />
+                  <ActionButton
+                    title="Delete"
+                    variant="danger"
+                    disabled={loadingAction[`${proc.name}:delete`]}
+                    onClick={() => callAction("delete", proc.name)}
+                    icon={<Trash2 size={14} />}
                   />
                 </div>
               </article>
@@ -1006,6 +1181,7 @@ export default function Dashboard() {
                 <th className="px-2 py-2">Downtime</th>
                 <th className="px-2 py-2">Restarts</th>
                 <th className="px-2 py-2">Anomaly</th>
+                <th className="px-2 py-2">Schedule</th>
                 <th className="px-2 py-2">Actions</th>
               </tr>
             </thead>
@@ -1047,6 +1223,9 @@ export default function Dashboard() {
                     <td className="px-2 py-3">{proc.restarts ?? 0}</td>
                     <td className="px-2 py-3">
                       {anomaly.isAnomaly ? <Badge tone="warning">score {anomaly.score}</Badge> : <span className="text-xs text-text-3">-</span>}
+                    </td>
+                    <td className="px-2 py-3">
+                      {proc.cronRestart ? <Badge tone="info">{proc.cronRestart}</Badge> : <span className="text-xs text-text-3">-</span>}
                     </td>
                     <td className="px-2 py-3">
                       <div className="flex flex-wrap gap-1">
@@ -1131,6 +1310,20 @@ export default function Dashboard() {
                           />
                         )}
                         <ActionButton
+                          title="Schedule"
+                          variant="secondary"
+                          disabled={loadingAction[`${proc.name}:schedule`]}
+                          onClick={() => callAction("schedule", proc.name)}
+                          icon={<AlarmClock size={14} />}
+                        />
+                        <ActionButton
+                          title="Duplicate"
+                          variant="secondary"
+                          disabled={loadingAction[`${proc.name}:duplicate`]}
+                          onClick={() => callAction("duplicate", proc.name)}
+                          icon={<Copy size={14} />}
+                        />
+                        <ActionButton
                           title="Deploy"
                           variant="info"
                           disabled={loadingAction[`${proc.name}:deploy`]}
@@ -1171,7 +1364,7 @@ export default function Dashboard() {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td className="px-2 py-8 text-center text-text-3" colSpan={11}>
+                  <td className="px-2 py-8 text-center text-text-3" colSpan={12}>
                     No processes found.
                   </td>
                 </tr>

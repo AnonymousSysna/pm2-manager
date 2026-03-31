@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useEffect, useMemo, useState } from "react";
-import { X, Copy, Play, Square, RefreshCw, RotateCcw, Trash2, Download, Hammer, ShieldAlert, History } from "lucide-react";
+import { X, Copy, Play, Square, RefreshCw, RotateCcw, Trash2, Download, Hammer, ShieldAlert, History, AlarmClock } from "lucide-react";
 import toast from "../lib/toast";
 import { processes as processApi } from "../api";
 import Button from "./ui/Button";
@@ -109,7 +109,8 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
       createdAt: env.created_at,
       unstableRestarts: env.unstable_restarts,
       versioning: env.versioning,
-      port: process?.port
+      port: process?.port,
+      cronRestart: process?.cronRestart || env.cron_restart || null
     };
   }, [process]);
 
@@ -266,6 +267,20 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
               variant="warning"
               disabled={!isCluster || !isOnline || loadingAction.reload}
               onClick={() => runAction("reload", process.name)}
+            />
+            <QuickAction
+              label="Schedule"
+              icon={AlarmClock}
+              variant="secondary"
+              disabled={loadingAction.schedule}
+              onClick={() => runAction("schedule", process.name)}
+            />
+            <QuickAction
+              label="Duplicate"
+              icon={Copy}
+              variant="secondary"
+              disabled={loadingAction.duplicate}
+              onClick={() => runAction("duplicate", process.name)}
             />
             <QuickAction
               label="NPM Install"

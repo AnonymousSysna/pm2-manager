@@ -183,6 +183,21 @@ export default function Caddy() {
                 <div>
                   <p className="font-medium text-text-1">{item.domain}</p>
                   <p className="text-text-3">reverse_proxy {item.upstream}</p>
+                  <p className="text-xs text-text-3">
+                    HTTPS:{" "}
+                    <span
+                      className={
+                        item?.https?.state === "active"
+                          ? "text-success-300"
+                          : item?.https?.state === "warning"
+                            ? "text-warning-300"
+                            : "text-danger-300"
+                      }
+                    >
+                      {item?.https?.state || "unknown"}
+                    </span>
+                    {item?.https?.message ? ` (${item.https.message})` : ""}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Button

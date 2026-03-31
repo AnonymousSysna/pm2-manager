@@ -116,6 +116,23 @@ function sanitizeInterpreter(value) {
   return sanitizeOptionalString(value, "interpreter", 128);
 }
 
+function sanitizeCronExpression(value) {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  const str = String(value).trim();
+  if (!str) {
+    return undefined;
+  }
+  if (str.length > 128) {
+    throw new Error("cron_restart exceeds max length 128");
+  }
+  if (!/^[A-Za-z0-9_*,\/\-?\s]+$/.test(str)) {
+    throw new Error("cron_restart contains invalid characters");
+  }
+  return str;
+}
+
 module.exports = {
   PROCESS_NAME_PATTERN,
   ENV_KEY_PATTERN,
@@ -126,6 +143,7 @@ module.exports = {
   sanitizeOptionalString,
   sanitizeNodeArgs,
   sanitizeMaxMemoryRestart,
-  sanitizeInterpreter
+  sanitizeInterpreter,
+  sanitizeCronExpression
 };
 

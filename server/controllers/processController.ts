@@ -1,6 +1,7 @@
 // @ts-nocheck
 const fs = require("fs");
 const net = require("net");
+const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
 const pm2 = require("pm2");
@@ -14,7 +15,8 @@ const {
   sanitizeOptionalString,
   sanitizeNodeArgs,
   sanitizeMaxMemoryRestart,
-  sanitizeInterpreter
+  sanitizeInterpreter,
+  sanitizeCronExpression
 } = require("../utils/validation");
 const { trackPm2Operation } = require("../middleware/metrics");
 const { appendHistoryEntry } = require("../utils/restartHistory");
@@ -150,6 +152,7 @@ const INTERPRETER_CATALOG = [
  * @property {string} [node_args]
  * @property {string} [interpreter]
  * @property {string} [log_date_format]
+ * @property {string} [cron_restart]
  * @property {string} [project_path]
  * @property {string} [git_clone_url]
  * @property {string} [git_branch]
@@ -560,6 +563,75 @@ function compactOutput(output = "") {
     .slice(-2000);
 }
 
+function normalizeDiskEntries(entries = []) {
+  return entries
+    .map((item) => {
+      const totalBytes = Number(item.totalBytes || 0);
+      const freeBytes = Number(item.freeBytes || 0);
+      const usedBytes = Math.max(0, totalBytes - freeBytes);
+      return {
+        mount: String(item.mount || "").trim(),
+        filesystem: String(item.filesystem || "").trim() || null,
+        totalBytes,
+        usedBytes,
+        freeBytes,
+        usedPercent: totalBytes > 0 ? Number(((usedBytes / totalBytes) * 100).toFixed(1)) : 0
+      };
+    })
+    .filter((item) => item.mount && item.totalBytes > 0);
+}
+
+async function readDiskUsage() {
+  if (process.platform === "win32") {
+    const psScript = "Get-CimInstance Win32_LogicalDisk -Filter \"DriveType=3\" | Select-Object DeviceID,Size,FreeSpace | ConvertTo-Json -Compress";
+    const psResult = await runCommand("powershell", ["-NoProfile", "-Command", psScript], process.cwd());
+    const raw = String(psResult.stdout || "").trim();
+    let parsed = [];
+    try {
+      const value = JSON.parse(raw || "[]");
+      parsed = Array.isArray(value) ? value : [value];
+    } catch (_error) {
+      parsed = [];
+    }
+    return normalizeDiskEntries(
+      parsed.map((item) => ({
+        mount: String(item.DeviceID || "").trim(),
+        totalBytes: Number(item.Size || 0),
+        freeBytes: Number(item.FreeSpace || 0),
+        filesystem: "ntfs"
+      }))
+    );
+  }
+
+  const dfResult = await runCommand("df", ["-kP"], process.cwd());
+  const lines = String(dfResult.stdout || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length <= 1) {
+    return [];
+  }
+
+  const entries = [];
+  for (const line of lines.slice(1)) {
+    const parts = line.split(/\s+/);
+    if (parts.length < 6) {
+      continue;
+    }
+    const [filesystem, totalKb, usedKb, availableKb] = parts;
+    const mount = parts[parts.length - 1];
+    entries.push({
+      mount,
+      filesystem,
+      totalBytes: Number(totalKb || 0) * 1024,
+      freeBytes: Number(availableKb || 0) * 1024,
+      usedBytes: Number(usedKb || 0) * 1024
+    });
+  }
+
+  return normalizeDiskEntries(entries);
+}
+
 function runDetectCommand(command, args) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -791,6 +863,7 @@ function formatProcess(proc) {
     memory: monit.memory || 0,
     uptime: formatUptime(proc),
     restarts: pm2Env.restart_time || 0,
+    cronRestart: String(pm2Env.cron_restart || "").trim() || null,
     port: findPort(env),
     mode
   };
@@ -1357,6 +1430,7 @@ async function createProcess(config, actorContext = "unknown") {
       node_args,
       interpreter,
       log_date_format,
+      cron_restart,
       project_path,
       git_clone_url,
       git_branch,
@@ -1670,7 +1744,8 @@ async function createProcess(config, actorContext = "unknown") {
       max_memory_restart: sanitizeMaxMemoryRestart(max_memory_restart),
       node_args: sanitizeNodeArgs(node_args),
       interpreter: sanitizeInterpreter(resolvedInterpreterOverride || interpreter),
-      log_date_format: sanitizeOptionalString(log_date_format, "log_date_format", 128)
+      log_date_format: sanitizeOptionalString(log_date_format, "log_date_format", 128),
+      cron_restart: sanitizeCronExpression(cron_restart)
     };
 
     if (normalizedPort) {
@@ -1924,6 +1999,194 @@ async function getProcessDetails(name) {
   const processName = sanitizeProcessName(name, "process name");
   const result = await withPM2(() => describeProcess(processName));
   trackPm2Operation("processes.details", result.success);
+  return result;
+}
+
+async function readSystemResources() {
+  try {
+    const cpuCount = Array.isArray(os.cpus()) ? os.cpus().length : 0;
+    const totalMemoryBytes = Number(os.totalmem() || 0);
+    const freeMemoryBytes = Number(os.freemem() || 0);
+    const usedMemoryBytes = Math.max(0, totalMemoryBytes - freeMemoryBytes);
+    const disks = await readDiskUsage().catch(() => []);
+
+    const diskTotalBytes = disks.reduce((sum, item) => sum + Number(item.totalBytes || 0), 0);
+    const diskFreeBytes = disks.reduce((sum, item) => sum + Number(item.freeBytes || 0), 0);
+    const diskUsedBytes = Math.max(0, diskTotalBytes - diskFreeBytes);
+
+    return {
+      success: true,
+      data: {
+        hostname: os.hostname(),
+        platform: process.platform,
+        uptimeSec: Math.floor(Number(os.uptime() || 0)),
+        loadAverage: os.loadavg(),
+        cpu: {
+          cores: cpuCount
+        },
+        memory: {
+          totalBytes: totalMemoryBytes,
+          usedBytes: usedMemoryBytes,
+          freeBytes: freeMemoryBytes,
+          usedPercent: totalMemoryBytes > 0 ? Number(((usedMemoryBytes / totalMemoryBytes) * 100).toFixed(1)) : 0
+        },
+        disk: {
+          totalBytes: diskTotalBytes,
+          usedBytes: diskUsedBytes,
+          freeBytes: diskFreeBytes,
+          usedPercent: diskTotalBytes > 0 ? Number(((diskUsedBytes / diskTotalBytes) * 100).toFixed(1)) : 0,
+          mounts: disks
+        }
+      },
+      error: null
+    };
+  } catch (error) {
+    return {
+      success: false,
+      data: null,
+      error: error?.message || "Failed to read system resources"
+    };
+  }
+}
+
+async function updateProcessSchedule(name, payload = {}, actorContext = "unknown") {
+  const processName = sanitizeProcessName(name, "process name");
+  const { actor, ip } = normalizeActorContext(actorContext);
+
+  let cronRestart;
+  try {
+    cronRestart = sanitizeCronExpression(payload.cron_restart);
+  } catch (error) {
+    return { success: false, data: null, error: error?.message || "Invalid cron_restart" };
+  }
+
+  const result = await withPM2(
+    () =>
+      new Promise((resolve, reject) => {
+        pm2.restart(
+          {
+            name: processName,
+            cron_restart: cronRestart || 0,
+            updateEnv: true
+          },
+          (error, proc) => {
+            if (error) {
+              reject(error);
+              return;
+            }
+            const first = Array.isArray(proc) ? proc[0] : proc;
+            const appliedCron = String(first?.pm2_env?.cron_restart || "").trim() || null;
+            resolve({
+              processName,
+              cronRestart: appliedCron
+            });
+          }
+        );
+      })
+  );
+
+  trackPm2Operation("processes.schedule.update", result.success);
+  if (result.success) {
+    await recordOperationNotification({
+      category: "operation",
+      title: `${processName} schedule updated`,
+      message: result.data?.cronRestart
+        ? `cron_restart set to ${result.data.cronRestart}`
+        : "cron_restart disabled",
+      processName,
+      details: result.data
+    });
+  }
+  await writeAudit("process.schedule.update", { actor, ip }, {
+    processName,
+    success: result.success,
+    details: result.success ? result.data : { requested: cronRestart || null },
+    error: result.success ? null : result.error || "schedule update failed"
+  });
+  return result;
+}
+
+async function duplicateProcess(name, payload = {}, actorContext = "unknown") {
+  const sourceName = sanitizeProcessName(name, "process name");
+  const { actor, ip } = normalizeActorContext(actorContext);
+  const targetName = sanitizeProcessName(payload?.name, "duplicate process name");
+
+  if (sourceName === targetName) {
+    return { success: false, data: null, error: "duplicate process name must differ from source process name" };
+  }
+
+  const result = await withPM2(async () => {
+    const source = await describeProcess(sourceName);
+    if (!source) {
+      throw new Error(`Process not found: ${sourceName}`);
+    }
+
+    const existingTarget = await describeProcess(targetName);
+    if (existingTarget) {
+      throw new Error(`Process already exists: ${targetName}`);
+    }
+
+    const pm2Env = source.pm2_env || {};
+    const sourceEnv = pm2Env.env && typeof pm2Env.env === "object" ? pm2Env.env : {};
+    const envWithoutName = { ...sourceEnv };
+    delete envWithoutName.name;
+    delete envWithoutName.pm_id;
+
+    const nextConfig = {
+      name: targetName,
+      script: sanitizeScriptPath(pm2Env.pm_exec_path || source.pm_exec_path || ""),
+      cwd: path.resolve(pm2Env.pm_cwd || process.cwd()),
+      args: sanitizeOptionalString(pm2Env.args && Array.isArray(pm2Env.args) ? pm2Env.args.join(" ") : pm2Env.args, "args", 1024),
+      node_args: sanitizeNodeArgs(pm2Env.node_args),
+      interpreter: sanitizeInterpreter(pm2Env.exec_interpreter),
+      exec_mode: String(pm2Env.exec_mode || "").includes("cluster") ? "cluster" : "fork",
+      instances: Number.isFinite(Number(pm2Env.instances)) ? Math.max(1, Number(pm2Env.instances)) : 1,
+      watch: Boolean(pm2Env.watch),
+      max_memory_restart: sanitizeMaxMemoryRestart(pm2Env.max_memory_restart),
+      log_date_format: sanitizeOptionalString(pm2Env.log_date_format, "log_date_format", 128),
+      cron_restart: sanitizeCronExpression(pm2Env.cron_restart),
+      env: sanitizeEnvObject(envWithoutName)
+    };
+
+    await new Promise((resolve, reject) => {
+      pm2.start(nextConfig, (error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
+
+    const created = await describeProcess(targetName);
+    if (!created) {
+      throw new Error(`Failed to verify duplicated process: ${targetName}`);
+    }
+
+    return {
+      sourceName,
+      targetName,
+      cronRestart: String(created?.pm2_env?.cron_restart || "").trim() || null
+    };
+  });
+
+  trackPm2Operation("processes.duplicate", result.success);
+  if (result.success) {
+    await recordOperationNotification({
+      category: "operation",
+      title: `${sourceName} duplicated`,
+      message: `Created ${targetName} from ${sourceName}`,
+      processName: targetName,
+      details: result.data
+    });
+  }
+  await writeAudit("process.duplicate", { actor, ip }, {
+    processName: targetName,
+    success: result.success,
+    details: result.success ? result.data : { sourceName },
+    error: result.success ? null : result.error || "duplicate failed"
+  });
+
   return result;
 }
 
@@ -2601,8 +2864,11 @@ module.exports = {
   reloadProcess,
   flushLogs,
   getProcessDetails,
+  readSystemResources,
   npmInstall,
   npmBuild,
+  updateProcessSchedule,
+  duplicateProcess,
   updateProcessMetadata,
   removeProcessMetadata,
   readProcessMetrics,

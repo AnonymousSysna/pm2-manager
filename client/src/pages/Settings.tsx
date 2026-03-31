@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Copy, X } from "lucide-react";
 import toast, { getErrorMessage } from "../lib/toast";
 import { auth, pm2Admin, alerts as alertsApi, processes as processApi } from "../api";
 import Button from "../components/ui/Button";
@@ -23,7 +23,29 @@ export default function Settings() {
   const [channelUrl, setChannelUrl] = useState("");
   const [channelSeverity, setChannelSeverity] = useState("warning");
   const [channelEnabled, setChannelEnabled] = useState(true);
+  const [startupWizard, setStartupWizard] = useState(null);
+  const [startupLoading, setStartupLoading] = useState(false);
   const fileRef = useRef(null);
+
+  const copyText = async (value) => {
+    const text = String(value || "");
+    if (!text) {
+      return;
+    }
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+    const el = document.createElement("textarea");
+    el.value = text;
+    el.style.position = "fixed";
+    el.style.top = "-1000px";
+    document.body.appendChild(el);
+    el.focus();
+    el.select();
+    document.execCommand("copy");
+    document.body.removeChild(el);
+  };
 
   useEffect(() => {
     pm2Admin
@@ -214,6 +236,22 @@ export default function Settings() {
 
   const channelsWithFailures = channels.filter((channel) => Number(channel?.deliveryStats?.failedDeliveries || 0) > 0);
 
+  const openStartupWizard = async () => {
+    try {
+      setStartupLoading(true);
+      const result = await pm2Admin.startup();
+      if (!result.success) {
+        throw new Error(result.error || "Failed to prepare startup command");
+      }
+      setStartupWizard(result.data || {});
+      localStorage.setItem("pm2_onboarding_startup_checked", "true");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Failed to prepare startup command"));
+    } finally {
+      setStartupLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <PageIntro
@@ -224,6 +262,13 @@ export default function Settings() {
       <section className="page-panel">
         <h2 className="section-title mb-3">PM2 Daemon Controls</h2>
         <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outlineInfo"
+            onClick={openStartupWizard}
+            disabled={startupLoading}
+          >
+            {startupLoading ? "Preparing..." : "Persist on Reboot"}
+          </Button>
           <Button variant="info" onClick={() => runAction("Resurrect", pm2Admin.resurrect)}>
             Resurrect Saved Processes
           </Button>
@@ -243,6 +288,57 @@ export default function Settings() {
           <p>PM2 Home: {info.pm2Home || "unknown"}</p>
         </div>
       </section>
+
+      {startupWizard && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="surface-overlay absolute inset-0"
+            aria-label="Close startup wizard"
+            onClick={() => setStartupWizard(null)}
+          />
+          <div className="relative z-10 w-full max-w-2xl rounded-lg border border-border bg-surface p-4 shadow-xl">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h3 className="section-title">Startup Persistence Wizard</h3>
+              <Button type="button" variant="ghost" size="icon" onClick={() => setStartupWizard(null)}>
+                <X size={18} />
+              </Button>
+            </div>
+            <div className="space-y-3 text-sm text-text-2">
+              <p>
+                1. Run this command in your server shell:
+              </p>
+              <div className="rounded border border-border bg-surface-2 p-3">
+                <code className="block break-all text-xs text-text-1">
+                  {startupWizard.instructionCommand || "pm2 startup"}
+                </code>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="mt-2"
+                  onClick={async () => {
+                    await copyText(startupWizard.instructionCommand || "pm2 startup");
+                    toast.success("Startup command copied");
+                  }}
+                >
+                  <Copy size={14} /> Copy Command
+                </Button>
+              </div>
+              <p>2. Run <code>pm2 save</code> after startup is configured.</p>
+              <p className="text-xs text-text-3">
+                Tip: you can also click the existing Save button in this page to run PM2 dump.
+              </p>
+              {startupWizard?.startup?.output && (
+                <details className="rounded border border-border bg-surface-2 p-3 text-xs text-text-3">
+                  <summary className="cursor-pointer text-text-2">Startup command output</summary>
+                  <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap">{startupWizard.startup.output}</pre>
+                </details>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <section className="page-panel">
         <h2 className="section-title mb-3">Dashboard Settings</h2>
@@ -370,4 +466,3 @@ export default function Settings() {
     </div>
   );
 }
-

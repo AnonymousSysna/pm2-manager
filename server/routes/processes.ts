@@ -15,8 +15,11 @@ const {
   reloadProcess,
   flushLogs,
   getProcessDetails,
+  readSystemResources,
   npmInstall,
   npmBuild,
+  updateProcessSchedule,
+  duplicateProcess,
   updateProcessMetadata,
   removeProcessMetadata,
   readProcessMetrics,
@@ -152,6 +155,11 @@ router.get("/monitoring/summary", readLimiter, asyncHandler(async (_req, res) =>
   res.status(result.success ? 200 : 500).json(result);
 }));
 
+router.get("/system/resources", readLimiter, asyncHandler(async (_req, res) => {
+  const result = await readSystemResources();
+  res.status(result.success ? 200 : 500).json(result);
+}));
+
 router.get("/config/export", readLimiter, asyncHandler(async (_req, res) => {
   const result = await exportProcessConfig();
   res.status(result.success ? 200 : 500).json(result);
@@ -249,6 +257,32 @@ router.post("/:name/reload", writeLimiter, validateProcessParam, asyncHandler(as
     ip: getRequestIp(req)
   });
   res.status(result.success ? 200 : 500).json(result);
+}));
+
+router.patch("/:name/schedule", writeLimiter, validateProcessParam, asyncHandler(async (req, res) => {
+  const result = await updateProcessSchedule(req.params.name, req.body || {}, {
+    actor: req.user?.username || "unknown",
+    ip: getRequestIp(req)
+  });
+  const status = result.success
+    ? 200
+    : /invalid|required|cron/i.test(result.error || "")
+      ? 400
+      : 500;
+  res.status(status).json(result);
+}));
+
+router.post("/:name/duplicate", writeLimiter, validateProcessParam, asyncHandler(async (req, res) => {
+  const result = await duplicateProcess(req.params.name, req.body || {}, {
+    actor: req.user?.username || "unknown",
+    ip: getRequestIp(req)
+  });
+  const status = result.success
+    ? 200
+    : /must|invalid|already exists|not found|differ/i.test(result.error || "")
+      ? 400
+      : 500;
+  res.status(status).json(result);
 }));
 
 router.patch("/:name/env", writeLimiter, validateProcessParam, asyncHandler(async (req, res) => {

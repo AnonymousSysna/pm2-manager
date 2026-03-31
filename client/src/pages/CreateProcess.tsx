@@ -174,6 +174,7 @@ export default function CreateProcess() {
     node_args: "",
     interpreter: "node",
     log_date_format: "",
+    cron_restart: "",
     envRows: [defaultEnvRow]
   });
 
@@ -416,6 +417,7 @@ export default function CreateProcess() {
       node_args: showAdvanced ? form.node_args || undefined : undefined,
       interpreter: showAdvanced ? form.interpreter || undefined : undefined,
       log_date_format: showAdvanced ? form.log_date_format || undefined : undefined,
+      cron_restart: showAdvanced ? String(form.cron_restart || "").trim() || undefined : undefined,
       env
     };
   };
@@ -761,6 +763,15 @@ export default function CreateProcess() {
 
                     <Field label="Log Date Format">
                       <Input value={form.log_date_format} onChange={(e) => update("log_date_format", e.target.value)} />
+                    </Field>
+
+                    <Field label="Cron Restart (optional)">
+                      <Input
+                        value={form.cron_restart}
+                        onChange={(e) => update("cron_restart", e.target.value)}
+                        placeholder="0 4 * * *"
+                      />
+                      <p className="mt-1 text-xs text-text-3">Leave blank to disable scheduled restart.</p>
                     </Field>
 
                     <div className="space-y-2">

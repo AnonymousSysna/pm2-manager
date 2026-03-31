@@ -128,6 +128,7 @@ export const processes = {
   installNodeRuntime: (version: string, manager = "") =>
     api.post<ApiResult<any>>("/api/v1/processes/runtimes/node/install", { version, manager }).then(unwrap),
   monitoringSummary: () => api.get<ApiResult<any[]>>("/api/v1/processes/monitoring/summary").then(unwrap),
+  systemResources: () => api.get<ApiResult<any>>("/api/v1/processes/system/resources").then(unwrap),
   setMeta: (name: string, payload: Record<string, unknown>) =>
     api.patch<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/meta`, payload).then(unwrap),
   clearMeta: (name: string) => api.delete<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/meta`).then(unwrap),
@@ -180,6 +181,10 @@ export const processes = {
   stop: (name: string) => api.post<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/stop`).then(unwrap),
   restart: (name: string) => api.post<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/restart`).then(unwrap),
   reload: (name: string) => api.post<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/reload`).then(unwrap),
+  updateSchedule: (name: string, cron_restart: string | null) =>
+    api.patch<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/schedule`, { cron_restart }).then(unwrap),
+  duplicate: (name: string, targetName: string) =>
+    api.post<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/duplicate`, { name: targetName }).then(unwrap),
   getDotEnv: (name: string) => api.get<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/dotenv`).then(unwrap),
   updateDotEnv: (name: string, values: Record<string, string> = {}) =>
     api.patch<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/dotenv`, { values }).then(unwrap),
@@ -194,6 +199,7 @@ export const processes = {
 
 export const pm2Admin = {
   save: () => api.post<ApiResult<any>>("/api/v1/pm2/save").then(unwrap),
+  startup: () => api.post<ApiResult<any>>("/api/v1/pm2/startup").then(unwrap),
   resurrect: () => api.post<ApiResult<any>>("/api/v1/pm2/resurrect").then(unwrap),
   kill: () => api.post<ApiResult<any>>("/api/v1/pm2/kill").then(unwrap),
   info: () => api.get<ApiResult<any>>("/api/v1/pm2/info").then(unwrap)
