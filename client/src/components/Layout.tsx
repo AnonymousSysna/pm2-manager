@@ -39,7 +39,7 @@ function NavLinks({ pathname, links, onNavigate }) {
             to={to}
             onClick={onNavigate}
             className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 ${
-              active ? "bg-brand-500/20 text-brand-300" : "text-text-2 hover:bg-surface-2"
+              active ? "bg-brand-500/20 text-brand-400" : "text-text-2 hover:bg-surface-2"
             }`}
           >
             <Icon size={16} />

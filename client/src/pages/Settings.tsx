@@ -3,11 +3,13 @@ import { useEffect, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import toast, { getErrorMessage } from "../lib/toast";
 import { auth, pm2Admin, alerts as alertsApi, processes as processApi } from "../api";
+import Banner from "../components/ui/Banner";
 import Button from "../components/ui/Button";
 import Checkbox from "../components/ui/Checkbox";
 import Input from "../components/ui/Input";
+import InsetPanel from "../components/ui/InsetPanel";
 import Select from "../components/ui/Select";
-import { PageIntro } from "../components/ui/PageLayout";
+import { PageIntro, SectionHeader } from "../components/ui/PageLayout";
 
 export default function Settings() {
   const [info, setInfo] = useState({ pm2Version: "-", nodeVersion: "-", pm2Home: "-" });
@@ -252,7 +254,7 @@ export default function Settings() {
       />
 
       <section className="page-panel">
-        <h2 className="mb-3 text-xl font-semibold text-text-1">PM2 Daemon Controls</h2>
+        <SectionHeader title="PM2 Daemon Controls" className="mb-3" />
         <div className="flex flex-wrap gap-2">
           <Button
             variant="outlineInfo"
@@ -283,7 +285,7 @@ export default function Settings() {
 
 
       <section className="page-panel">
-        <h2 className="mb-3 text-xl font-semibold text-text-1">Dashboard Settings</h2>
+        <SectionHeader title="Dashboard Settings" className="mb-3" />
         <div className="space-y-3 text-base text-text-2">
           <label className="block">
             Poll interval: {pollSeconds}s
@@ -307,25 +309,22 @@ export default function Settings() {
       </section>
 
       <section className="page-panel">
-        <h2 className="mb-3 text-xl font-semibold text-text-1">Process Config Export / Import</h2>
+        <SectionHeader title="Process Config Export / Import" className="mb-3" />
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" onClick={exportConfig}>
             Export Config JSON
           </Button>
-          <input ref={fileRef} type="file" accept="application/json" onChange={onImportFile} className="text-sm text-text-2" />
+          <Input ref={fileRef} type="file" accept="application/json" onChange={onImportFile} className="max-w-sm file:mr-3 file:rounded-md file:border-0 file:bg-surface file:px-3 file:py-1.5 file:text-sm file:text-text-1" />
         </div>
       </section>
 
       <section className="page-panel">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="text-xl font-semibold text-text-1">External Alert Channels</h2>
-          {channelsWithFailures.length > 0 && (
-            <span className="inline-flex items-center gap-1 rounded border border-warning-500/40 bg-warning-500/10 px-2 py-1 text-xs text-warning-300">
-              <AlertTriangle size={12} />
-              {channelsWithFailures.length} channel(s) have failed deliveries
-            </span>
-          )}
-        </div>
+        <SectionHeader title="External Alert Channels" className="mb-3" />
+        {channelsWithFailures.length > 0 && (
+          <Banner tone="warning" icon={<AlertTriangle size={14} />} className="mb-3">
+            {channelsWithFailures.length} channel(s) have failed deliveries.
+          </Banner>
+        )}
         <div className="grid gap-2 md:grid-cols-2">
           <Input value={channelName} onChange={(e) => setChannelName(e.target.value)} placeholder="Channel name" />
           <Input value={channelUrl} onChange={(e) => setChannelUrl(e.target.value)} placeholder="https://..." />
@@ -351,7 +350,7 @@ export default function Settings() {
         <div className="mt-3 space-y-2">
           {channels.length === 0 && <p className="text-sm text-text-3">No channels configured.</p>}
           {channels.map((channel) => (
-            <div key={channel.id} className="page-panel flex flex-wrap items-center gap-2 p-2 text-sm">
+            <InsetPanel key={channel.id} padding="sm" className="flex flex-wrap items-center gap-2 text-sm">
               <span className="font-medium text-text-1">{channel.name}</span>
               <span className="text-text-3">{channel.type}</span>
               <span className="text-text-3">min:{channel.minSeverity}</span>
@@ -372,13 +371,13 @@ export default function Settings() {
               <Button variant="danger" onClick={() => removeChannel(channel.id)}>
                 Delete
               </Button>
-            </div>
+            </InsetPanel>
           ))}
         </div>
       </section>
 
       <section className="page-panel">
-        <h2 className="mb-3 text-xl font-semibold text-text-1">Change Password</h2>
+        <SectionHeader title="Change Password" className="mb-3" />
         <div className="grid gap-2 md:max-w-md">
           <Input
             type="password"

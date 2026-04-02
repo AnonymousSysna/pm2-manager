@@ -2,8 +2,10 @@
 import { useEffect, useState } from "react";
 import { caddy as caddyApi } from "../api";
 import toast, { getErrorMessage } from "../lib/toast";
+import Banner from "../components/ui/Banner";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
+import InsetPanel from "../components/ui/InsetPanel";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 
 export default function Caddy() {
@@ -123,7 +125,7 @@ export default function Caddy() {
         <div className="text-sm text-text-2">
           <p>
             Caddy status:{" "}
-            <span className={status.installed ? "text-success-300" : "text-danger-300"}>
+            <span className={status.installed ? "text-success-300" : "text-warning-300"}>
               {status.installed ? "Installed" : "Not installed"}
             </span>
           </p>
@@ -141,9 +143,9 @@ export default function Caddy() {
         </div>
 
         {!status.installed && (
-          <p className="rounded-md border border-warning-500/40 bg-warning-500/10 px-3 py-2 text-sm text-warning-300">
+          <Banner tone="warning">
             Install Caddy first from the Extensions page.
-          </p>
+          </Banner>
         )}
 
         <div className="grid gap-2 md:grid-cols-2">
@@ -179,7 +181,7 @@ export default function Caddy() {
         {Array.isArray(status.managedSites) && status.managedSites.length > 0 && (
           <div className="space-y-2">
             {status.managedSites.map((item) => (
-              <div key={item.domain} className="page-panel flex items-start justify-between gap-3 p-2 text-sm">
+              <InsetPanel key={item.domain} padding="sm" className="flex items-start justify-between gap-3 text-sm">
                 <div>
                   <p className="font-medium text-text-1">{item.domain}</p>
                   <p className="text-text-3">reverse_proxy {item.upstream}</p>
@@ -219,7 +221,7 @@ export default function Caddy() {
                     {deletingDomain === item.domain ? "Deleting..." : "Delete"}
                   </Button>
                 </div>
-              </div>
+              </InsetPanel>
             ))}
           </div>
         )}

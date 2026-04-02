@@ -4,3 +4,4 @@ dist/
 client/dist/
 .claude
 .gitignore
+npm-cli/

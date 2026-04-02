@@ -6,6 +6,7 @@ import toast, { getErrorMessage } from "../lib/toast";
 import Button from "../components/ui/Button";
 import Badge from "../components/ui/Badge";
 import Input from "../components/ui/Input";
+import InsetPanel from "../components/ui/InsetPanel";
 import Select from "../components/ui/Select";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 
@@ -164,11 +165,11 @@ export default function Extensions() {
       <section className="page-panel">
         <PanelHeader title="Available Extensions" className="mb-3" />
         <div className="flex flex-wrap items-center gap-3">
-          <div className="rounded-md border border-border bg-surface-2 p-2">
+          <InsetPanel padding="sm">
             <PackageCheck className="text-brand-400" size={22} />
-          </div>
+          </InsetPanel>
           <div className="min-w-0 flex-1">
-            <h3 className="section-title">Caddy</h3>
+            <h3 className="panel-heading">Caddy</h3>
             <p className="text-sm text-text-3">
               Platform: <span className="text-text-2">{status.platform || "unknown"}</span>
             </p>
@@ -191,14 +192,14 @@ export default function Extensions() {
         </div>
 
         {!status.installed && Array.isArray(status.installCommands) && status.installCommands.length > 0 && (
-          <div className="mt-3 rounded-md border border-border bg-surface-2 p-3 text-xs text-text-3">
+          <InsetPanel className="mt-3 text-xs text-text-3">
             <p className="mb-1 text-text-2">Detected install command(s)</p>
             {status.installCommands.map((command) => (
               <pre key={command} className="overflow-x-auto whitespace-pre-wrap text-xs text-text-3">
                 {command}
               </pre>
             ))}
-          </div>
+          </InsetPanel>
         )}
       </section>
 
@@ -206,9 +207,9 @@ export default function Extensions() {
         <PanelHeader title="Runtime Interpreters" className="mb-3" />
 
         <div className="mb-3 flex items-center gap-3">
-          <div className="rounded-md border border-border bg-surface-2 p-2">
+          <InsetPanel padding="sm">
             <TerminalSquare className="text-brand-400" size={22} />
-          </div>
+          </InsetPanel>
           <div className="text-sm text-text-3">
             PM2 can use interpreters installed on this server. Cluster mode is Node.js-focused.
             <div className="text-text-2">
@@ -224,7 +225,7 @@ export default function Extensions() {
 
         <div className="space-y-2">
           {interpreterState.interpreters.map((item) => (
-            <div key={item.key} className="rounded-md border border-border bg-surface-2 p-3">
+            <InsetPanel key={item.key}>
               <div className="flex flex-wrap items-center gap-2">
                 <h4 className="text-sm font-semibold text-text-1">{item.displayName}</h4>
                 <Badge tone={item.installed ? "success" : "warning"}>{item.installed ? "Installed" : "Not found"}</Badge>
@@ -268,17 +269,17 @@ export default function Extensions() {
                   )}
                 </div>
               )}
-            </div>
+            </InsetPanel>
           ))}
 
           {!interpreterState.loading && interpreterState.interpreters.length === 0 ? (
-            <div className="rounded-md border border-border bg-surface-2 p-3 text-sm text-text-3">
+            <InsetPanel className="text-sm text-text-3">
               No interpreter presets detected.
-            </div>
+            </InsetPanel>
           ) : null}
         </div>
 
-        <div className="mt-4 rounded-md border border-border bg-surface-2 p-3">
+        <InsetPanel className="mt-4">
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="text-sm font-semibold text-text-1">Node Runtime Manager</p>
             <Button
@@ -349,7 +350,7 @@ export default function Extensions() {
               </div>
             ))}
           </div>
-        </div>
+        </InsetPanel>
       </section>
     </div>
   );

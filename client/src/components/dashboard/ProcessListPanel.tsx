@@ -19,6 +19,7 @@ import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 import Checkbox from "../ui/Checkbox";
 import Input from "../ui/Input";
+import { PanelHeader } from "../ui/PageLayout";
 import ProgressBar from "../ui/ProgressBar";
 
 export default function ProcessListPanel({
@@ -47,15 +48,18 @@ export default function ProcessListPanel({
 }) {
   return (
     <section className="page-panel">
-      <div className="mb-4 panel-title-row">
-        <h2 className="section-title">Process List</h2>
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by name or status"
-          className="w-full md:w-80"
-        />
-      </div>
+      <PanelHeader
+        title="Process List"
+        className="mb-4"
+        actions={
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by name or status"
+            className="w-full md:w-80"
+          />
+        }
+      />
 
       <div className="mb-3 flex flex-wrap items-center gap-2 rounded border border-border bg-surface-2 p-2 text-xs text-text-2">
         <ListChecks size={14} />
@@ -81,6 +85,19 @@ export default function ProcessListPanel({
         {filtered.map((proc) => {
           const summary = monitoringSummary[proc.name] || {};
           const anomaly = summary.anomaly || { isAnomaly: false, score: 0 };
+          const actionButtons = buildProcessActions({
+            proc,
+            loadingAction,
+            callAction,
+            onOpenLogs,
+            onOpenApp,
+            openMetaModal,
+            openDotEnvModal,
+            openDeployModal,
+            openDeploymentHistoryForProcess,
+            dotEnvByProcess,
+            npmCapabilitiesByProcess
+          });
 
           return (
             <article key={proc.name} className="rounded-xl border border-border bg-surface-2 p-3">
@@ -111,88 +128,9 @@ export default function ProcessListPanel({
                 </p>
               </div>
               <div className="mt-3 flex gap-1 overflow-x-auto whitespace-nowrap pb-1">
-                <ActionButton title="Logs" variant="secondary" onClick={() => onOpenLogs(proc.name)} icon={<ScrollText size={14} />} />
-                {Number(proc.port) > 0 && (
-                  <ActionButton
-                    title="Open App"
-                    variant="info"
-                    onClick={() => onOpenApp(proc.port)}
-                    icon={<ExternalLink size={14} />}
-                  />
-                )}
-                <ActionButton title="Meta" variant="secondary" onClick={() => openMetaModal(proc)} icon={<ListChecks size={14} />} />
-                {dotEnvByProcess[proc.name] && (
-                  <ActionButton title="Edit .env" variant="secondary" onClick={() => openDotEnvModal(proc)} icon={<ScrollText size={14} />} />
-                )}
-                <ActionButton
-                  title="Start"
-                  variant="success"
-                  disabled={proc.status === "online" || loadingAction[`${proc.name}:start`]}
-                  onClick={() => callAction("start", proc.name)}
-                  icon={<Play size={14} />}
-                />
-                <ActionButton
-                  title="Stop"
-                  variant="danger"
-                  disabled={proc.status === "stopped" || loadingAction[`${proc.name}:stop`]}
-                  onClick={() => callAction("stop", proc.name)}
-                  icon={<Square size={14} />}
-                />
-                <ActionButton
-                  title="Restart"
-                  variant="info"
-                  disabled={loadingAction[`${proc.name}:restart`]}
-                  onClick={() => callAction("restart", proc.name)}
-                  icon={<RefreshCw size={14} />}
-                />
-                <ActionButton
-                  title="Schedule"
-                  variant="secondary"
-                  disabled={loadingAction[`${proc.name}:schedule`]}
-                  onClick={() => callAction("schedule", proc.name)}
-                  icon={<AlarmClock size={14} />}
-                />
-                <ActionButton
-                  title="Duplicate"
-                  variant="secondary"
-                  disabled={loadingAction[`${proc.name}:duplicate`]}
-                  onClick={() => callAction("duplicate", proc.name)}
-                  icon={<Copy size={14} />}
-                />
-                <ActionButton
-                  title="Deploy"
-                  variant="info"
-                  disabled={loadingAction[`${proc.name}:deploy`]}
-                  onClick={() => openDeployModal(proc)}
-                  icon={<Rocket size={14} />}
-                />
-                <ActionButton
-                  title="Deploy History"
-                  variant="secondary"
-                  onClick={() => openDeploymentHistoryForProcess(proc.name)}
-                  icon={<ListChecks size={14} />}
-                />
-                <ActionButton
-                  title="Rollback"
-                  variant="warning"
-                  disabled={loadingAction[`${proc.name}:rollback`]}
-                  onClick={() => callAction("rollback", proc.name)}
-                  icon={<Undo2 size={14} />}
-                />
-                <ActionButton
-                  title="Git Pull"
-                  variant="secondary"
-                  disabled={loadingAction[`${proc.name}:gitPull`]}
-                  onClick={() => callAction("gitPull", proc.name)}
-                  icon={<Download size={14} />}
-                />
-                <ActionButton
-                  title="Delete"
-                  variant="danger"
-                  disabled={loadingAction[`${proc.name}:delete`]}
-                  onClick={() => callAction("delete", proc.name)}
-                  icon={<Trash2 size={14} />}
-                />
+                {actionButtons.map((action) => (
+                  <ActionButton key={action.title} {...action} />
+                ))}
               </div>
             </article>
           );
@@ -227,6 +165,19 @@ export default function ProcessListPanel({
             {filtered.map((proc) => {
               const summary = monitoringSummary[proc.name] || {};
               const anomaly = summary.anomaly || { isAnomaly: false, score: 0 };
+              const actionButtons = buildProcessActions({
+                proc,
+                loadingAction,
+                callAction,
+                onOpenLogs,
+                onOpenApp,
+                openMetaModal,
+                openDotEnvModal,
+                openDeployModal,
+                openDeploymentHistoryForProcess,
+                dotEnvByProcess,
+                npmCapabilitiesByProcess
+              });
 
               return (
                 <tr key={proc.name} className="border-t border-border">
@@ -267,113 +218,9 @@ export default function ProcessListPanel({
                   </td>
                   <td className="px-2 py-3">
                     <div className="flex gap-1 overflow-x-auto whitespace-nowrap pb-1">
-                      <ActionButton title="Logs" variant="secondary" onClick={() => onOpenLogs(proc.name)} icon={<ScrollText size={14} />} />
-                      {Number(proc.port) > 0 && (
-                        <ActionButton
-                          title="Open App"
-                          variant="info"
-                          onClick={() => onOpenApp(proc.port)}
-                          icon={<ExternalLink size={14} />}
-                        />
-                      )}
-                      <ActionButton title="Edit Meta" variant="secondary" onClick={() => openMetaModal(proc)} icon={<ListChecks size={14} />} />
-                      {dotEnvByProcess[proc.name] && (
-                        <ActionButton title="Edit .env" variant="secondary" onClick={() => openDotEnvModal(proc)} icon={<ScrollText size={14} />} />
-                      )}
-                      <ActionButton
-                        title="Start"
-                        variant="success"
-                        disabled={proc.status === "online" || loadingAction[`${proc.name}:start`]}
-                        onClick={() => callAction("start", proc.name)}
-                        icon={<Play size={14} />}
-                      />
-                      <ActionButton
-                        title="Stop"
-                        variant="danger"
-                        disabled={proc.status === "stopped" || loadingAction[`${proc.name}:stop`]}
-                        onClick={() => callAction("stop", proc.name)}
-                        icon={<Square size={14} />}
-                      />
-                      <ActionButton
-                        title="Restart"
-                        variant="info"
-                        disabled={loadingAction[`${proc.name}:restart`]}
-                        onClick={() => callAction("restart", proc.name)}
-                        icon={<RefreshCw size={14} />}
-                      />
-                      <ActionButton
-                        title="Reload"
-                        variant="warning"
-                        disabled={proc.mode !== "cluster" || loadingAction[`${proc.name}:reload`]}
-                        onClick={() => callAction("reload", proc.name)}
-                        icon={<RotateCcw size={14} />}
-                      />
-                      {Boolean(npmCapabilitiesByProcess[proc.name]?.hasPackageJson) && (
-                        <ActionButton
-                          title="NPM Install"
-                          variant="secondary"
-                          disabled={loadingAction[`${proc.name}:npmInstall`]}
-                          onClick={() => callAction("npmInstall", proc.name)}
-                          icon={<Download size={14} />}
-                        />
-                      )}
-                      {Boolean(npmCapabilitiesByProcess[proc.name]?.hasBuildScript) && (
-                        <ActionButton
-                          title="NPM Build"
-                          variant="secondary"
-                          disabled={loadingAction[`${proc.name}:npmBuild`]}
-                          onClick={() => callAction("npmBuild", proc.name)}
-                          icon={<Hammer size={14} />}
-                        />
-                      )}
-                      <ActionButton
-                        title="Schedule"
-                        variant="secondary"
-                        disabled={loadingAction[`${proc.name}:schedule`]}
-                        onClick={() => callAction("schedule", proc.name)}
-                        icon={<AlarmClock size={14} />}
-                      />
-                      <ActionButton
-                        title="Duplicate"
-                        variant="secondary"
-                        disabled={loadingAction[`${proc.name}:duplicate`]}
-                        onClick={() => callAction("duplicate", proc.name)}
-                        icon={<Copy size={14} />}
-                      />
-                      <ActionButton
-                        title="Deploy"
-                        variant="info"
-                        disabled={loadingAction[`${proc.name}:deploy`]}
-                        onClick={() => openDeployModal(proc)}
-                        icon={<Rocket size={14} />}
-                      />
-                      <ActionButton
-                        title="Deploy History"
-                        variant="secondary"
-                        onClick={() => openDeploymentHistoryForProcess(proc.name)}
-                        icon={<ListChecks size={14} />}
-                      />
-                      <ActionButton
-                        title="Rollback"
-                        variant="warning"
-                        disabled={loadingAction[`${proc.name}:rollback`]}
-                        onClick={() => callAction("rollback", proc.name)}
-                        icon={<Undo2 size={14} />}
-                      />
-                      <ActionButton
-                        title="Git Pull"
-                        variant="secondary"
-                        disabled={loadingAction[`${proc.name}:gitPull`]}
-                        onClick={() => callAction("gitPull", proc.name)}
-                        icon={<Download size={14} />}
-                      />
-                      <ActionButton
-                        title="Delete"
-                        variant="danger"
-                        disabled={loadingAction[`${proc.name}:delete`]}
-                        onClick={() => callAction("delete", proc.name)}
-                        icon={<Trash2 size={14} />}
-                      />
+                      {actionButtons.map((action) => (
+                        <ActionButton key={action.title} {...action} />
+                      ))}
                     </div>
                   </td>
                 </tr>
@@ -391,6 +238,125 @@ export default function ProcessListPanel({
       </div>
     </section>
   );
+}
+
+function buildProcessActions({
+  proc,
+  loadingAction,
+  callAction,
+  onOpenLogs,
+  onOpenApp,
+  openMetaModal,
+  openDotEnvModal,
+  openDeployModal,
+  openDeploymentHistoryForProcess,
+  dotEnvByProcess,
+  npmCapabilitiesByProcess
+}) {
+  return [
+    { title: "Logs", variant: "secondary", onClick: () => onOpenLogs(proc.name), icon: <ScrollText size={14} /> },
+    Number(proc.port) > 0
+      ? { title: "Open App", variant: "info", onClick: () => onOpenApp(proc.port), icon: <ExternalLink size={14} /> }
+      : null,
+    { title: "Edit Meta", variant: "secondary", onClick: () => openMetaModal(proc), icon: <ListChecks size={14} /> },
+    dotEnvByProcess[proc.name]
+      ? { title: "Edit .env", variant: "secondary", onClick: () => openDotEnvModal(proc), icon: <ScrollText size={14} /> }
+      : null,
+    {
+      title: "Start",
+      variant: "success",
+      disabled: proc.status === "online" || loadingAction[`${proc.name}:start`],
+      onClick: () => callAction("start", proc.name),
+      icon: <Play size={14} />
+    },
+    {
+      title: "Stop",
+      variant: "danger",
+      disabled: proc.status === "stopped" || loadingAction[`${proc.name}:stop`],
+      onClick: () => callAction("stop", proc.name),
+      icon: <Square size={14} />
+    },
+    {
+      title: "Restart",
+      variant: "info",
+      disabled: loadingAction[`${proc.name}:restart`],
+      onClick: () => callAction("restart", proc.name),
+      icon: <RefreshCw size={14} />
+    },
+    {
+      title: "Reload",
+      variant: "warning",
+      disabled: proc.mode !== "cluster" || loadingAction[`${proc.name}:reload`],
+      onClick: () => callAction("reload", proc.name),
+      icon: <RotateCcw size={14} />
+    },
+    Boolean(npmCapabilitiesByProcess[proc.name]?.hasPackageJson)
+      ? {
+          title: "NPM Install",
+          variant: "secondary",
+          disabled: loadingAction[`${proc.name}:npmInstall`],
+          onClick: () => callAction("npmInstall", proc.name),
+          icon: <Download size={14} />
+        }
+      : null,
+    Boolean(npmCapabilitiesByProcess[proc.name]?.hasBuildScript)
+      ? {
+          title: "NPM Build",
+          variant: "secondary",
+          disabled: loadingAction[`${proc.name}:npmBuild`],
+          onClick: () => callAction("npmBuild", proc.name),
+          icon: <Hammer size={14} />
+        }
+      : null,
+    {
+      title: "Schedule",
+      variant: "secondary",
+      disabled: loadingAction[`${proc.name}:schedule`],
+      onClick: () => callAction("schedule", proc.name),
+      icon: <AlarmClock size={14} />
+    },
+    {
+      title: "Duplicate",
+      variant: "secondary",
+      disabled: loadingAction[`${proc.name}:duplicate`],
+      onClick: () => callAction("duplicate", proc.name),
+      icon: <Copy size={14} />
+    },
+    {
+      title: "Deploy",
+      variant: "info",
+      disabled: loadingAction[`${proc.name}:deploy`],
+      onClick: () => openDeployModal(proc),
+      icon: <Rocket size={14} />
+    },
+    {
+      title: "Deploy History",
+      variant: "secondary",
+      onClick: () => openDeploymentHistoryForProcess(proc.name),
+      icon: <ListChecks size={14} />
+    },
+    {
+      title: "Rollback",
+      variant: "warning",
+      disabled: loadingAction[`${proc.name}:rollback`],
+      onClick: () => callAction("rollback", proc.name),
+      icon: <Undo2 size={14} />
+    },
+    {
+      title: "Git Pull",
+      variant: "secondary",
+      disabled: loadingAction[`${proc.name}:gitPull`],
+      onClick: () => callAction("gitPull", proc.name),
+      icon: <Download size={14} />
+    },
+    {
+      title: "Delete",
+      variant: "danger",
+      disabled: loadingAction[`${proc.name}:delete`],
+      onClick: () => callAction("delete", proc.name),
+      icon: <Trash2 size={14} />
+    }
+  ].filter(Boolean);
 }
 
 function ActionButton({ title, icon, variant, onClick, disabled }) {
@@ -419,8 +385,8 @@ function ActionButton({ title, icon, variant, onClick, disabled }) {
 function StatusBadge({ status }) {
   const map = {
     online: "success",
-    stopped: "danger",
-    errored: "warning"
+    stopped: "warning",
+    errored: "danger"
   };
 
   return <Badge tone={map[status] || "neutral"}>{status || "unknown"}</Badge>;

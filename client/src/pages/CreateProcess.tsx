@@ -938,7 +938,7 @@ function StepBadge({ active, done, children }) {
       className={[
         "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
         active
-          ? "bg-brand-500/20 text-brand-300"
+          ? "bg-brand-500/20 text-brand-400"
           : done
             ? "bg-success-500/20 text-success-300"
             : "bg-surface-2 text-text-3"

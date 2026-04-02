@@ -144,7 +144,7 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
       <button type="button" className="surface-overlay absolute inset-0" aria-label="Close panel" onClick={onClose} />
       <aside className="absolute right-0 top-0 h-full w-full max-w-xl border-l border-border bg-surface p-6 text-text-1 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="section-title">{process.name}</h2>
+          <h2 className="panel-heading">{process.name}</h2>
           <Button type="button" variant="ghost" size="icon" onClick={onClose}>
             <X size={20} />
           </Button>

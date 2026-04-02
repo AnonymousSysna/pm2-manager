@@ -5,8 +5,9 @@ import { useSearchParams } from "react-router-dom";
 import { processes as processApi } from "../api";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
+import InsetPanel from "../components/ui/InsetPanel";
 import Select from "../components/ui/Select";
-import { PageIntro } from "../components/ui/PageLayout";
+import { PageIntro, SectionHeader } from "../components/ui/PageLayout";
 
 export default function History() {
   const [searchParams] = useSearchParams();
@@ -154,9 +155,10 @@ export default function History() {
       />
 
       <section className="page-panel">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="text-xl font-semibold text-text-1">Deployment History</h2>
-          <div className="flex items-center gap-2">
+        <SectionHeader
+          title="Deployment History"
+          className="mb-3"
+          actions={
             <Button
               type="button"
               variant="secondary"
@@ -167,8 +169,8 @@ export default function History() {
               <RefreshCw size={14} className={deploymentHistoryLoading ? "animate-spin" : ""} />
               Refresh
             </Button>
-          </div>
-        </div>
+          }
+        />
         <div className="mb-2 grid gap-2 md:grid-cols-[1fr,auto] md:items-center">
           <Input
             value={deploymentProcessFilter}
@@ -188,7 +190,7 @@ export default function History() {
           {deploymentHistoryLoading && <p className="text-text-3">Loading deployment history...</p>}
           {!deploymentHistoryLoading && deploymentHistory.length === 0 && <p className="text-text-3">No deployments yet.</p>}
           {deploymentHistory.map((item, idx) => (
-            <div key={`${item.ts}-${idx}`} className="page-panel p-2">
+            <InsetPanel key={`${item.ts}-${idx}`} padding="sm">
               <p className="text-text-1">
                 {item.processName} {item.action === "rollback" ? "rollback" : "deployment"} by {item.actor || "unknown"} {item.success ? "succeeded" : "failed"}
               </p>
@@ -210,7 +212,7 @@ export default function History() {
                   ))}
                 </div>
               )}
-            </div>
+            </InsetPanel>
           ))}
         </div>
         <div className="mt-3 flex items-center justify-end gap-2">
@@ -236,19 +238,22 @@ export default function History() {
       </section>
 
       <section className="page-panel">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="text-xl font-semibold text-text-1">Restart History</h2>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => loadRestartHistory(restartPage)}
-            disabled={restartHistoryLoading}
-          >
-            <RefreshCw size={14} className={restartHistoryLoading ? "animate-spin" : ""} />
-            Refresh
-          </Button>
-        </div>
+        <SectionHeader
+          title="Restart History"
+          className="mb-3"
+          actions={
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => loadRestartHistory(restartPage)}
+              disabled={restartHistoryLoading}
+            >
+              <RefreshCw size={14} className={restartHistoryLoading ? "animate-spin" : ""} />
+              Refresh
+            </Button>
+          }
+        />
         <p className="mb-2 border-b border-border pb-2 text-xs text-text-3">
           Page {restartPagination.page} of {restartPagination.totalPages} ({restartPagination.totalItems} items)
         </p>
@@ -256,7 +261,7 @@ export default function History() {
           {restartHistoryLoading && <p className="text-text-3">Loading restart history...</p>}
           {!restartHistoryLoading && restartHistory.length === 0 && <p className="text-text-3">No restart history yet.</p>}
           {restartHistory.map((item, idx) => (
-            <div key={`${item.ts}-${idx}`} className="page-panel p-2">
+            <InsetPanel key={`${item.ts}-${idx}`} padding="sm">
               <p className="text-text-1">
                 {item.processName} {item.event || "event"} by {item.actor || "system"}
               </p>
@@ -270,7 +275,7 @@ export default function History() {
                   {item.signal ? ` | signal: ${item.signal}` : ""}
                 </p>
               )}
-            </div>
+            </InsetPanel>
           ))}
         </div>
         <div className="mt-3 flex items-center justify-end gap-2">
@@ -296,19 +301,22 @@ export default function History() {
       </section>
 
       <section className="page-panel">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="text-xl font-semibold text-text-1">Audit Trail</h2>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => loadAuditHistory(auditPage)}
-            disabled={auditHistoryLoading}
-          >
-            <RefreshCw size={14} className={auditHistoryLoading ? "animate-spin" : ""} />
-            Refresh
-          </Button>
-        </div>
+        <SectionHeader
+          title="Audit Trail"
+          className="mb-3"
+          actions={
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => loadAuditHistory(auditPage)}
+              disabled={auditHistoryLoading}
+            >
+              <RefreshCw size={14} className={auditHistoryLoading ? "animate-spin" : ""} />
+              Refresh
+            </Button>
+          }
+        />
         <div className="mb-2 grid gap-2 md:grid-cols-[220px,1fr] md:items-center">
           <Select value={auditActionPreset} onChange={(event) => setAuditActionPreset(event.target.value)}>
             <option value="">All actions</option>
@@ -334,7 +342,7 @@ export default function History() {
           {auditHistoryLoading && <p className="text-text-3">Loading audit trail...</p>}
           {!auditHistoryLoading && auditHistory.length === 0 && <p className="text-text-3">No audit entries yet.</p>}
           {auditHistory.map((item, idx) => (
-            <div key={`${item.ts}-${idx}`} className="page-panel p-2">
+            <InsetPanel key={`${item.ts}-${idx}`} padding="sm">
               <p className="text-text-1">
                 {item.action} {item.processName ? `(${item.processName})` : ""}
               </p>
@@ -342,7 +350,7 @@ export default function History() {
                 {formatTimestamp(item.ts)} | actor: {item.actor || "unknown"} | ip: {item.ip || "unknown"} | {item.success ? "success" : "failed"}
               </p>
               {!item.success && item.error && <p className="mt-1 whitespace-pre-wrap text-xs text-danger-300">{item.error}</p>}
-            </div>
+            </InsetPanel>
           ))}
         </div>
         <div className="mt-3 flex items-center justify-end gap-2">

@@ -5,8 +5,10 @@ import { useSearchParams } from "react-router-dom";
 import toast, { getErrorMessage } from "../lib/toast";
 import { processes as processApi } from "../api";
 import { useSocket } from "../hooks/useSocket";
+import Banner from "../components/ui/Banner";
 import Button from "../components/ui/Button";
 import Checkbox from "../components/ui/Checkbox";
+import InsetPanel from "../components/ui/InsetPanel";
 import Select from "../components/ui/Select";
 import Input from "../components/ui/Input";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
@@ -384,16 +386,16 @@ export default function Logs() {
       />
 
       {showCreateHint && (
-        <section className="rounded-md border border-info-500/40 bg-info-500/10 p-3 text-base text-info-300">
+        <Banner tone="info" className="text-base">
           <p>Process creation request was accepted for <span className="font-semibold">{selected || defaultProcess}</span>. Waiting for first logs...</p>
           <p className="mt-1 text-xs text-text-3">
             If this stays empty, click Refresh Logs and check process status on Dashboard.
           </p>
-        </section>
+        </Banner>
       )}
 
       {launchSource === "create" && selected && (
-        <section className="rounded-md border border-border bg-surface p-3 text-base">
+        <Banner tone="neutral" className="text-base">
           <p className="text-text-2">
             Socket:{" "}
             <span className={connected ? "text-success-300" : "text-warning-300"}>
@@ -412,7 +414,7 @@ export default function Logs() {
             </p>
           )}
           {Array.isArray(createSummary?.details?.steps) && createSummary.details.steps.length > 0 && (
-            <div className="mt-2 rounded border border-border bg-surface-2 p-2">
+            <InsetPanel className="mt-2" padding="sm">
               <p className="text-xs font-semibold text-text-2">Create Steps</p>
               <div className="mt-1 space-y-1 text-xs text-text-3">
                 {createSummary.details.steps.map((step, idx) => (
@@ -422,9 +424,9 @@ export default function Logs() {
                   </p>
                 ))}
               </div>
-            </div>
+            </InsetPanel>
           )}
-        </section>
+        </Banner>
       )}
 
       <section className="page-panel grid gap-2 md:grid-cols-2 xl:grid-cols-6">
@@ -519,7 +521,7 @@ export default function Logs() {
       )}
 
       <section ref={containerRef} className="h-log-viewer overflow-y-auto rounded-xl border border-border bg-surface p-3 font-mono text-sm sm:p-4 sm:text-base">
-        <PanelHeader title="Log Stream" className="mb-3 font-sans text-xl" />
+        <PanelHeader title="Log Stream" className="mb-3 font-sans" />
         {!selected && !combinedView && (
           <div className="flex h-full flex-col items-center justify-center text-text-3">
             <Terminal size={36} />
