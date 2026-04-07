@@ -4,7 +4,7 @@ const path = require("path");
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const { verifyToken } = require("../middleware/auth");
+const { verifyToken, getTokenFromRequest } = require("../middleware/auth");
 const { isIpAllowed, getRequestIp } = require("../utils/ipAccess");
 const { AUTH_COOKIE_NAME, REFRESH_COOKIE_NAME } = require("../middleware/auth");
 const { asyncHandler } = require("../middleware/asyncHandler");
@@ -26,6 +26,10 @@ const REFRESH_TOKEN_TTL_SEC = Number.isFinite(Number(process.env.REFRESH_TOKEN_T
   : 7 * 24 * 60 * 60;
 
 let cachedHash = String(process.env.PM2_PASS_HASH || "").trim() || null;
+const AUTH_ENV_FILE_PATHS = [
+  path.resolve(__dirname, "../.env"),
+  path.resolve(__dirname, "../../.env")
+];
 
 async function writeAuthAudit(action, ip, username, success, details = null) {
   try {
@@ -108,8 +112,21 @@ function getUserConfig(username) {
   return { hash: cachedHash };
 }
 
-function updateEnvPasswordHash(newPasswordHash) {
-  const envPath = path.resolve(__dirname, "../.env");
+function resolvePreferredEnvPath(envPaths = AUTH_ENV_FILE_PATHS) {
+  const candidates = Array.isArray(envPaths) && envPaths.length > 0
+    ? envPaths.map((candidate) => path.resolve(candidate))
+    : AUTH_ENV_FILE_PATHS;
+
+  for (let i = candidates.length - 1; i >= 0; i -= 1) {
+    if (fs.existsSync(candidates[i])) {
+      return candidates[i];
+    }
+  }
+
+  return candidates[candidates.length - 1];
+}
+
+function updateEnvPasswordHash(newPasswordHash, envPath = resolvePreferredEnvPath()) {
   if (!fs.existsSync(envPath)) {
     fs.writeFileSync(envPath, `PM2_PASS_HASH=${newPasswordHash}\n`, "utf8");
     return;
@@ -129,6 +146,24 @@ function updateEnvPasswordHash(newPasswordHash) {
     filtered.push(`PM2_PASS_HASH=${newPasswordHash}`);
   }
   fs.writeFileSync(envPath, `${filtered.filter(Boolean).join("\n")}\n`, "utf8");
+}
+
+function getLogoutUser(req) {
+  const jwtSecret = String(process.env.JWT_SECRET || "").trim();
+  const token = getTokenFromRequest(req);
+  if (!jwtSecret || !token) {
+    return null;
+  }
+
+  try {
+    const decoded = jwt.verify(token, jwtSecret, { ignoreExpiration: true });
+    if (decoded?.tokenType && decoded.tokenType !== "access") {
+      return null;
+    }
+    return decoded?.username ? decoded : null;
+  } catch (_error) {
+    return null;
+  }
 }
 
 router.post("/login", asyncHandler(async (req, res) => {
@@ -306,31 +341,18 @@ router.get("/me", verifyToken, asyncHandler(async (req, res) => {
   });
 }));
 
-router.post("/logout", verifyToken, asyncHandler(async (req, res) => {
-  const secureCookie = shouldUseSecureCookies(req);
-  res.clearCookie(AUTH_COOKIE_NAME, {
-    httpOnly: true,
-    secure: secureCookie,
-    sameSite: "lax",
-    path: "/"
-  });
-  res.clearCookie(REFRESH_COOKIE_NAME, {
-    httpOnly: true,
-    secure: secureCookie,
-    sameSite: "lax",
-    path: "/"
-  });
-  res.clearCookie(CSRF_COOKIE_NAME, {
-    httpOnly: false,
-    secure: secureCookie,
-    sameSite: "lax",
-    path: "/"
-  });
-  logger.info("auth_logout", { ip: getRequestIp(req), username: req.user?.username || null });
-  await writeAuthAudit("auth.logout", getRequestIp(req), req.user?.username || "unknown", true, { reason: "success" });
+router.post("/logout", asyncHandler(async (req, res) => {
+  const ip = getRequestIp(req) || "unknown";
+  const user = getLogoutUser(req);
+  clearAuthCookies(res, req);
+  logger.info("auth_logout", { ip, username: user?.username || null });
+  await writeAuthAudit("auth.logout", ip, user?.username || "unknown", true, { reason: "success" });
 
   return res.json({ success: true, data: { loggedOut: true }, error: null });
 }));
 
 module.exports = router;
+module.exports.AUTH_ENV_FILE_PATHS = AUTH_ENV_FILE_PATHS;
+module.exports.resolvePreferredEnvPath = resolvePreferredEnvPath;
+module.exports.updateEnvPasswordHash = updateEnvPasswordHash;
 

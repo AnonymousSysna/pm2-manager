@@ -201,6 +201,7 @@ Defaults:
 - Frontend: `http://localhost:5173`
 - Backend: `http://localhost:8000`
 - Health: `http://localhost:8000/health`
+- When `VITE_API_URL` is unset, the Vite dev server proxies `/api` and `/socket.io` to `http://localhost:8000`.
 
 ## Build and Run
 

@@ -13,7 +13,6 @@ import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 
 const defaultEnvRow = { key: "", value: "" };
 const TEMPLATE_STORAGE_KEY = "pm2_process_templates_v1";
-const DEFAULT_PROJECTS_ROOT = "/root/pm2-manager/apps/";
 const SENSITIVE_ENV_KEY_PATTERN = /(pass(word)?|secret|token|api[_-]?key|private|credential|auth|pwd)/i;
 
 function isSensitiveEnvKey(key) {
@@ -186,7 +185,7 @@ export default function CreateProcess() {
     setForm((prev) => {
       const next = { ...prev, git_clone_url: gitUrl };
       if (!String(prev.project_path || "").trim()) {
-        next.project_path = `${DEFAULT_PROJECTS_ROOT}${inferred}`;
+        next.project_path = inferred;
       }
       if (!String(prev.name || "").trim()) {
         next.name = inferred;
@@ -594,7 +593,7 @@ export default function CreateProcess() {
                     <Input
                       value={form.project_path}
                       onChange={(e) => update("project_path", e.target.value)}
-                      placeholder="/root/pm2-manager/apps/{auto-inferred-from-repo-name}"
+                      placeholder="repo-name or relative/path/inside/allowed/root"
                     />
                   </Field>
 

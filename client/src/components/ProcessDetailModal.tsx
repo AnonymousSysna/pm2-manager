@@ -100,7 +100,6 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
 
     return {
       pid: process?.pid,
-      ppid: data.pid,
       execPath: env.pm_exec_path,
       cwd: env.pm_cwd,
       nodeVersion: env.node_version,

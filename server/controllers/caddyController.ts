@@ -113,6 +113,43 @@ async function writeManagedSites(sites) {
   await fs.promises.writeFile(MANAGED_SITES_PATH, JSON.stringify(sites, null, 2), "utf8");
 }
 
+async function readOptionalFile(filePath) {
+  try {
+    return {
+      exists: true,
+      content: await fs.promises.readFile(filePath, "utf8")
+    };
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      return {
+        exists: false,
+        content: ""
+      };
+    }
+    throw error;
+  }
+}
+
+async function writeTextFile(filePath, content) {
+  await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.promises.writeFile(filePath, content, "utf8");
+}
+
+async function restoreOptionalFile(filePath, snapshot) {
+  if (snapshot?.exists) {
+    await writeTextFile(filePath, snapshot.content);
+    return;
+  }
+
+  try {
+    await fs.promises.unlink(filePath);
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
 function sanitizeDomain(value) {
   const domain = String(value || "").trim().toLowerCase();
   if (!domain) {
@@ -228,24 +265,14 @@ async function readCaddyfileSites(caddyfilePath) {
   return sites;
 }
 
-async function removeDomainBlocksFromCaddyfile(caddyfilePath, domain) {
-  let content = "";
-  try {
-    content = await fs.promises.readFile(caddyfilePath, "utf8");
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      return false;
-    }
-    throw error;
-  }
-
+function removeDomainBlocksFromContent(content, domain) {
   const parsed = parseTopLevelSiteBlocks(content);
   const ranges = parsed.blocks
     .filter((block) => block.addresses.includes(domain))
     .map((block) => [block.start, block.end]);
 
   if (!ranges.length) {
-    return false;
+    return String(content || "");
   }
 
   const toRemove = new Set();
@@ -272,14 +299,18 @@ async function removeDomainBlocksFromCaddyfile(caddyfilePath, domain) {
     compacted.push(line);
     previousBlank = isBlank;
   });
-  const nextContent = `${compacted.join("\n").trimEnd()}\n`;
+  return `${compacted.join("\n").trimEnd()}\n`;
+}
 
-  if (nextContent !== content) {
-    await fs.promises.mkdir(path.dirname(caddyfilePath), { recursive: true });
-    await fs.promises.writeFile(caddyfilePath, nextContent, "utf8");
-    return true;
+async function removeDomainBlocksFromCaddyfile(caddyfilePath, domain) {
+  const snapshot = await readOptionalFile(caddyfilePath);
+  const nextContent = removeDomainBlocksFromContent(snapshot.content, domain);
+  if (nextContent === snapshot.content) {
+    return false;
   }
-  return false;
+
+  await writeTextFile(caddyfilePath, nextContent);
+  return true;
 }
 
 function buildManagedSection(sites) {
@@ -292,17 +323,8 @@ function buildManagedSection(sites) {
   return `${MANAGED_SECTION_START}\n${blocks.join("\n\n")}\n${MANAGED_SECTION_END}`;
 }
 
-async function updateCaddyfileManagedSection(caddyfilePath, sites) {
+function updateCaddyfileManagedSectionContent(existing, sites) {
   const managedSection = buildManagedSection(sites);
-  let existing = "";
-  try {
-    existing = await fs.promises.readFile(caddyfilePath, "utf8");
-  } catch (error) {
-    if (error.code !== "ENOENT") {
-      throw error;
-    }
-  }
-
   let next = "";
   const escapedStart = MANAGED_SECTION_START.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const escapedEnd = MANAGED_SECTION_END.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -315,8 +337,54 @@ async function updateCaddyfileManagedSection(caddyfilePath, sites) {
     next = `${existing.trimEnd()}\n\n${managedSection}\n`;
   }
 
-  await fs.promises.mkdir(path.dirname(caddyfilePath), { recursive: true });
-  await fs.promises.writeFile(caddyfilePath, next, "utf8");
+  return next;
+}
+
+async function updateCaddyfileManagedSection(caddyfilePath, sites) {
+  const snapshot = await readOptionalFile(caddyfilePath);
+  const next = updateCaddyfileManagedSectionContent(snapshot.content, sites);
+  await writeTextFile(caddyfilePath, next);
+}
+
+async function applyReverseProxyConfigChange({ caddyfilePath, domain, sites, status }) {
+  const previousManagedSites = await readOptionalFile(MANAGED_SITES_PATH);
+  const previousCaddyfile = await readOptionalFile(caddyfilePath);
+  const nextManagedSitesContent = JSON.stringify(sites, null, 2);
+  const nextCaddyfileContent = updateCaddyfileManagedSectionContent(
+    removeDomainBlocksFromContent(previousCaddyfile.content, domain),
+    sites
+  );
+
+  let validation = { success: false, skipped: true, error: "Caddy is not installed or unavailable in PATH" };
+  let reload = { success: false, skipped: true, error: "Caddy is not installed or unavailable in PATH" };
+
+  if (!status.installed || !status.available) {
+    return { success: false, validation, reload };
+  }
+
+  await writeTextFile(MANAGED_SITES_PATH, nextManagedSitesContent);
+  await writeTextFile(caddyfilePath, nextCaddyfileContent);
+
+  try {
+    await runCommand("caddy", ["validate", "--config", caddyfilePath, "--adapter", "caddyfile"]);
+    validation = { success: true, skipped: false, error: null };
+  } catch (error) {
+    validation = { success: false, skipped: false, error: error.message };
+    await restoreOptionalFile(MANAGED_SITES_PATH, previousManagedSites);
+    await restoreOptionalFile(caddyfilePath, previousCaddyfile);
+    return { success: false, validation, reload };
+  }
+
+  try {
+    await runCommand("caddy", ["reload", "--config", caddyfilePath, "--adapter", "caddyfile"]);
+    reload = { success: true, skipped: false, error: null };
+    return { success: true, validation, reload };
+  } catch (error) {
+    reload = { success: false, skipped: false, error: error.message };
+    await restoreOptionalFile(MANAGED_SITES_PATH, previousManagedSites);
+    await restoreOptionalFile(caddyfilePath, previousCaddyfile);
+    return { success: false, validation, reload };
+  }
 }
 
 async function detectCaddy() {
@@ -574,27 +642,12 @@ async function addReverseProxy(payload = {}) {
     const caddyfilePath = getCaddyfilePath();
     const sites = await readManagedSites();
     sites[domain] = upstream;
-    await writeManagedSites(sites);
-    await removeDomainBlocksFromCaddyfile(caddyfilePath, domain);
-    await updateCaddyfileManagedSection(caddyfilePath, sites);
-
-    let validation = { success: false, skipped: true, error: "Caddy is not installed or unavailable in PATH" };
-    let reload = { success: false, skipped: true, error: "Caddy is not installed or unavailable in PATH" };
-    if (status.installed && status.available) {
-      try {
-        await runCommand("caddy", ["validate", "--config", caddyfilePath, "--adapter", "caddyfile"]);
-        validation = { success: true, skipped: false, error: null };
-      } catch (error) {
-        validation = { success: false, skipped: false, error: error.message };
-      }
-
-      try {
-        await runCommand("caddy", ["reload", "--config", caddyfilePath, "--adapter", "caddyfile"]);
-        reload = { success: true, skipped: false, error: null };
-      } catch (error) {
-        reload = { success: false, skipped: false, error: error.message };
-      }
-    }
+    const { success: operationSuccess, validation, reload } = await applyReverseProxyConfigChange({
+      caddyfilePath,
+      domain,
+      sites,
+      status
+    });
 
     const warnings = [];
     if (!validation.success) {
@@ -603,7 +656,6 @@ async function addReverseProxy(payload = {}) {
     if (!reload.success) {
       warnings.push(reload.error);
     }
-    const operationSuccess = validation.success && reload.success;
 
     return {
       success: operationSuccess,
@@ -635,27 +687,12 @@ async function deleteReverseProxy(payload = {}) {
     const caddyfilePath = getCaddyfilePath();
     const sites = await readManagedSites();
     delete sites[domain];
-    await writeManagedSites(sites);
-    await removeDomainBlocksFromCaddyfile(caddyfilePath, domain);
-    await updateCaddyfileManagedSection(caddyfilePath, sites);
-
-    let validation = { success: false, skipped: true, error: "Caddy is not installed or unavailable in PATH" };
-    let reload = { success: false, skipped: true, error: "Caddy is not installed or unavailable in PATH" };
-    if (status.installed && status.available) {
-      try {
-        await runCommand("caddy", ["validate", "--config", caddyfilePath, "--adapter", "caddyfile"]);
-        validation = { success: true, skipped: false, error: null };
-      } catch (error) {
-        validation = { success: false, skipped: false, error: error.message };
-      }
-
-      try {
-        await runCommand("caddy", ["reload", "--config", caddyfilePath, "--adapter", "caddyfile"]);
-        reload = { success: true, skipped: false, error: null };
-      } catch (error) {
-        reload = { success: false, skipped: false, error: error.message };
-      }
-    }
+    const { success: operationSuccess, validation, reload } = await applyReverseProxyConfigChange({
+      caddyfilePath,
+      domain,
+      sites,
+      status
+    });
 
     const warnings = [];
     if (!validation.success) {
@@ -664,7 +701,6 @@ async function deleteReverseProxy(payload = {}) {
     if (!reload.success) {
       warnings.push(reload.error);
     }
-    const operationSuccess = validation.success && reload.success;
 
     return {
       success: operationSuccess,
@@ -762,6 +798,11 @@ module.exports = {
   installCaddy,
   addReverseProxy,
   deleteReverseProxy,
-  restartCaddyService
+  restartCaddyService,
+  __test: {
+    buildManagedSection,
+    removeDomainBlocksFromContent,
+    updateCaddyfileManagedSectionContent
+  }
 };
 
