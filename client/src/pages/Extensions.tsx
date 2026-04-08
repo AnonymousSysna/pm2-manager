@@ -189,15 +189,19 @@ export default function Extensions() {
               </p>
             </div>
           )}
-          <Button
-            type="button"
-            variant={status.installed ? "secondary" : "outlineInfo"}
-            disabled={loading || installing || status.installed}
-            onClick={installCaddy}
-          >
-            <DownloadCloud size={16} />
-            {status.installed ? "Installed" : installing ? "Installing..." : "Install Caddy"}
-          </Button>
+          {loading ? (
+            <Skeleton className="h-10 w-36" />
+          ) : (
+            <Button
+              type="button"
+              variant={status.installed ? "secondary" : "outlineInfo"}
+              disabled={loading || installing || status.installed}
+              onClick={installCaddy}
+            >
+              <DownloadCloud size={16} />
+              {status.installed ? "Installed" : installing ? "Installing..." : "Install Caddy"}
+            </Button>
+          )}
         </div>
 
         {!status.installed && Array.isArray(status.installCommands) && status.installCommands.length > 0 && (

@@ -130,6 +130,11 @@ export default function Caddy() {
               <Skeleton className="h-4 w-64 max-w-full" />
             </div>
             <Skeleton className="h-10 w-36" />
+            <div className="grid gap-2 md:grid-cols-2">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+            <Skeleton className="h-10 w-56" />
           </div>
         ) : (
           <div className="text-sm text-text-2">
@@ -142,45 +147,51 @@ export default function Caddy() {
             <p className="text-text-3">Caddyfile: {status.caddyfilePath || "-"}</p>
           </div>
         )}
-        <div>
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={!status.installed || loading || saving || restarting}
-            onClick={restartCaddy}
-          >
-            {restarting ? "Restarting..." : "Restart Caddy"}
-          </Button>
-        </div>
+        {!loading && (
+          <div>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={!status.installed || loading || saving || restarting}
+              onClick={restartCaddy}
+            >
+              {restarting ? "Restarting..." : "Restart Caddy"}
+            </Button>
+          </div>
+        )}
 
-        {!status.installed && (
+        {!loading && !status.installed && (
           <Banner tone="warning">
             Install Caddy first from the Extensions page.
           </Banner>
         )}
 
-        <div className="grid gap-2 md:grid-cols-2">
-          <Input
-            value={form.domain}
-            onChange={(event) => setForm((prev) => ({ ...prev, domain: event.target.value }))}
-            placeholder="example.com"
-            disabled={!status.installed || saving || restarting || loading}
-          />
-          <Input
-            value={form.upstream}
-            onChange={(event) => setForm((prev) => ({ ...prev, upstream: event.target.value }))}
-            placeholder="localhost:3000"
-            disabled={!status.installed || saving || restarting || loading}
-          />
-        </div>
-        <Button
-          type="button"
-          variant="outlineInfo"
-          disabled={!status.installed || saving || restarting || loading}
-          onClick={saveProxy}
-        >
-          {saving ? "Saving..." : "Add / Update Reverse Proxy"}
-        </Button>
+        {!loading && (
+          <>
+            <div className="grid gap-2 md:grid-cols-2">
+              <Input
+                value={form.domain}
+                onChange={(event) => setForm((prev) => ({ ...prev, domain: event.target.value }))}
+                placeholder="example.com"
+                disabled={!status.installed || saving || restarting || loading}
+              />
+              <Input
+                value={form.upstream}
+                onChange={(event) => setForm((prev) => ({ ...prev, upstream: event.target.value }))}
+                placeholder="localhost:3000"
+                disabled={!status.installed || saving || restarting || loading}
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outlineInfo"
+              disabled={!status.installed || saving || restarting || loading}
+              onClick={saveProxy}
+            >
+              {saving ? "Saving..." : "Add / Update Reverse Proxy"}
+            </Button>
+          </>
+        )}
       </section>
 
       <section className="page-panel">

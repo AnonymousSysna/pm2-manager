@@ -8,6 +8,7 @@ import Button from "../components/ui/Button";
 import Select from "../components/ui/Select";
 import Input from "../components/ui/Input";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
+import { Skeleton } from "../components/ui/Skeleton";
 
 function levelIcon(level) {
   const normalized = String(level || "").toLowerCase();
@@ -165,11 +166,14 @@ export default function Notifications() {
       <section className="page-panel">
         <PanelHeader title="Event Timeline" className="mb-3" />
         <div className="max-h-log-viewer space-y-2 overflow-y-auto pr-1">
+          {loading && visible.length === 0 && <NotificationListSkeleton />}
           {visible.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-text-3">
-              <Bell size={24} />
-              <p className="mt-2 text-sm">No notifications found.</p>
-            </div>
+            !loading && (
+              <div className="flex flex-col items-center justify-center py-12 text-text-3">
+                <Bell size={24} />
+                <p className="mt-2 text-sm">No notifications found.</p>
+              </div>
+            )
           )}
 
           {visible.map((item, index) => {
@@ -217,6 +221,30 @@ export default function Notifications() {
           })}
         </div>
       </section>
+    </div>
+  );
+}
+
+function NotificationListSkeleton() {
+  return (
+    <div className="space-y-2" aria-hidden="true">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <article key={index} className="rounded-lg border border-border bg-surface-2 p-3">
+          <div className="flex items-start gap-2">
+            <Skeleton className="mt-0.5 h-4 w-4 rounded-full" />
+            <div className="min-w-0 flex-1 space-y-2">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-5/6" />
+              <div className="flex gap-2">
+                <Skeleton className="h-8 w-24" />
+                <Skeleton className="h-8 w-28" />
+              </div>
+              <Skeleton className="h-3 w-48" />
+            </div>
+          </div>
+        </article>
+      ))}
     </div>
   );
 }
