@@ -12,6 +12,7 @@ import InsetPanel from "../components/ui/InsetPanel";
 import Select from "../components/ui/Select";
 import Input from "../components/ui/Input";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
+import { Skeleton } from "../components/ui/Skeleton";
 
 function levelFromLine(line) {
   const text = String(line || "").toUpperCase();
@@ -530,11 +531,11 @@ export default function Logs() {
         )}
 
         {(selected || combinedView) && visibleEntries.length === 0 && (
-          <p className="text-text-3">
-            {logsLoading && "Loading log entries..."}
-            {!logsLoading && hasActiveFilter && entries.length > 0 && "No logs match your current filter."}
-            {!logsLoading && (!hasActiveFilter || entries.length === 0) && "Waiting for logs from the selected process."}
-          </p>
+          <>
+            {logsLoading && <LogsViewerSkeleton />}
+            {!logsLoading && hasActiveFilter && entries.length > 0 && <p className="text-text-3">No logs match your current filter.</p>}
+            {!logsLoading && (!hasActiveFilter || entries.length === 0) && <p className="text-text-3">Waiting for logs from the selected process.</p>}
+          </>
         )}
 
         {visibleEntries.map((entry, index) => {
@@ -556,6 +557,21 @@ export default function Logs() {
           );
         })}
       </section>
+    </div>
+  );
+}
+
+function LogsViewerSkeleton() {
+  return (
+    <div className="space-y-2" aria-hidden="true">
+      {Array.from({ length: 10 }).map((_, index) => (
+        <div key={index} className="flex items-center gap-2">
+          <Skeleton className="h-3 w-20" />
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-3 w-14" />
+          <Skeleton className="h-3 w-full" />
+        </div>
+      ))}
     </div>
   );
 }

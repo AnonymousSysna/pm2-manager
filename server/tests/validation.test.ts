@@ -5,7 +5,8 @@ const path = require("path");
 const {
   sanitizeProcessName,
   sanitizeEnvObject,
-  resolveSafePath
+  resolveSafePath,
+  sanitizeGitCloneUrl
 } = require("../utils/validation");
 
 test("sanitizeProcessName allows safe names", () => {
@@ -30,5 +31,22 @@ test("resolveSafePath blocks traversal outside base", () => {
     () => resolveSafePath("../../etc/passwd", base, "project_path"),
     /(inside allowed base path|traversal segments)/
   );
+});
+
+test("sanitizeGitCloneUrl accepts common git remote formats", () => {
+  assert.equal(
+    sanitizeGitCloneUrl("https://github.com/acme/sample-app.git"),
+    "https://github.com/acme/sample-app.git"
+  );
+  assert.equal(
+    sanitizeGitCloneUrl("git@github.com:acme/sample-app.git"),
+    "git@github.com:acme/sample-app.git"
+  );
+});
+
+test("sanitizeGitCloneUrl rejects malformed clone URLs", () => {
+  assert.throws(() => sanitizeGitCloneUrl("dasdas"), /must be a valid git clone URL/);
+  assert.throws(() => sanitizeGitCloneUrl("https://github.com"), /must include a repository path/);
+  assert.throws(() => sanitizeGitCloneUrl("https://git hub.com/acme/repo.git"), /cannot contain whitespace/);
 });
 

@@ -8,6 +8,7 @@ import Input from "../components/ui/Input";
 import InsetPanel from "../components/ui/InsetPanel";
 import Select from "../components/ui/Select";
 import { PageIntro, SectionHeader } from "../components/ui/PageLayout";
+import { Skeleton } from "../components/ui/Skeleton";
 
 export default function History() {
   const [searchParams] = useSearchParams();
@@ -166,7 +167,7 @@ export default function History() {
               onClick={() => loadDeploymentHistory(deploymentPage)}
               disabled={deploymentHistoryLoading}
             >
-              <RefreshCw size={14} className={deploymentHistoryLoading ? "animate-spin" : ""} />
+              <RefreshCw size={14} />
               Refresh
             </Button>
           }
@@ -187,7 +188,7 @@ export default function History() {
           Page {deploymentPagination.page} of {deploymentPagination.totalPages} ({deploymentPagination.totalItems} items)
         </p>
         <div className="max-h-60 space-y-2 overflow-y-auto text-base">
-          {deploymentHistoryLoading && <p className="text-text-3">Loading deployment history...</p>}
+          {deploymentHistoryLoading && <HistoryListSkeleton showSteps />}
           {!deploymentHistoryLoading && deploymentHistory.length === 0 && <p className="text-text-3">No deployments yet.</p>}
           {deploymentHistory.map((item, idx) => (
             <InsetPanel key={`${item.ts}-${idx}`} padding="sm">
@@ -249,7 +250,7 @@ export default function History() {
               onClick={() => loadRestartHistory(restartPage)}
               disabled={restartHistoryLoading}
             >
-              <RefreshCw size={14} className={restartHistoryLoading ? "animate-spin" : ""} />
+              <RefreshCw size={14} />
               Refresh
             </Button>
           }
@@ -258,7 +259,7 @@ export default function History() {
           Page {restartPagination.page} of {restartPagination.totalPages} ({restartPagination.totalItems} items)
         </p>
         <div className="max-h-60 space-y-2 overflow-y-auto text-base">
-          {restartHistoryLoading && <p className="text-text-3">Loading restart history...</p>}
+          {restartHistoryLoading && <HistoryListSkeleton />}
           {!restartHistoryLoading && restartHistory.length === 0 && <p className="text-text-3">No restart history yet.</p>}
           {restartHistory.map((item, idx) => (
             <InsetPanel key={`${item.ts}-${idx}`} padding="sm">
@@ -312,7 +313,7 @@ export default function History() {
               onClick={() => loadAuditHistory(auditPage)}
               disabled={auditHistoryLoading}
             >
-              <RefreshCw size={14} className={auditHistoryLoading ? "animate-spin" : ""} />
+              <RefreshCw size={14} />
               Refresh
             </Button>
           }
@@ -339,7 +340,7 @@ export default function History() {
           Page {auditPagination.page} of {auditPagination.totalPages} ({auditPagination.totalItems} items)
         </p>
         <div className="max-h-72 space-y-2 overflow-y-auto text-base">
-          {auditHistoryLoading && <p className="text-text-3">Loading audit trail...</p>}
+          {auditHistoryLoading && <HistoryListSkeleton />}
           {!auditHistoryLoading && auditHistory.length === 0 && <p className="text-text-3">No audit entries yet.</p>}
           {auditHistory.map((item, idx) => (
             <InsetPanel key={`${item.ts}-${idx}`} padding="sm">
@@ -374,6 +375,25 @@ export default function History() {
           </Button>
         </div>
       </section>
+    </div>
+  );
+}
+
+function HistoryListSkeleton({ showSteps = false, count = 3 }) {
+  return (
+    <div className="space-y-2" aria-hidden="true">
+      {Array.from({ length: count }).map((_, index) => (
+        <InsetPanel key={index} padding="sm">
+          <Skeleton className="mb-2 h-4 w-3/4" />
+          <Skeleton className="h-3 w-1/2" />
+          {showSteps && (
+            <div className="mt-2 space-y-1 border-t border-border pt-2">
+              <Skeleton className="h-3 w-2/3" />
+              <Skeleton className="h-3 w-3/5" />
+            </div>
+          )}
+        </InsetPanel>
+      ))}
     </div>
   );
 }

@@ -5,6 +5,8 @@ const PROCESS_NAME_PATTERN = /^[A-Za-z0-9:_-]{1,100}$/;
 const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const SAFE_ARG_CHARS = /^[A-Za-z0-9_./:=,@+\-\s]*$/;
 const RESERVED_PROCESS_NAMES = new Set(["catalog", "interpreters"]);
+const GIT_CLONE_SSH_PATTERN = /^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+:[^\s]+$/;
+const GIT_CLONE_PROTOCOLS = new Set(["http:", "https:", "ssh:", "git:", "file:"]);
 
 function sanitizeProcessName(name, field = "name") {
   const value = String(name || "").trim();
@@ -133,6 +135,46 @@ function sanitizeCronExpression(value) {
   return str;
 }
 
+function sanitizeGitCloneUrl(value, fieldName = "git_clone_url") {
+  const str = String(value || "").trim();
+  if (!str) {
+    throw new Error(`${fieldName} is required`);
+  }
+  if (str.length > 2048) {
+    throw new Error(`${fieldName} exceeds max length 2048`);
+  }
+  if (/\s/.test(str)) {
+    throw new Error(`${fieldName} cannot contain whitespace`);
+  }
+
+  if (GIT_CLONE_SSH_PATTERN.test(str)) {
+    const remotePath = str.split(":").slice(1).join(":");
+    if (!remotePath || !remotePath.includes("/")) {
+      throw new Error(`${fieldName} must be a valid git clone URL`);
+    }
+    return str;
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(str);
+  } catch (_error) {
+    throw new Error(`${fieldName} must be a valid git clone URL`);
+  }
+
+  if (!GIT_CLONE_PROTOCOLS.has(parsed.protocol)) {
+    throw new Error(`${fieldName} must use http, https, ssh, git, or file protocol`);
+  }
+  if (parsed.protocol !== "file:" && !parsed.hostname) {
+    throw new Error(`${fieldName} must include a hostname`);
+  }
+  if (!parsed.pathname || parsed.pathname === "/") {
+    throw new Error(`${fieldName} must include a repository path`);
+  }
+
+  return str;
+}
+
 module.exports = {
   PROCESS_NAME_PATTERN,
   ENV_KEY_PATTERN,
@@ -144,6 +186,7 @@ module.exports = {
   sanitizeNodeArgs,
   sanitizeMaxMemoryRestart,
   sanitizeInterpreter,
-  sanitizeCronExpression
+  sanitizeCronExpression,
+  sanitizeGitCloneUrl
 };
 

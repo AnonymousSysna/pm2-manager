@@ -12,6 +12,7 @@ import Checkbox from "../components/ui/Checkbox";
 import Input from "../components/ui/Input";
 import Select from "../components/ui/Select";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
+import { Skeleton } from "../components/ui/Skeleton";
 import StatCardsSection from "../components/dashboard/StatCardsSection";
 import SystemResourcesPanel from "../components/dashboard/SystemResourcesPanel";
 import DependencyGraphPanel from "../components/dashboard/DependencyGraphPanel";
@@ -901,7 +902,7 @@ export default function Dashboard() {
               {deploySubmitting && (
                 <div className="rounded-md border border-border bg-surface-2 p-3">
                   <div className="flex items-center gap-2 text-sm text-text-2">
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-border border-t-brand-500" />
+                    <Skeleton className="h-4 w-24 rounded-full" />
                     Deployment in progress. Keep this page open.
                   </div>
                   <p className="mt-1 text-xs text-text-3">Elapsed: {deployElapsedSec}s</p>
@@ -1076,7 +1077,7 @@ export default function Dashboard() {
               </Button>
             </div>
             {dotEnvLoading ? (
-              <div className="rounded-md border border-border bg-surface-2 p-3 text-sm text-text-3">Loading .env...</div>
+              <DotEnvEditorSkeleton />
             ) : (
               <div className="max-h-80 space-y-3 overflow-y-auto rounded-md border border-border bg-surface-2 p-3">
                 {dotEnvValidationError && (
@@ -1212,6 +1213,21 @@ function DotEnvValueInput({ valueType, value, onChange, disabled, sensitive = fa
       disabled={disabled}
       onChange={(event) => onChange(event.target.value)}
     />
+  );
+}
+
+function DotEnvEditorSkeleton() {
+  return (
+    <div className="rounded-md border border-border bg-surface-2 p-3" aria-hidden="true">
+      <div className="space-y-3">
+        {Array.from({ length: 5 }).map((_, index) => (
+          <div key={index} className="grid grid-cols-1 gap-2 md:grid-cols-[220px,1fr] md:items-center">
+            <Skeleton className="h-3 w-28" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

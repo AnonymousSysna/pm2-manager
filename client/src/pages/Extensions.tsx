@@ -9,6 +9,7 @@ import Input from "../components/ui/Input";
 import InsetPanel from "../components/ui/InsetPanel";
 import Select from "../components/ui/Select";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
+import { Skeleton } from "../components/ui/Skeleton";
 
 export default function Extensions() {
   const [loading, setLoading] = useState(true);
@@ -168,18 +169,26 @@ export default function Extensions() {
           <InsetPanel padding="sm">
             <PackageCheck className="text-brand-400" size={22} />
           </InsetPanel>
-          <div className="min-w-0 flex-1">
-            <h3 className="panel-heading">Caddy</h3>
-            <p className="text-sm text-text-3">
-              Platform: <span className="text-text-2">{status.platform || "unknown"}</span>
-            </p>
-            <p className="text-sm text-text-3">
-              Status:{" "}
-              <span className={status.installed ? "text-success-300" : "text-warning-300"}>
-                {status.installed ? `Installed${status.version ? ` (${status.version})` : ""}` : "Not installed"}
-              </span>
-            </p>
-          </div>
+          {loading ? (
+            <div className="min-w-0 flex-1 space-y-2">
+              <Skeleton className="h-6 w-28" />
+              <Skeleton className="h-4 w-36" />
+              <Skeleton className="h-4 w-44" />
+            </div>
+          ) : (
+            <div className="min-w-0 flex-1">
+              <h3 className="panel-heading">Caddy</h3>
+              <p className="text-sm text-text-3">
+                Platform: <span className="text-text-2">{status.platform || "unknown"}</span>
+              </p>
+              <p className="text-sm text-text-3">
+                Status:{" "}
+                <span className={status.installed ? "text-success-300" : "text-warning-300"}>
+                  {status.installed ? `Installed${status.version ? ` (${status.version})` : ""}` : "Not installed"}
+                </span>
+              </p>
+            </div>
+          )}
           <Button
             type="button"
             variant={status.installed ? "secondary" : "outlineInfo"}
@@ -224,6 +233,9 @@ export default function Extensions() {
         </div>
 
         <div className="space-y-2">
+          {interpreterState.loading && interpreterState.interpreters.length === 0 && (
+            <InterpreterListSkeleton />
+          )}
           {interpreterState.interpreters.map((item) => (
             <InsetPanel key={item.key}>
               <div className="flex flex-wrap items-center gap-2">
@@ -318,40 +330,84 @@ export default function Extensions() {
           </div>
 
           <div className="mt-3 space-y-2">
-            <p className="text-xs text-text-3">
-              Platform: <span className="text-text-2">{nodeRuntimeState.data?.platform || "-"}</span>{" "}
-              | System Node: <span className="text-text-2">{nodeRuntimeState.data?.systemNode?.version || "-"}</span>
-            </p>
-            {Array.isArray(nodeRuntimeState.data?.managers) && nodeRuntimeState.data.managers.map((manager) => (
-              <div key={manager.manager} className="rounded border border-border bg-surface p-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-xs font-semibold text-text-2">{manager.displayName}</p>
-                  <Badge tone={manager.installed ? "success" : "warning"}>
-                    {manager.installed ? "Installed" : "Missing"}
-                  </Badge>
-                </div>
-                <p className="mt-1 text-xs text-text-3">
-                  Installed versions:{" "}
-                  <span className="text-text-2">
-                    {Array.isArray(manager.versions) && manager.versions.length > 0
-                      ? manager.versions.join(", ")
-                      : "-"}
-                  </span>
+            {nodeRuntimeState.loading ? (
+              <NodeRuntimeSkeleton />
+            ) : (
+              <>
+                <p className="text-xs text-text-3">
+                  Platform: <span className="text-text-2">{nodeRuntimeState.data?.platform || "-"}</span>{" "}
+                  | System Node: <span className="text-text-2">{nodeRuntimeState.data?.systemNode?.version || "-"}</span>
                 </p>
-                {!manager.installed && Array.isArray(manager.installCommands) && manager.installCommands.length > 0 && (
-                  <div className="mt-1 text-xs text-text-3">
-                    {manager.installCommands.map((command) => (
-                      <pre key={command} className="overflow-x-auto whitespace-pre-wrap text-xs text-text-3">
-                        {command}
-                      </pre>
-                    ))}
+                {Array.isArray(nodeRuntimeState.data?.managers) && nodeRuntimeState.data.managers.map((manager) => (
+                  <div key={manager.manager} className="rounded border border-border bg-surface p-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-xs font-semibold text-text-2">{manager.displayName}</p>
+                      <Badge tone={manager.installed ? "success" : "warning"}>
+                        {manager.installed ? "Installed" : "Missing"}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-xs text-text-3">
+                      Installed versions:{" "}
+                      <span className="text-text-2">
+                        {Array.isArray(manager.versions) && manager.versions.length > 0
+                          ? manager.versions.join(", ")
+                          : "-"}
+                      </span>
+                    </p>
+                    {!manager.installed && Array.isArray(manager.installCommands) && manager.installCommands.length > 0 && (
+                      <div className="mt-1 text-xs text-text-3">
+                        {manager.installCommands.map((command) => (
+                          <pre key={command} className="overflow-x-auto whitespace-pre-wrap text-xs text-text-3">
+                            {command}
+                          </pre>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
+                ))}
+              </>
+            )}
           </div>
         </InsetPanel>
       </section>
+    </div>
+  );
+}
+
+function InterpreterListSkeleton() {
+  return (
+    <div className="space-y-2" aria-hidden="true">
+      {Array.from({ length: 3 }).map((_, index) => (
+        <InsetPanel key={index}>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-5 w-20" />
+              <Skeleton className="h-5 w-24" />
+            </div>
+            <Skeleton className="h-3 w-40" />
+            <Skeleton className="h-3 w-64" />
+          </div>
+        </InsetPanel>
+      ))}
+    </div>
+  );
+}
+
+function NodeRuntimeSkeleton() {
+  return (
+    <div className="space-y-2" aria-hidden="true">
+      <Skeleton className="h-3 w-56" />
+      {Array.from({ length: 2 }).map((_, index) => (
+        <div key={index} className="rounded border border-border bg-surface p-2">
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-5 w-20" />
+          </div>
+          <Skeleton className="mt-2 h-3 w-48" />
+          <Skeleton className="mt-2 h-10 w-full" />
+        </div>
+      ))}
     </div>
   );
 }

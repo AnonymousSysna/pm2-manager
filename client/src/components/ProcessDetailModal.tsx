@@ -7,6 +7,7 @@ import Button from "./ui/Button";
 import Badge from "./ui/Badge";
 import ProgressBar from "./ui/ProgressBar";
 import TabGroup from "./ui/TabGroup";
+import { Skeleton } from "./ui/Skeleton";
 
 const tabs = ["Overview", "Environment", "Resource Graph", "Quick Actions"];
 
@@ -214,7 +215,7 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
 
         {tab === "Resource Graph" && (
           <div className="space-y-3">
-            {metricsLoading && <p className="text-sm text-text-3">Loading metrics history...</p>}
+            {metricsLoading && <MetricsHistorySkeleton />}
             {!metricsLoading && metricsPoints.length === 0 && (
               <p className="text-sm text-text-3">No metrics history yet.</p>
             )}
@@ -322,6 +323,23 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
           </div>
         )}
       </aside>
+    </div>
+  );
+}
+
+function MetricsHistorySkeleton() {
+  return (
+    <div className="space-y-3" aria-hidden="true">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={index} className="space-y-1 text-xs">
+          <div className="flex justify-between">
+            <Skeleton className="h-3 w-28" />
+            <Skeleton className="h-3 w-24" />
+          </div>
+          <Skeleton className="h-2.5 w-full rounded-full" />
+          <Skeleton className="h-2.5 w-full rounded-full" />
+        </div>
+      ))}
     </div>
   );
 }

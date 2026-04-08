@@ -56,4 +56,27 @@ describe("CreateProcess", () => {
     expect(screen.getByLabelText("Process Name *")).toHaveValue("sample-app");
     expect(screen.getByLabelText("Project Directory *")).toHaveValue("sample-app");
   });
+
+  it("blocks continuing with an invalid git clone url", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <CreateProcess />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(nodeRuntimeStatusMock).toHaveBeenCalled();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Git Clone" }));
+    await user.type(screen.getByLabelText("Process Name *"), "sample-app");
+    await user.type(screen.getByLabelText("Git Clone URL *"), "dasdas");
+    await user.type(screen.getByLabelText("Project Directory *"), "sample-app");
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(screen.getByText("Git clone URL must be a valid git clone URL.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Start Script")).not.toBeInTheDocument();
+  });
 });

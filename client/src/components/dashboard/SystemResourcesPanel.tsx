@@ -1,12 +1,26 @@
 // @ts-nocheck
 import { PanelHeader } from "../ui/PageLayout";
+import { Skeleton, SkeletonText } from "../ui/Skeleton";
 
 export default function SystemResourcesPanel({ systemResources, bytesToGB }) {
   return (
     <section className="page-panel">
       <PanelHeader title="System Resources" className="mb-2" />
       {!systemResources ? (
-        <p className="text-sm text-text-3">Loading system resources...</p>
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            {[0, 1, 2].map((item) => (
+              <div key={item} className="rounded border border-border bg-surface-2 p-2">
+                <Skeleton className="mb-2 h-3 w-16" />
+                <Skeleton className="mb-2 h-5 w-24" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+            ))}
+          </div>
+          <div className="rounded border border-border bg-surface-2 p-2">
+            <SkeletonText lines={4} lineClassName="h-3" />
+          </div>
+        </div>
       ) : (
         <div className="space-y-3">
           <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-3">

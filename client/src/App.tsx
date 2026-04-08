@@ -2,6 +2,7 @@
 import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import RequireAuth from "./components/RequireAuth";
+import { Skeleton } from "./components/ui/Skeleton";
 
 const Layout = lazy(() => import("./components/Layout"));
 const Login = lazy(() => import("./pages/Login"));
@@ -16,8 +17,25 @@ const Caddy = lazy(() => import("./pages/Caddy"));
 
 function RouteFallback() {
   return (
-    <div className="flex min-h-route-fallback items-center justify-center text-sm text-text-3">
-      Loading...
+    <div className="min-h-route-fallback space-y-4 p-4">
+      <section className="page-panel page-intro space-y-3">
+        <Skeleton className="h-8 w-56" />
+        <Skeleton className="h-4 w-80 max-w-full" />
+      </section>
+      <section className="page-panel space-y-3">
+        <Skeleton className="h-6 w-40" />
+        <div className="grid gap-3 md:grid-cols-3">
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+        </div>
+      </section>
+      <section className="page-panel space-y-3">
+        <Skeleton className="h-6 w-48" />
+        <Skeleton className="h-12" />
+        <Skeleton className="h-12" />
+        <Skeleton className="h-12" />
+      </section>
     </div>
   );
 }

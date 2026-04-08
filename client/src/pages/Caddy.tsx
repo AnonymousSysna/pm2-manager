@@ -7,6 +7,7 @@ import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
 import InsetPanel from "../components/ui/InsetPanel";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
+import { Skeleton } from "../components/ui/Skeleton";
 
 export default function Caddy() {
   const [loading, setLoading] = useState(true);
@@ -122,15 +123,25 @@ export default function Caddy() {
 
       <section className="page-panel space-y-3">
         <PanelHeader title="Caddy Service" />
-        <div className="text-sm text-text-2">
-          <p>
-            Caddy status:{" "}
-            <span className={status.installed ? "text-success-300" : "text-warning-300"}>
-              {status.installed ? "Installed" : "Not installed"}
-            </span>
-          </p>
-          <p className="text-text-3">Caddyfile: {status.caddyfilePath || "-"}</p>
-        </div>
+        {loading ? (
+          <div className="space-y-3">
+            <div className="text-sm text-text-2">
+              <Skeleton className="mb-2 h-4 w-36" />
+              <Skeleton className="h-4 w-64 max-w-full" />
+            </div>
+            <Skeleton className="h-10 w-36" />
+          </div>
+        ) : (
+          <div className="text-sm text-text-2">
+            <p>
+              Caddy status:{" "}
+              <span className={status.installed ? "text-success-300" : "text-warning-300"}>
+                {status.installed ? "Installed" : "Not installed"}
+              </span>
+            </p>
+            <p className="text-text-3">Caddyfile: {status.caddyfilePath || "-"}</p>
+          </div>
+        )}
         <div>
           <Button
             type="button"
@@ -174,7 +185,7 @@ export default function Caddy() {
 
       <section className="page-panel">
         <PanelHeader title="Managed Domains" className="mb-2" />
-        {loading && <p className="text-sm text-text-3">Loading...</p>}
+        {loading && <ManagedDomainsSkeleton />}
         {!loading && (!Array.isArray(status.managedSites) || status.managedSites.length === 0) && (
           <p className="text-sm text-text-3">No managed domains yet.</p>
         )}
@@ -268,6 +279,26 @@ export default function Caddy() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ManagedDomainsSkeleton() {
+  return (
+    <div className="space-y-2" aria-hidden="true">
+      {Array.from({ length: 3 }).map((_, index) => (
+        <InsetPanel key={index} padding="sm" className="flex items-start justify-between gap-3 text-sm">
+          <div className="min-w-0 flex-1 space-y-2">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-3 w-32" />
+            <Skeleton className="h-3 w-48" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-8 w-14" />
+            <Skeleton className="h-8 w-16" />
+          </div>
+        </InsetPanel>
+      ))}
     </div>
   );
 }

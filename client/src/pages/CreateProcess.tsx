@@ -10,10 +10,13 @@ import Input from "../components/ui/Input";
 import Select from "../components/ui/Select";
 import Textarea from "../components/ui/Textarea";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
+import { Skeleton } from "../components/ui/Skeleton";
 
 const defaultEnvRow = { key: "", value: "" };
 const TEMPLATE_STORAGE_KEY = "pm2_process_templates_v1";
 const SENSITIVE_ENV_KEY_PATTERN = /(pass(word)?|secret|token|api[_-]?key|private|credential|auth|pwd)/i;
+const GIT_CLONE_SSH_PATTERN = /^(?:ssh:\/\/)?(?:[^@\s]+@)?[^:/\s]+:[^:\s]+$/;
+const GIT_CLONE_PROTOCOLS = new Set(["http:", "https:", "ssh:", "git:", "file:"]);
 
 function isSensitiveEnvKey(key) {
   return SENSITIVE_ENV_KEY_PATTERN.test(String(key || ""));
@@ -41,6 +44,46 @@ function inferRepoName(gitUrl) {
     .replace(/\.git$/i, "");
   const parts = cleaned.split("/");
   return (parts[parts.length - 1] || "app").replace(/[^A-Za-z0-9._-]/g, "-");
+}
+
+function validateGitCloneUrl(value) {
+  const str = String(value || "").trim();
+  if (!str) {
+    return "Git clone URL is required in Git Clone Mode.";
+  }
+  if (str.length > 2048) {
+    return "Git clone URL exceeds max length 2048.";
+  }
+  if (/\s/.test(str)) {
+    return "Git clone URL cannot contain whitespace.";
+  }
+
+  if (GIT_CLONE_SSH_PATTERN.test(str)) {
+    const remotePath = str.split(":").slice(1).join(":");
+    if (!remotePath || !remotePath.includes("/")) {
+      return "Git clone URL must be a valid git clone URL.";
+    }
+    return "";
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(str);
+  } catch (_error) {
+    return "Git clone URL must be a valid git clone URL.";
+  }
+
+  if (!GIT_CLONE_PROTOCOLS.has(parsed.protocol)) {
+    return "Git clone URL must use http, https, ssh, git, or file protocol.";
+  }
+  if (parsed.protocol !== "file:" && !parsed.hostname) {
+    return "Git clone URL must include a hostname.";
+  }
+  if (!parsed.pathname || parsed.pathname === "/") {
+    return "Git clone URL must include a repository path.";
+  }
+
+  return "";
 }
 
 function makeCreateOperationId() {
@@ -350,11 +393,46 @@ export default function CreateProcess() {
     if (mode === "project" && !form.project_path.trim()) {
       return "Project Directory is required in Project Mode.";
     }
-    if (mode === "git" && !form.git_clone_url.trim()) {
-      return "Git clone URL is required in Git Clone Mode.";
+    if (mode === "git") {
+      const gitCloneUrlError = validateGitCloneUrl(form.git_clone_url);
+      if (gitCloneUrlError) {
+        return gitCloneUrlError;
+      }
     }
     if (mode === "git" && !form.project_path.trim()) {
       return "Project Directory is required in Git Clone Mode.";
+    }
+    return "";
+  };
+
+  const validateSubmission = () => {
+    if (!form.name.trim()) {
+      return "Process Name is required.";
+    }
+
+    if (mode === "script" && !form.script.trim()) {
+      return "Script Path is required in Script Mode.";
+    }
+
+    if (mode === "project" && !form.project_path.trim()) {
+      return "Project Directory is required in Project Mode.";
+    }
+
+    if (mode === "git") {
+      const gitCloneUrlError = validateGitCloneUrl(form.git_clone_url);
+      if (gitCloneUrlError) {
+        return gitCloneUrlError;
+      }
+    }
+
+    if (mode === "git" && !form.project_path.trim()) {
+      return "Project Directory is required in Git Clone Mode.";
+    }
+    if (showAdvanced && maxMemoryRestartError) {
+      return maxMemoryRestartError;
+    }
+    if (mode === "git" && envFileValidationErrors.length > 0) {
+      return `.env content has invalid lines: ${envFileValidationErrors.slice(0, 5).map((item) => item.line).join(", ")}`;
     }
     return "";
   };
@@ -428,36 +506,9 @@ export default function CreateProcess() {
       return;
     }
 
-    if (!form.name.trim()) {
-      setError("Process Name is required.");
-      return;
-    }
-
-    if (mode === "script" && !form.script.trim()) {
-      setError("Script Path is required in Script Mode.");
-      return;
-    }
-
-    if (mode === "project" && !form.project_path.trim()) {
-      setError("Project Directory is required in Project Mode.");
-      return;
-    }
-
-    if (mode === "git" && !form.git_clone_url.trim()) {
-      setError("Git clone URL is required in Git Clone Mode.");
-      return;
-    }
-
-    if (mode === "git" && !form.project_path.trim()) {
-      setError("Project Directory is required in Git Clone Mode.");
-      return;
-    }
-    if (showAdvanced && maxMemoryRestartError) {
-      setError(maxMemoryRestartError);
-      return;
-    }
-    if (mode === "git" && envFileValidationErrors.length > 0) {
-      setError(`.env content has invalid lines: ${envFileValidationErrors.slice(0, 5).map((item) => item.line).join(", ")}`);
+    const validationError = validateSubmission();
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
@@ -688,7 +739,10 @@ export default function CreateProcess() {
                   )}
                   <div className="rounded border border-border bg-surface p-2 text-xs text-text-3">
                     {nodeRuntimeState.loading ? (
-                      <p>Checking Node runtime managers...</p>
+                      <div className="space-y-2" aria-hidden="true">
+                        <Skeleton className="h-3 w-32" />
+                        <Skeleton className="h-3 w-5/6" />
+                      </div>
                     ) : (
                       <>
                         <p>
@@ -865,7 +919,10 @@ export default function CreateProcess() {
       {isLaunching && (
         <div className="surface-overlay fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="w-full max-w-lg rounded-lg border border-border bg-surface p-5 shadow-xl">
-            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-border border-t-brand-500" />
+            <div className="mx-auto w-full max-w-xs space-y-2" aria-hidden="true">
+              <Skeleton className="mx-auto h-3 w-20 rounded-full" />
+              <Skeleton className="h-3 w-full" />
+            </div>
             <p className="mt-3 text-center text-base font-semibold text-text-1">This may take a moment</p>
             <p className="mt-1 text-center text-sm text-text-3">
               Preparing process, installing dependencies, and starting services.

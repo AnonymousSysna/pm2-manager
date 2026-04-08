@@ -17,7 +17,8 @@ const {
   sanitizeNodeArgs,
   sanitizeMaxMemoryRestart,
   sanitizeInterpreter,
-  sanitizeCronExpression
+  sanitizeCronExpression,
+  sanitizeGitCloneUrl
 } = require("../utils/validation");
 const { trackPm2Operation } = require("../middleware/metrics");
 const { appendHistoryEntry } = require("../utils/restartHistory");
@@ -1524,10 +1525,7 @@ async function createProcess(config, actorContext = "unknown") {
       }
 
       if (cloneUrl) {
-        const gitUrl = sanitizeOptionalString(cloneUrl, "git_clone_url", 2048);
-        if (!gitUrl) {
-          throw new Error("git_clone_url is required when provided");
-        }
+        const gitUrl = sanitizeGitCloneUrl(cloneUrl, "git_clone_url");
 
         if (!projectStat) {
           await fs.promises.mkdir(projectDir, { recursive: true });

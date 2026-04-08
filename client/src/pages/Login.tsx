@@ -54,7 +54,7 @@ export default function Login() {
           <Input type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Username" required />
           <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" required />
           <Button type="submit" variant="primary" disabled={loading} className="w-full">
-            {loading ? <span className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" /> : "Sign In"}
+            {loading ? "Signing In..." : "Sign In"}
           </Button>
         </form>
       </div>
