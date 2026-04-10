@@ -857,7 +857,7 @@ export default function Dashboard() {
       />
 
       <div className="ops-section-grid">
-        <div className="space-y-4">
+        <div className="space-y-4 xl:col-span-2">
           <ProcessListPanel
             filtered={filtered}
             monitoringSummary={monitoringSummary}
@@ -881,16 +881,16 @@ export default function Dashboard() {
             bytesToMB={bytesToMB}
             durationLabel={durationLabel}
           />
+        </div>
 
-          <div className="ops-subgrid">
-            <MetricsHistoryPanel
-              chartProcess={chartProcess}
-              onChartProcessChange={setChartProcess}
-              processes={processes}
-              historyPoints={historyPoints}
-            />
-            <DependencyGraphPanel dependencyEdges={dependencyEdges} />
-          </div>
+        <div className="space-y-4">
+          <MetricsHistoryPanel
+            chartProcess={chartProcess}
+            onChartProcessChange={setChartProcess}
+            processes={processes}
+            historyPoints={historyPoints}
+          />
+          <DependencyGraphPanel dependencyEdges={dependencyEdges} />
         </div>
 
         <div className="space-y-4">

@@ -146,10 +146,14 @@
   }
 
   .ops-section-grid {
-    @apply grid gap-4 xl:grid-cols-[minmax(0,1.8fr)_minmax(320px,1fr)];
+    @apply grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.95fr)];
   }
 
-  .ops-subgrid {
-    @apply grid gap-4 lg:grid-cols-2;
+  .process-control-panel {
+    @apply xl:p-5;
+  }
+
+  .process-control-table table {
+    @apply xl:min-w-[76rem];
   }
 }

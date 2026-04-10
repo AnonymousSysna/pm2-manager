@@ -36,7 +36,7 @@ export default function ProcessListPanel({
   const allSelected = filtered.length > 0 && filtered.every((proc) => Boolean(selectedNames[proc.name]));
 
   return (
-    <section className="page-panel space-y-4">
+    <section className="page-panel space-y-4 process-control-panel">
       <PanelHeader
         title="Process Control"
         description="The fastest route to inspect state, restart safely, jump into logs, and deploy with fewer clicks."
@@ -106,7 +106,7 @@ export default function ProcessListPanel({
         {filtered.length === 0 && <EmptyState />}
       </div>
 
-      <div className="hidden overflow-x-auto xl:block">
+      <div className="process-control-table hidden overflow-x-auto xl:block">
         <table className="min-w-full text-sm">
           <thead className="meta-label border-b border-border/80 text-left">
             <tr>
@@ -127,13 +127,13 @@ export default function ProcessListPanel({
 
               return (
                 <tr key={proc.name} className="border-b border-border/70 align-top last:border-b-0">
-                  <td className="px-2 py-4">
+                  <td className="px-3 py-4">
                     <Checkbox
                       checked={Boolean(selectedNames[proc.name])}
                       onChange={(event) => toggleSelected(proc.name, event.target.checked)}
                     />
                   </td>
-                  <td className="px-2 py-4">
+                  <td className="px-3 py-4">
                     <div className="min-w-[200px]">
                       <TextButton type="button" className="text-left text-base font-semibold" onClick={() => openDetails(proc)}>
                         {proc.name}
@@ -146,7 +146,7 @@ export default function ProcessListPanel({
                       </div>
                     </div>
                   </td>
-                  <td className="px-2 py-4">
+                  <td className="px-3 py-4">
                     <div className="space-y-2">
                       <StatusBadge status={proc.status} />
                       <p className="text-xs text-text-3">
@@ -154,15 +154,16 @@ export default function ProcessListPanel({
                       </p>
                     </div>
                   </td>
-                  <td className="px-2 py-4">
+                  <td className="px-3 py-4">
                     <LoadSummary proc={proc} bytesToMB={bytesToMB} />
                   </td>
-                  <td className="px-2 py-4">
+                  <td className="px-3 py-4">
                     <RuntimeSummary proc={proc} summary={summary} durationLabel={durationLabel} />
                   </td>
-                  <td className="px-2 py-4">
+                  <td className="px-3 py-4 min-w-[23rem]">
                     <RowActions
                       proc={proc}
+                      layout="table"
                       openDetails={openDetails}
                       openMetaModal={openMetaModal}
                       openDotEnvModal={openDotEnvModal}
@@ -312,6 +313,7 @@ function RuntimeSummary({ proc, summary, durationLabel }) {
 function RowActions({
   proc,
   compact = false,
+  layout = "default",
   openDetails,
   openMetaModal,
   openDotEnvModal,
@@ -325,10 +327,11 @@ function RowActions({
 }) {
   const isOnline = proc.status === "online";
   const canOpenApp = Number(proc.port) > 0;
+  const isTableLayout = layout === "table";
 
   return (
-    <div className="space-y-2">
-      <div className={`flex flex-wrap gap-2 ${compact ? "" : "max-w-[38rem]"}`}>
+    <div className={`space-y-2 ${isTableLayout ? "min-w-[21rem]" : ""}`}>
+      <div className={`flex flex-wrap ${isTableLayout ? "gap-1.5" : "gap-2"} ${compact ? "" : isTableLayout ? "" : "max-w-[38rem]"}`}>
         <Button type="button" size="sm" variant="outlineInfo" onClick={() => openDetails(proc)}>
           <Settings2 size={14} />
           Inspect
@@ -363,7 +366,7 @@ function RowActions({
         </Button>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className={`flex flex-wrap ${isTableLayout ? "gap-1.5" : "gap-2"}`}>
         <Button
           type="button"
           size="sm"
