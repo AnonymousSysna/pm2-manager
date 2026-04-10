@@ -35,28 +35,29 @@ function SparkLine({ points, accessor, stroke }) {
 
 export default function MetricsHistoryPanel({ chartProcess, onChartProcessChange, processes = [], historyPoints = [] }) {
   return (
-    <section>
-      <div className="page-panel space-y-3">
-        <PanelHeader title="CPU / Memory History" />
-        <Select value={chartProcess} onChange={(e) => onChartProcessChange(e.target.value)} className="w-full">
-          {processes.map((proc) => (
-            <option key={proc.name} value={proc.name}>
-              {proc.name}
-            </option>
-          ))}
-        </Select>
-        <div>
-          <p className="mb-1 text-xs text-text-3">CPU %</p>
-          <SparkLine points={historyPoints} accessor={(point) => Number(point.cpu || 0)} stroke="rgb(var(--color-brand-500))" />
-        </div>
-        <div>
-          <p className="mb-1 text-xs text-text-3">Memory MB</p>
-          <SparkLine
-            points={historyPoints}
-            accessor={(point) => Number(point.memory || 0) / 1024 / 1024}
-            stroke="rgb(var(--color-info-500))"
-          />
-        </div>
+    <section className="page-panel space-y-3">
+      <PanelHeader
+        title="Resource Trends"
+        description="Compare CPU and memory movement for one process without opening the detail drawer."
+      />
+      <Select value={chartProcess} onChange={(e) => onChartProcessChange(e.target.value)} className="w-full">
+        {processes.map((proc) => (
+          <option key={proc.name} value={proc.name}>
+            {proc.name}
+          </option>
+        ))}
+      </Select>
+      <div>
+        <p className="mb-1 text-xs text-text-3">CPU %</p>
+        <SparkLine points={historyPoints} accessor={(point) => Number(point.cpu || 0)} stroke="rgb(var(--color-brand-500))" />
+      </div>
+      <div>
+        <p className="mb-1 text-xs text-text-3">Memory MB</p>
+        <SparkLine
+          points={historyPoints}
+          accessor={(point) => Number(point.memory || 0) / 1024 / 1024}
+          stroke="rgb(var(--color-info-500))"
+        />
       </div>
     </section>
   );

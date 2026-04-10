@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import { within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import Dashboard from "./Dashboard";
 
@@ -63,6 +64,7 @@ vi.mock("../lib/toast", () => ({
 
 describe("Dashboard", () => {
   beforeEach(() => {
+    socketState.alerts = [];
     catalogMock.mockReset();
     monitoringSummaryMock.mockReset();
     metricsMock.mockReset();
@@ -90,7 +92,9 @@ describe("Dashboard", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText("Dependency Graph")).toBeInTheDocument();
+    expect(screen.getByText("Operations Overview")).toBeInTheDocument();
+    expect(screen.getByText("Process Control")).toBeInTheDocument();
+    expect(screen.getByText("Dependencies")).toBeInTheDocument();
     await waitFor(() => {
       const relation = screen.getAllByText(/depends on/i)[0];
       expect(relation).toBeInTheDocument();
@@ -98,5 +102,32 @@ describe("Dashboard", () => {
       expect(line?.textContent || "").toContain("worker");
       expect(line?.textContent || "").toContain("api");
     });
+  });
+
+  it("counts attention and healthy KPIs by unique process, not by incident rows", async () => {
+    socketState.alerts = [
+      { processName: "api", metric: "cpu", value: 95, threshold: 80, severity: "warning", ts: "2026-04-10T10:00:00.000Z" },
+      { processName: "api", metric: "memory", value: 800, threshold: 512, severity: "danger", ts: "2026-04-10T10:01:00.000Z" }
+    ];
+    monitoringSummaryMock.mockResolvedValue({
+      success: true,
+      data: [
+        { name: "api", anomaly: { isAnomaly: false, score: 0 } },
+        { name: "worker", anomaly: { isAnomaly: false, score: 0 } }
+      ],
+      error: null
+    });
+
+    render(
+      <MemoryRouter>
+        <Dashboard />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("Operations Overview");
+
+    expect(screen.getByText("1 process needs attention")).toBeInTheDocument();
+    const healthyNote = screen.getByText("Online processes without active alert noise");
+    expect(within(healthyNote.parentElement as HTMLElement).getByText("1")).toBeInTheDocument();
   });
 });

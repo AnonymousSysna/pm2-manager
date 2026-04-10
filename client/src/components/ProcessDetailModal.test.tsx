@@ -34,7 +34,7 @@ describe("ProcessDetailModal", () => {
           pid: 4321,
           status: "online",
           restarts: 0,
-          uptime: 1200,
+          uptime: 125000,
           port: 3000,
           mode: "fork",
           details: {
@@ -58,5 +58,6 @@ describe("ProcessDetailModal", () => {
 
     expect(screen.getByText(/^pid$/i)).toBeInTheDocument();
     expect(screen.queryByText(/^ppid$/i)).not.toBeInTheDocument();
+    expect(screen.getByText("2m 5s")).toBeInTheDocument();
   });
 });

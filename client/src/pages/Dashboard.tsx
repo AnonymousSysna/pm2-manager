@@ -4,22 +4,23 @@ import toast, { getErrorMessage } from "../lib/toast";
 import { alerts as alertsApi, caddy as caddyApi, processes as processApi } from "../api";
 import { useSocket } from "../hooks/useSocket";
 import ProcessDetailModal from "../components/ProcessDetailModal";
-import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
-import Checkbox from "../components/ui/Checkbox";
-import Field from "../components/ui/Field";
-import Input from "../components/ui/Input";
 import { ConfirmDialog } from "../components/ui/Modal";
-import Modal from "../components/ui/Modal";
-import Select from "../components/ui/Select";
-import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
-import { Skeleton } from "../components/ui/Skeleton";
-import StatCardsSection from "../components/dashboard/StatCardsSection";
+import { PageIntro } from "../components/ui/PageLayout";
+import OperationsOverviewPanel from "../components/dashboard/OperationsOverviewPanel";
+import SetupChecklistPanel from "../components/dashboard/SetupChecklistPanel";
 import SystemResourcesPanel from "../components/dashboard/SystemResourcesPanel";
 import DependencyGraphPanel from "../components/dashboard/DependencyGraphPanel";
 import MetricsHistoryPanel from "../components/dashboard/MetricsHistoryPanel";
 import ThresholdAlertsPanel from "../components/dashboard/ThresholdAlertsPanel";
 import ProcessListPanel from "../components/dashboard/ProcessListPanel";
+import {
+  DeployProcessModal,
+  DotEnvDiffModal,
+  DotEnvEditorModal,
+  ProcessActionDialog,
+  ProcessMetaModal
+} from "../components/dashboard/DashboardModals";
 
 function bytesToMB(value) {
   return `${(Number(value || 0) / 1024 / 1024).toFixed(1)} MB`;
@@ -27,17 +28,6 @@ function bytesToMB(value) {
 
 function bytesToGB(value) {
   return `${(Number(value || 0) / 1024 / 1024 / 1024).toFixed(1)} GB`;
-}
-
-function uptimeLabel(ms) {
-  if (!ms || ms < 0) {
-    return "-";
-  }
-  const totalSec = Math.floor(ms / 1000);
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  return `${h}h ${m}m ${s}s`;
 }
 
 function durationLabel(ms) {
@@ -139,7 +129,7 @@ export default function Dashboard() {
         setMonitoringSummary(byName);
       }
     } catch (_error) {
-      // Skip noisy toast for polling refresh.
+      // Keep polling quiet.
     }
   };
 
@@ -150,7 +140,7 @@ export default function Dashboard() {
         setSystemResources(result.data || null);
       }
     } catch (_error) {
-      // Optional panel; keep previous values.
+      // Optional panel.
     }
   };
 
@@ -169,7 +159,7 @@ export default function Dashboard() {
         hasStartupPersistence: prev.hasStartupPersistence || localStorage.getItem("pm2_onboarding_startup_checked") === "true"
       }));
     } catch (_error) {
-      // Keep checklist best-effort.
+      // Best effort.
     }
   };
 
@@ -177,11 +167,11 @@ export default function Dashboard() {
     refreshCatalog();
     refreshSystemResources();
     refreshOnboardingChecklist();
-    const timer = setInterval(refreshCatalog, 15000);
+    const catalogTimer = setInterval(refreshCatalog, 15000);
     const systemTimer = setInterval(refreshSystemResources, 20000);
     const checklistTimer = setInterval(refreshOnboardingChecklist, 30000);
     return () => {
-      clearInterval(timer);
+      clearInterval(catalogTimer);
       clearInterval(systemTimer);
       clearInterval(checklistTimer);
     };
@@ -266,23 +256,10 @@ export default function Dashboard() {
   }, [deploySubmitting, deployStartedAt]);
 
   useEffect(() => {
-    if (!monitorError) {
-      return;
+    if (monitorError) {
+      toast.error(monitorError);
     }
-    toast.error(monitorError);
   }, [monitorError]);
-
-  const openDetails = async (proc) => {
-    try {
-      const result = await processApi.get(proc.name);
-      setSelectedProcess({
-        ...proc,
-        details: result.success ? result.data : null
-      });
-    } catch (_error) {
-      setSelectedProcess(proc);
-    }
-  };
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -298,9 +275,9 @@ export default function Dashboard() {
   }, [processes, query]);
 
   const stats = useMemo(() => {
-    const online = processes.filter((p) => p.status === "online").length;
-    const stopped = processes.filter((p) => p.status === "stopped").length;
-    const errored = processes.filter((p) => p.status === "errored").length;
+    const online = processes.filter((process) => process.status === "online").length;
+    const stopped = processes.filter((process) => process.status === "stopped").length;
+    const errored = processes.filter((process) => process.status === "errored").length;
     return { total: processes.length, online, stopped, errored };
   }, [processes]);
 
@@ -310,10 +287,10 @@ export default function Dashboard() {
   );
 
   const checklistItems = useMemo(() => ([
-    { key: "hasProcess", label: "Create your first process", done: checklist.hasProcess, to: "/dashboard/create" },
-    { key: "hasAlertChannel", label: "Add an alert channel", done: checklist.hasAlertChannel, to: "/dashboard/settings" },
-    { key: "hasStartupPersistence", label: "Enable startup persistence", done: checklist.hasStartupPersistence, to: "/dashboard/settings" },
-    { key: "hasDomain", label: "Configure a domain in Caddy", done: checklist.hasDomain, to: "/dashboard/caddy" }
+    { key: "hasProcess", label: "Add the first managed process", done: checklist.hasProcess, to: "/dashboard/create" },
+    { key: "hasAlertChannel", label: "Wire an alert channel", done: checklist.hasAlertChannel, to: "/dashboard/settings" },
+    { key: "hasStartupPersistence", label: "Persist PM2 on startup", done: checklist.hasStartupPersistence, to: "/dashboard/settings" },
+    { key: "hasDomain", label: "Publish a domain through Caddy", done: checklist.hasDomain, to: "/dashboard/caddy" }
   ]), [checklist]);
 
   const checklistDoneCount = checklistItems.filter((item) => item.done).length;
@@ -341,6 +318,18 @@ export default function Dashboard() {
 
     return edges.sort((a, b) => (`${a.from}:${a.to}`).localeCompare(`${b.from}:${b.to}`));
   }, [processMeta]);
+
+  const openDetails = async (proc) => {
+    try {
+      const result = await processApi.get(proc.name);
+      setSelectedProcess({
+        ...proc,
+        details: result.success ? result.data : null
+      });
+    } catch (_error) {
+      setSelectedProcess(proc);
+    }
+  };
 
   const executeAction = async (action, name, actionPayload) => {
     setLoadingAction((prev) => ({ ...prev, [`${name}:${action}`]: true }));
@@ -394,7 +383,6 @@ export default function Dashboard() {
       }
       return true;
     } catch (_error) {
-      // Toast handled by toast.promise.
       return false;
     } finally {
       setLoadingAction((prev) => ({ ...prev, [`${name}:${action}`]: false }));
@@ -423,11 +411,11 @@ export default function Dashboard() {
         action,
         name,
         title: `Duplicate ${name}`,
-        description: "Create a new PM2 process using the same base configuration.",
+        description: "Create a new PM2 process from the same base configuration.",
         label: "New process name",
         placeholder: `${name}-copy`,
         value: `${name}-copy`,
-        confirmLabel: "Duplicate Process"
+        confirmLabel: "Duplicate process"
       });
       return false;
     }
@@ -438,12 +426,12 @@ export default function Dashboard() {
         mode: "input",
         action,
         name,
-        title: `Schedule Restart: ${name}`,
+        title: `Schedule restart for ${name}`,
         description: "Leave blank to disable. Example: 0 4 * * *",
         label: "Cron expression",
         placeholder: "0 4 * * *",
         value: current,
-        confirmLabel: "Save Schedule"
+        confirmLabel: "Save schedule"
       });
       return false;
     }
@@ -457,11 +445,11 @@ export default function Dashboard() {
           action,
           name,
           title: `Rollback ${name}`,
-          description: "Leave blank to roll back to the previous commit (HEAD~1).",
-          label: "Target commit (optional)",
+          description: "Leave blank to roll back to HEAD~1.",
+          label: "Target commit",
           placeholder: "HEAD~1 or commit SHA",
           value: "",
-          confirmLabel: "Run Rollback",
+          confirmLabel: "Run rollback",
           recentCommits: commits.slice(0, 5)
         });
       } catch (error) {
@@ -510,8 +498,11 @@ export default function Dashboard() {
     }
   };
 
-  const openDeploymentHistoryForProcess = (name) => {
-    navigate(`/dashboard/history?deploymentProcess=${encodeURIComponent(name)}`);
+  const openDeploymentHistory = (name = "") => {
+    const target = name
+      ? `/dashboard/history?deploymentProcess=${encodeURIComponent(name)}`
+      : "/dashboard/history";
+    navigate(target);
   };
 
   const toggleSelected = (name, checked) => {
@@ -838,397 +829,164 @@ export default function Dashboard() {
   return (
     <div className="space-y-4">
       <PageIntro
-        title="Operations Dashboard"
-        description="Monitor process health, inspect activity, and run lifecycle actions from a single control surface."
+        title="Operations Console"
+        description="Run the PM2 fleet from live health, recent exceptions, and the actions an operator needs most often."
+        actions={(
+          <>
+            <Button type="button" variant="secondary" onClick={() => openDeploymentHistory()}>
+              Review history
+            </Button>
+            <Button type="button" variant="outlineInfo" onClick={() => navigate("/dashboard/create")}>
+              Add process
+            </Button>
+          </>
+        )}
       />
 
       {reconnecting && (
-        <div className="rounded-md border border-warning-500/40 bg-warning-500/15 px-3 py-2 text-sm text-warning-300">
-          Reconnecting... Live process updates are temporarily paused.
+        <div className="rounded-lg border border-warning-500/40 bg-warning-500/15 px-3 py-2 text-sm text-warning-300">
+          Reconnecting. Live process updates are temporarily paused.
         </div>
       )}
       {monitorError && (
-        <div className="rounded-md border border-danger-500/40 bg-danger-500/15 px-3 py-2 text-sm text-danger-300">
+        <div className="rounded-lg border border-danger-500/40 bg-danger-500/15 px-3 py-2 text-sm text-danger-300">
           Monitor error: {monitorError}
         </div>
       )}
 
-      <StatCardsSection stats={stats} />
+      <OperationsOverviewPanel
+        stats={stats}
+        alerts={alerts}
+        processes={processes}
+        monitoringSummary={monitoringSummary}
+        onOpenLogs={openLogsForProcess}
+        onOpenHistory={() => openDeploymentHistory()}
+      />
 
-      {!checklist.dismissed && (
-        <section className="page-panel">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <PanelHeader title={`Setup Checklist (${checklistDoneCount}/${checklistItems.length})`} />
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              onClick={() => {
+      <div className="ops-section-grid">
+        <div className="space-y-4">
+          <ProcessListPanel
+            filtered={filtered}
+            monitoringSummary={monitoringSummary}
+            selectedNames={selectedNames}
+            toggleSelected={toggleSelected}
+            toggleSelectAllFiltered={toggleSelectAllFiltered}
+            selectedCount={selectedCount}
+            runBulkAction={runBulkAction}
+            query={query}
+            setQuery={setQuery}
+            openDetails={openDetails}
+            openMetaModal={openMetaModal}
+            openDotEnvModal={openDotEnvModal}
+            openDeployModal={openDeployModal}
+            openDeploymentHistoryForProcess={openDeploymentHistory}
+            dotEnvByProcess={dotEnvByProcess}
+            loadingAction={loadingAction}
+            callAction={callAction}
+            onOpenLogs={openLogsForProcess}
+            onOpenApp={openAppForPort}
+            bytesToMB={bytesToMB}
+            durationLabel={durationLabel}
+          />
+
+          <div className="ops-subgrid">
+            <MetricsHistoryPanel
+              chartProcess={chartProcess}
+              onChartProcessChange={setChartProcess}
+              processes={processes}
+              historyPoints={historyPoints}
+            />
+            <DependencyGraphPanel dependencyEdges={dependencyEdges} />
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <ThresholdAlertsPanel alerts={alerts} onOpenLogs={openLogsForProcess} />
+          <SystemResourcesPanel systemResources={systemResources} bytesToGB={bytesToGB} />
+          {!checklist.dismissed && (
+            <SetupChecklistPanel
+              checklistItems={checklistItems}
+              checklistDoneCount={checklistDoneCount}
+              onDismiss={() => {
                 localStorage.setItem("pm2_onboarding_checklist_dismissed", "true");
                 setChecklist((prev) => ({ ...prev, dismissed: true }));
               }}
-            >
-              Dismiss
-            </Button>
-          </div>
-          <div className="space-y-2">
-            {checklistItems.map((item) => (
-              <div key={item.key} className="flex items-center justify-between gap-2 rounded border border-border bg-surface-2 px-3 py-2 text-sm">
-                <div className="flex items-center gap-2">
-                  <Badge tone={item.done ? "success" : "warning"}>{item.done ? "Done" : "Todo"}</Badge>
-                  <span className="text-text-2">{item.label}</span>
-                </div>
-                {!item.done && (
-                  <Button type="button" size="sm" variant="outlineInfo" onClick={() => navigate(item.to)}>
-                    Open
-                  </Button>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <SystemResourcesPanel systemResources={systemResources} bytesToGB={bytesToGB} />
-
-      <DependencyGraphPanel dependencyEdges={dependencyEdges} />
-
-      <MetricsHistoryPanel
-        chartProcess={chartProcess}
-        onChartProcessChange={setChartProcess}
-        processes={processes}
-        historyPoints={historyPoints}
-      />
-
-      <ThresholdAlertsPanel alerts={alerts} />
-
-      <ProcessListPanel
-        filtered={filtered}
-        monitoringSummary={monitoringSummary}
-        selectedNames={selectedNames}
-        toggleSelected={toggleSelected}
-        toggleSelectAllFiltered={toggleSelectAllFiltered}
-        selectedCount={selectedCount}
-        runBulkAction={runBulkAction}
-        query={query}
-        setQuery={setQuery}
-        openDetails={openDetails}
-        openMetaModal={openMetaModal}
-        openDotEnvModal={openDotEnvModal}
-        openDeployModal={openDeployModal}
-        openDeploymentHistoryForProcess={openDeploymentHistoryForProcess}
-        dotEnvByProcess={dotEnvByProcess}
-        npmCapabilitiesByProcess={npmCapabilitiesByProcess}
-        loadingAction={loadingAction}
-        callAction={callAction}
-        onOpenLogs={openLogsForProcess}
-        onOpenApp={openAppForPort}
-        bytesToMB={bytesToMB}
-        durationLabel={durationLabel}
-      />
-
-      {selectedProcess && (
-        <ProcessDetailModal
-          process={selectedProcess}
-          onClose={() => setSelectedProcess(null)}
-          onAction={callAction}
-          onViewDeployHistory={openDeploymentHistoryForProcess}
-        />
-      )}
-
-      {deployingProcess && (
-        <Modal
-          title={`Deploy: ${deployingProcess.name}`}
-          onClose={() => setDeployingProcess(null)}
-          disableClose={deploySubmitting}
-          disableOverlayClose={deploySubmitting}
-        >
-          <>
-            <div className="space-y-3">
-              {deploySubmitting && (
-                <div className="rounded-md border border-border bg-surface-2 p-3">
-                  <div className="flex items-center gap-2 text-sm text-text-2">
-                    <Skeleton className="h-4 w-24 rounded-full" />
-                    Deployment in progress. Keep this page open.
-                  </div>
-                  <p className="mt-1 text-xs text-text-3">Elapsed: {deployElapsedSec}s</p>
-                  {deployElapsedSec >= 300 && (
-                    <p className="mt-1 text-xs text-warning-300">
-                      This deployment is taking unusually long (over 5 minutes). Check git access, build output, and network.
-                    </p>
-                  )}
-                </div>
-              )}
-              <Field label="Branch (optional)">
-                <Input
-                  value={deployForm.branch}
-                  onChange={(e) => setDeployForm((prev) => ({ ...prev, branch: e.target.value }))}
-                  placeholder="leave blank for current branch"
-                  disabled={deploySubmitting}
-                />
-              </Field>
-              {Boolean(npmCapabilitiesByProcess[deployingProcess.name]?.hasPackageJson) ? (
-                <label className="flex items-center gap-2 text-sm text-text-2">
-                  <Checkbox
-                    checked={deployForm.installDependencies}
-                    disabled={deploySubmitting}
-                    onChange={(e) => setDeployForm((prev) => ({ ...prev, installDependencies: e.target.checked }))}
-                  />
-                  Run npm install
-                </label>
-              ) : (
-                <p className="text-xs text-text-3">npm install is hidden: no package.json in process directory.</p>
-              )}
-              {Boolean(npmCapabilitiesByProcess[deployingProcess.name]?.hasBuildScript) ? (
-                <label className="flex items-center gap-2 text-sm text-text-2">
-                  <Checkbox
-                    checked={deployForm.runBuild}
-                    disabled={deploySubmitting}
-                    onChange={(e) => setDeployForm((prev) => ({ ...prev, runBuild: e.target.checked }))}
-                  />
-                  Run npm run build
-                </label>
-              ) : (
-                <p className="text-xs text-text-3">npm run build is hidden: no build script in package.json.</p>
-              )}
-              <Field label="After deploy">
-                <Select
-                  value={deployForm.restartMode}
-                  onChange={(e) => setDeployForm((prev) => ({ ...prev, restartMode: e.target.value }))}
-                  disabled={deploySubmitting}
-                >
-                  <option value="restart">Restart</option>
-                  <option value="reload">Reload</option>
-                </Select>
-              </Field>
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <Button type="button" variant="secondary" disabled={deploySubmitting} onClick={() => setDeployingProcess(null)}>
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="outlineInfo"
-                disabled={deploySubmitting || loadingAction[`${deployingProcess.name}:deploy`]}
-                onClick={submitDeployModal}
-              >
-                {deploySubmitting ? "Deploying..." : "Deploy"}
-              </Button>
-            </div>
-          </>
-        </Modal>
-      )}
-
-      {editingMetaProcess && (
-        <Modal title={`Edit Metadata: ${editingMetaProcess.name}`} onClose={() => setEditingMetaProcess(null)} size="lg">
-          <>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <Field label="Dependencies (comma-separated)">
-                <Input
-                  value={metaForm.dependencies}
-                  onChange={(e) => setMetaForm((prev) => ({ ...prev, dependencies: e.target.value }))}
-                  placeholder="redis-worker,db-sync"
-                />
-              </Field>
-              <Field label="CPU alert threshold (%)">
-                <Input
-                  value={metaForm.cpuThreshold}
-                  onChange={(e) => setMetaForm((prev) => ({ ...prev, cpuThreshold: e.target.value }))}
-                  placeholder="80"
-                />
-              </Field>
-              <Field label="Memory alert threshold (MB)">
-                <Input
-                  value={metaForm.memoryThreshold}
-                  onChange={(e) => setMetaForm((prev) => ({ ...prev, memoryThreshold: e.target.value }))}
-                  placeholder="512"
-                />
-              </Field>
-            </div>
-            <div className="mt-4 flex justify-between gap-2">
-              <Button type="button" variant="danger" disabled={metaSaving} onClick={() => setMetaResetConfirmOpen(true)}>
-                Reset Metadata
-              </Button>
-              <div className="flex gap-2">
-                <Button type="button" variant="secondary" onClick={() => setEditingMetaProcess(null)}>
-                  Cancel
-                </Button>
-                <Button type="button" variant="success" disabled={metaSaving} onClick={submitMetaModal}>
-                  Save Metadata
-                </Button>
-              </div>
-            </div>
-          </>
-        </Modal>
-      )}
-
-      {editingDotEnvProcess && (
-        <Modal
-          title={`Edit .env: ${editingDotEnvProcess.name}`}
-          onClose={() => setEditingDotEnvProcess(null)}
-          size="xl"
-          disableClose={dotEnvSaving}
-          disableOverlayClose={dotEnvSaving}
-        >
-          <>
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs text-text-3">Fields are inferred from existing `.env` values.</p>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                disabled={dotEnvLoading || dotEnvSaving}
-                onClick={() => setDotEnvRevealValues((prev) => !prev)}
-              >
-                {dotEnvRevealValues ? "Mask Sensitive Values" : "Reveal Sensitive Values"}
-              </Button>
-            </div>
-            {dotEnvLoading ? (
-              <DotEnvEditorSkeleton />
-            ) : (
-              <div className="max-h-80 space-y-3 overflow-y-auto rounded-md border border-border bg-surface-2 p-3">
-                {dotEnvValidationError && (
-                  <div className="rounded border border-warning-500/40 bg-warning-500/10 p-2 text-xs text-warning-300">
-                    <p>{dotEnvValidationError}</p>
-                    <p className="mt-1">Fix malformed `.env` lines before saving changes.</p>
-                  </div>
-                )}
-                {dotEnvFields.length === 0 && (
-                  <p className="text-sm text-text-3">No editable `KEY=VALUE` lines found in `.env`.</p>
-                )}
-                {dotEnvFields.map((item, index) => (
-                  <div key={`${item.key}-${index}`} className="grid grid-cols-1 gap-2 md:grid-cols-[220px,1fr] md:items-center">
-                    <label className="text-xs font-semibold text-text-2">{item.key}</label>
-                    <DotEnvValueInput
-                      valueType={item.valueType}
-                      value={item.value}
-                      sensitive={item.sensitive}
-                      revealed={dotEnvRevealValues}
-                      disabled={dotEnvSaving}
-                      onChange={(nextValue) => updateDotEnvFieldValue(index, nextValue)}
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="mt-4 flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={dotEnvSaving}
-                onClick={() => setEditingDotEnvProcess(null)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="success"
-                disabled={dotEnvLoading || dotEnvSaving || Boolean(dotEnvValidationError)}
-                onClick={submitDotEnvModal}
-              >
-                Save .env
-              </Button>
-            </div>
-          </>
-        </Modal>
-      )}
-
-      {dotEnvDiffOpen && editingDotEnvProcess && (
-        <Modal
-          title="Review .env Changes"
-          onClose={() => setDotEnvDiffOpen(false)}
-          size="lg"
-          disableClose={dotEnvSaving}
-          disableOverlayClose={dotEnvSaving}
-          className="z-[60]"
-        >
-            <p className="mb-3 text-sm text-text-3">
-              Confirm before saving to avoid accidental overwrite.
-            </p>
-            <div className="max-h-80 space-y-2 overflow-y-auto rounded-md border border-border bg-surface-2 p-3">
-              {dotEnvDiffEntries.map((entry) => (
-                <div key={entry.key} className="rounded-md border border-border bg-surface px-3 py-2 text-sm">
-                  <p className="font-semibold text-text-1">{entry.key}</p>
-                  <p className="text-xs text-text-3">
-                    - {entry.sensitive && !dotEnvRevealValues ? "*****" : entry.before}
-                  </p>
-                  <p className="text-xs text-success-300">
-                    + {entry.sensitive && !dotEnvRevealValues ? "*****" : entry.after}
-                  </p>
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <Button type="button" variant="secondary" disabled={dotEnvSaving} onClick={() => setDotEnvDiffOpen(false)}>
-                Back
-              </Button>
-              <Button type="button" variant="success" disabled={dotEnvSaving} onClick={confirmDotEnvSave}>
-                {dotEnvSaving ? "Saving..." : "Confirm Save"}
-              </Button>
-            </div>
-        </Modal>
-      )}
-
-      {actionDialog?.mode === "confirm" && (
-        <ConfirmDialog
-          title={actionDialog.title}
-          description={actionDialog.description}
-          confirmLabel={actionDialog.action === "delete" ? "Delete Process" : "Confirm"}
-          onClose={() => setActionDialog(null)}
-          onConfirm={submitActionDialog}
-          confirmDisabled={Boolean(loadingAction[`${actionDialog.name}:${actionDialog.action}`])}
-        />
-      )}
-
-      {actionDialog?.mode === "input" && (
-        <Modal
-          title={actionDialog.title}
-          description={actionDialog.description}
-          onClose={() => setActionDialog(null)}
-          size="md"
-          actions={(
-            <>
-              <Button type="button" variant="secondary" onClick={() => setActionDialog(null)}>
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant={actionDialog.action === "rollback" ? "warning" : "info"}
-                onClick={submitActionDialog}
-                disabled={Boolean(loadingAction[`${actionDialog.name}:${actionDialog.action}`])}
-              >
-                {actionDialog.confirmLabel}
-              </Button>
-            </>
-          )}
-        >
-          <Field label={actionDialog.label}>
-            <Input
-              value={actionDialog.value}
-              placeholder={actionDialog.placeholder}
-              onChange={(event) => setActionDialog((prev) => ({ ...prev, value: event.target.value }))}
+              onNavigate={(to) => navigate(to)}
             />
-          </Field>
-          {Array.isArray(actionDialog.recentCommits) && actionDialog.recentCommits.length > 0 && (
-            <div className="mt-3 rounded-md border border-border bg-surface-2 p-3 text-xs text-text-3">
-              <p className="mb-2 font-semibold text-text-2">Recent commits</p>
-              <div className="space-y-1">
-                {actionDialog.recentCommits.map((item) => (
-                  <p key={item.hash || item.shortHash}>
-                    <span className="font-semibold text-text-2">{item.shortHash}</span> {item.subject}
-                  </p>
-                ))}
-              </div>
-            </div>
           )}
-        </Modal>
-      )}
+        </div>
+      </div>
+
+      <ProcessDetailModal
+        process={selectedProcess}
+        onClose={() => setSelectedProcess(null)}
+        onAction={callAction}
+        onViewDeployHistory={openDeploymentHistory}
+        onOpenLogs={openLogsForProcess}
+      />
+
+      <DeployProcessModal
+        process={deployingProcess}
+        deployForm={deployForm}
+        setDeployForm={setDeployForm}
+        submitDeployModal={submitDeployModal}
+        deploySubmitting={deploySubmitting}
+        deployElapsedSec={deployElapsedSec}
+        loadingAction={loadingAction}
+        npmCapabilitiesByProcess={npmCapabilitiesByProcess}
+        onClose={() => setDeployingProcess(null)}
+      />
+
+      <ProcessMetaModal
+        process={editingMetaProcess}
+        metaForm={metaForm}
+        setMetaForm={setMetaForm}
+        metaSaving={metaSaving}
+        onClose={() => setEditingMetaProcess(null)}
+        onSubmit={submitMetaModal}
+        onReset={() => setMetaResetConfirmOpen(true)}
+      />
+
+      <DotEnvEditorModal
+        process={editingDotEnvProcess}
+        dotEnvLoading={dotEnvLoading}
+        dotEnvSaving={dotEnvSaving}
+        dotEnvRevealValues={dotEnvRevealValues}
+        setDotEnvRevealValues={setDotEnvRevealValues}
+        dotEnvValidationError={dotEnvValidationError}
+        dotEnvFields={dotEnvFields}
+        updateDotEnvFieldValue={updateDotEnvFieldValue}
+        submitDotEnvModal={submitDotEnvModal}
+        onClose={() => setEditingDotEnvProcess(null)}
+      />
+
+      <DotEnvDiffModal
+        open={dotEnvDiffOpen}
+        process={editingDotEnvProcess}
+        dotEnvSaving={dotEnvSaving}
+        dotEnvRevealValues={dotEnvRevealValues}
+        dotEnvDiffEntries={dotEnvDiffEntries}
+        confirmDotEnvSave={confirmDotEnvSave}
+        onClose={() => setDotEnvDiffOpen(false)}
+      />
+
+      <ProcessActionDialog
+        actionDialog={
+          actionDialog && {
+            ...actionDialog,
+            setValue: (value) => setActionDialog((prev) => ({ ...prev, value }))
+          }
+        }
+        loadingAction={loadingAction}
+        onClose={() => setActionDialog(null)}
+        onSubmit={submitActionDialog}
+      />
 
       {metaResetConfirmOpen && editingMetaProcess && (
         <ConfirmDialog
-          title="Reset Metadata"
-          description={`Clear saved metadata for ${editingMetaProcess.name}?`}
-          confirmLabel="Reset Metadata"
+          title="Clear saved process rules"
+          description={`Remove thresholds and dependency metadata for ${editingMetaProcess.name}?`}
+          confirmLabel="Clear rules"
           onClose={() => setMetaResetConfirmOpen(false)}
           onConfirm={async () => {
             await clearMetaForEditingProcess();
@@ -1249,56 +1007,3 @@ function openProcessUrl(port) {
   const target = `${window.location.protocol}//${window.location.hostname}:${value}`;
   window.open(target, "_blank", "noopener,noreferrer");
 }
-
-function DotEnvValueInput({ valueType, value, onChange, disabled, sensitive = false, revealed = false }) {
-  if (valueType === "boolean") {
-    return (
-      <Select
-        value={String(value).toLowerCase() === "true" ? "true" : "false"}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="true">true</option>
-        <option value="false">false</option>
-      </Select>
-    );
-  }
-
-  if (valueType === "integer" || valueType === "number") {
-    return (
-      <Input
-        type={sensitive && !revealed ? "password" : "number"}
-        step={valueType === "integer" ? "1" : "any"}
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    );
-  }
-
-  return (
-    <Input
-      type={sensitive && !revealed ? "password" : "text"}
-      value={value}
-      disabled={disabled}
-      onChange={(event) => onChange(event.target.value)}
-    />
-  );
-}
-
-function DotEnvEditorSkeleton() {
-  return (
-    <div className="rounded-md border border-border bg-surface-2 p-3" aria-hidden="true">
-      <div className="space-y-3">
-        {Array.from({ length: 5 }).map((_, index) => (
-          <div key={index} className="grid grid-cols-1 gap-2 md:grid-cols-[220px,1fr] md:items-center">
-            <Skeleton className="h-3 w-28" />
-            <Skeleton className="h-10 w-full" />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-

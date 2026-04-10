@@ -7,22 +7,22 @@ import Badge from "./ui/Badge";
 import Button from "./ui/Button";
 
 const staticLinks = [
-  { to: "/dashboard", label: "Dashboard", icon: Activity },
-  { to: "/dashboard/create", label: "Create", icon: Plus },
-  { to: "/dashboard/notifications", label: "Notifications", icon: Bell },
-  { to: "/dashboard/logs", label: "Logs", icon: ScrollText },
-  { to: "/dashboard/history", label: "History", icon: History },
-  { to: "/dashboard/settings", label: "Settings", icon: Settings },
+  { to: "/dashboard", label: "Operations", icon: Activity },
+  { to: "/dashboard/create", label: "Add Process", icon: Plus },
+  { to: "/dashboard/notifications", label: "Alerts", icon: Bell },
+  { to: "/dashboard/logs", label: "Process Logs", icon: ScrollText },
+  { to: "/dashboard/history", label: "Audit Trail", icon: History },
+  { to: "/dashboard/settings", label: "Runtime Settings", icon: Settings },
   { to: "/dashboard/extensions", label: "Extensions", icon: Puzzle }
 ];
 
 const pageTitleMap = {
-  "/dashboard": "Dashboard",
-  "/dashboard/create": "Create Process",
-  "/dashboard/notifications": "Notification Center",
-  "/dashboard/logs": "Logs",
-  "/dashboard/history": "History",
-  "/dashboard/settings": "Settings",
+  "/dashboard": "Operations Console",
+  "/dashboard/create": "Add Process",
+  "/dashboard/notifications": "Alert Center",
+  "/dashboard/logs": "Process Logs",
+  "/dashboard/history": "Audit Trail",
+  "/dashboard/settings": "Runtime Settings",
   "/dashboard/extensions": "Extensions",
   "/dashboard/caddy": "Caddy Reverse Proxy"
 };
@@ -151,7 +151,7 @@ export default function Layout() {
         <aside className="sticky top-header hidden h-[calc(100vh-theme(spacing.header)-theme(spacing.6))] w-64 shrink-0 rounded-xl border border-border bg-surface p-4 md:flex md:flex-col">
           <div className="mb-4 flex items-center gap-2 border-b border-border pb-3 text-sm text-text-3">
             <span className="h-2 w-2 rounded-full bg-brand-500" />
-            Navigation
+            Operator navigation
           </div>
           <NavLinks pathname={location.pathname} links={links} />
           <Button type="button" variant="secondary" onClick={logout} className="mt-auto w-full justify-start">

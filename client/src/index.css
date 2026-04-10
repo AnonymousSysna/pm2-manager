@@ -4,17 +4,17 @@
 
 :root,
 [data-theme="dark"] {
-  --color-bg: 11 18 32;
-  --color-surface: 17 26 43;
-  --color-surface-2: 22 35 58;
-  --color-surface-3: 31 47 77;
-  --color-border: 42 58 89;
+  --color-bg: 8 14 24;
+  --color-surface: 14 22 36;
+  --color-surface-2: 18 29 47;
+  --color-surface-3: 27 43 67;
+  --color-border: 49 65 92;
   --color-text-1: 226 232 240;
   --color-text-2: 203 213 225;
   --color-text-3: 148 163 184;
-  --color-brand-400: 165 180 252;
-  --color-brand-500: 129 140 248;
-  --color-brand-600: 99 102 241;
+  --color-brand-400: 125 211 252;
+  --color-brand-500: 56 189 248;
+  --color-brand-600: 14 165 233;
   --color-success-300: 134 239 172;
   --color-success-500: 34 197 94;
   --color-success-600: 22 163 74;
@@ -30,17 +30,17 @@
 }
 
 [data-theme="light"] {
-  --color-bg: 243 246 252;
+  --color-bg: 240 245 250;
   --color-surface: 255 255 255;
-  --color-surface-2: 236 242 252;
-  --color-surface-3: 223 233 247;
-  --color-border: 196 209 230;
+  --color-surface-2: 233 241 249;
+  --color-surface-3: 216 230 243;
+  --color-border: 191 206 223;
   --color-text-1: 17 24 39;
   --color-text-2: 55 65 81;
   --color-text-3: 107 114 128;
-  --color-brand-400: 99 102 241;
-  --color-brand-500: 79 70 229;
-  --color-brand-600: 67 56 202;
+  --color-brand-400: 14 165 233;
+  --color-brand-500: 3 105 161;
+  --color-brand-600: 8 47 73;
   --color-success-300: 21 128 61;
   --color-success-500: 22 163 74;
   --color-success-600: 20 83 45;
@@ -64,6 +64,9 @@
     margin: 0;
     min-height: 100vh;
     background-color: theme("colors.bg");
+    background-image:
+      radial-gradient(circle at top right, rgb(var(--color-brand-500) / 0.1), transparent 28rem),
+      linear-gradient(180deg, rgb(var(--color-surface-2) / 0.12), transparent 24rem);
     color: theme("colors.text-1");
     font-family: "IBM Plex Sans", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   }
@@ -71,7 +74,7 @@
 
 @layer components {
   .page-panel {
-    @apply rounded-xl border border-border bg-surface p-4;
+    @apply rounded-xl border border-border/90 bg-surface p-4 shadow-[0_20px_60px_-44px_rgba(0,0,0,0.85)];
   }
 
   .page-title {
@@ -95,7 +98,7 @@
   }
 
   .page-intro {
-    @apply border-brand-500/20 bg-gradient-to-r from-surface to-surface-2;
+    @apply border-brand-500/30 bg-gradient-to-br from-surface via-surface to-surface-2;
   }
 
   .panel-title-row {
@@ -112,5 +115,29 @@
 
   .surface-overlay {
     @apply bg-black/60;
+  }
+
+  .ops-kpi {
+    @apply rounded-xl border border-border/80 bg-surface-2/80 p-3;
+  }
+
+  .ops-kpi-label {
+    @apply text-[11px] uppercase tracking-[0.18em] text-text-3;
+  }
+
+  .ops-kpi-value {
+    @apply mt-2 text-2xl font-semibold text-text-1;
+  }
+
+  .ops-kpi-note {
+    @apply mt-1 text-xs text-text-3;
+  }
+
+  .ops-section-grid {
+    @apply grid gap-4 xl:grid-cols-[minmax(0,1.8fr)_minmax(320px,1fr)];
+  }
+
+  .ops-subgrid {
+    @apply grid gap-4 lg:grid-cols-2;
   }
 }

@@ -1,23 +1,39 @@
 import { AlertTriangle } from "lucide-react";
+import Button from "../ui/Button";
 import { PanelHeader } from "../ui/PageLayout";
 
-export default function ThresholdAlertsPanel({ alerts = [] }) {
+export default function ThresholdAlertsPanel({ alerts = [], onOpenLogs }) {
   return (
-    <section className="page-panel">
-      <PanelHeader title="Threshold Alerts" className="mb-2" />
-      {alerts.length === 0 && <p className="text-sm text-text-3">No alerts yet.</p>}
-      <div className="max-h-40 space-y-1 overflow-y-auto text-sm">
+    <section className="page-panel space-y-3">
+      <PanelHeader
+        title="Alert Feed"
+        description="Recent threshold hits worth investigating before they turn into noisy restarts."
+      />
+      {alerts.length === 0 && <p className="text-sm text-text-3">No active threshold alerts in the current session.</p>}
+      <div className="max-h-64 space-y-2 overflow-y-auto text-sm">
         {alerts
           .slice()
           .reverse()
           .slice(0, 20)
           .map((item, index) => (
-            <div key={`${item.ts}-${index}`} className="flex items-center gap-2 rounded border border-border px-2 py-1">
-              <AlertTriangle size={14} className={item.severity === "danger" ? "text-danger-300" : "text-warning-300"} />
-              <span className="text-text-2">
-                {item.processName}: {item.metric}={item.value} (threshold {item.threshold})
-              </span>
-              <span className="ml-auto text-xs text-text-3">{new Date(item.ts).toLocaleTimeString()}</span>
+            <div key={`${item.ts}-${index}`} className="rounded-lg border border-border/80 bg-surface-2/60 p-3">
+              <div className="flex items-start gap-2">
+                <AlertTriangle size={16} className={item.severity === "danger" ? "text-danger-300" : "text-warning-300"} />
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-text-1">{item.processName}</p>
+                  <p className="mt-1 text-sm text-text-2">
+                    {item.metric} at {item.value} against threshold {item.threshold}
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-text-3">{new Date(item.ts).toLocaleTimeString()}</span>
+                    {typeof onOpenLogs === "function" && item.processName && (
+                      <Button type="button" size="sm" variant="secondary" onClick={() => onOpenLogs(item.processName)}>
+                        Open logs
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           ))}
       </div>

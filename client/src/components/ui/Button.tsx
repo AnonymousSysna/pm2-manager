@@ -2,12 +2,12 @@ import { cn } from "../../lib/cn";
 
 const variants = {
   primary: "bg-brand-600 text-white hover:bg-brand-500 focus-visible:ring-brand-400",
-  secondary: "border border-border bg-transparent text-text-1 hover:bg-surface-2 focus-visible:ring-brand-400",
+  secondary: "border border-border/90 bg-surface-2/70 text-text-1 hover:bg-surface-3/70 focus-visible:ring-brand-400",
   success: "bg-success-600 text-white hover:bg-success-500 focus-visible:ring-success-300",
   danger: "bg-danger-600 text-white hover:bg-danger-500 focus-visible:ring-danger-300",
   warning: "bg-warning-600 text-white hover:bg-warning-500 focus-visible:ring-warning-300",
   info: "bg-info-600 text-white hover:bg-info-500 focus-visible:ring-info-300",
-  outline: "border border-border bg-transparent text-text-2 hover:bg-surface-2 focus-visible:ring-brand-400",
+  outline: "border border-border/90 bg-transparent text-text-2 hover:bg-surface-2 focus-visible:ring-brand-400",
   outlinePrimary: "border border-brand-500/60 bg-transparent text-brand-400 hover:bg-brand-500/10 focus-visible:ring-brand-400",
   outlineSuccess: "border border-success-500/60 bg-transparent text-success-300 hover:bg-success-500/10 focus-visible:ring-success-300",
   outlineDanger: "border border-danger-500/60 bg-transparent text-danger-300 hover:bg-danger-500/10 focus-visible:ring-danger-300",
