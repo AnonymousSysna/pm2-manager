@@ -50,7 +50,7 @@ export default function ProcessListPanel({
         )}
       />
 
-      <InsetCard className="rounded-xl bg-surface-2/50">
+      <InsetCard className="rounded-xl bg-surface-2/60">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-2 text-xs text-text-2">
             <Badge tone={selectedCount > 0 ? "info" : "neutral"}>{selectedCount} selected</Badge>
@@ -106,7 +106,7 @@ export default function ProcessListPanel({
         {filtered.length === 0 && <EmptyState />}
       </div>
 
-      <InsetCard className="hidden overflow-x-auto rounded-xl bg-surface-2/50 p-0 xl:block">
+      <div className="hidden overflow-x-auto xl:block">
         <table className="min-w-full text-sm">
           <thead className="meta-label border-b border-border/80 text-left">
             <tr>
@@ -135,11 +135,7 @@ export default function ProcessListPanel({
                   </td>
                   <td className="px-2 py-4">
                     <div className="min-w-[200px]">
-                      <TextButton
-                        type="button"
-                        className="w-full justify-start px-0 py-0 text-left text-base font-semibold"
-                        onClick={() => openDetails(proc)}
-                      >
+                      <TextButton type="button" className="text-left text-base font-semibold" onClick={() => openDetails(proc)}>
                         {proc.name}
                       </TextButton>
                       <div className="mt-2 flex flex-wrap gap-2">
@@ -191,7 +187,7 @@ export default function ProcessListPanel({
             )}
           </tbody>
         </table>
-      </InsetCard>
+      </div>
     </section>
   );
 }
@@ -217,16 +213,12 @@ function ProcessCard({
   const anomaly = summary.anomaly || { isAnomaly: false, score: 0 };
 
   return (
-    <InsetCard as="article" className="rounded-xl bg-surface-2/50">
+    <InsetCard as="article" className="rounded-xl bg-surface-2/60">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Checkbox checked={selected} onChange={(event) => toggleSelected(proc.name, event.target.checked)} />
-            <TextButton
-              type="button"
-              className="min-w-0 flex-1 justify-start px-0 py-0 text-left text-base font-semibold"
-              onClick={() => openDetails(proc)}
-            >
+            <TextButton type="button" className="text-left text-base font-semibold" onClick={() => openDetails(proc)}>
               {proc.name}
             </TextButton>
           </div>
@@ -245,7 +237,7 @@ function ProcessCard({
         )}
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 sm:items-stretch">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <LoadSummary proc={proc} bytesToMB={bytesToMB} />
         <RuntimeSummary proc={proc} summary={summary} durationLabel={durationLabel} />
       </div>
@@ -272,7 +264,7 @@ function ProcessCard({
 
 function LoadSummary({ proc, bytesToMB }) {
   return (
-    <InsetCard tone="surface" className="h-full">
+    <InsetCard tone="surface">
       <Eyebrow>Load</Eyebrow>
       <div className="mt-2 space-y-2">
         <div>
@@ -293,7 +285,7 @@ function LoadSummary({ proc, bytesToMB }) {
 
 function RuntimeSummary({ proc, summary, durationLabel }) {
   return (
-    <InsetCard tone="surface" className="h-full">
+    <InsetCard tone="surface">
       <Eyebrow>Runtime</Eyebrow>
       <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-text-2">
         <div>
