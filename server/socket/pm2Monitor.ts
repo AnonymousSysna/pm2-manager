@@ -1,11 +1,11 @@
 // @ts-nocheck
-const jwt = require("jsonwebtoken");
 const pm2 = require("pm2");
 const { listProcesses } = require("../controllers/processController");
 const { isIpAllowed, getSocketIp } = require("../utils/ipAccess");
 const { parseCookieHeader } = require("../utils/cookies");
 const { AUTH_COOKIE_NAME } = require("../middleware/auth");
 const { logger } = require("../utils/logger");
+const { verifyAccessToken } = require("../utils/accessToken");
 const {
   onSocketConnected,
   onSocketDisconnected,
@@ -18,6 +18,7 @@ const { appendMetricsSample } = require("../utils/metricsHistoryStore");
 const { sendAlertNotifications } = require("../utils/alertNotifier");
 const { appendNotification } = require("../utils/notificationStore");
 const { listAlertChannels } = require("../utils/alertChannelsStore");
+const { getUserSocketRoom } = require("../utils/socketSessions");
 
 let busAttached = false;
 let attachInProgress = false;
@@ -412,11 +413,7 @@ function registerPM2Monitor(io) {
     }
 
     try {
-      const decoded = jwt.verify(token, secret);
-      if (decoded?.tokenType && decoded.tokenType !== "access") {
-        next(new Error("Unauthorized: invalid token type"));
-        return;
-      }
+      const decoded = verifyAccessToken(token, secret);
       socket.user = decoded;
       next();
     } catch (_error) {
@@ -426,6 +423,11 @@ function registerPM2Monitor(io) {
 
   io.on("connection", async (socket) => {
     let previous = new Map();
+    const username = String(socket.user?.username || "").trim();
+
+    if (username) {
+      socket.join(getUserSocketRoom(username));
+    }
 
     const sendInitial = async () => {
       const result = await listProcesses();

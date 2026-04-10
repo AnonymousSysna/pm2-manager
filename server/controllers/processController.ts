@@ -51,6 +51,7 @@ const {
   detectNodeVersionFromProject,
   normalizeVersion
 } = require("../utils/nodeRuntimeManager");
+const { getUserSocketRoom } = require("../utils/socketSessions");
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
 const COMMAND_TIMEOUT_MS = Number.isFinite(Number(process.env.COMMAND_TIMEOUT_MS))
@@ -1445,11 +1446,14 @@ async function createProcess(config, actorContext = "unknown") {
     processNameForAudit = safeName;
     const normalizedPort = parsePortValue(port);
     let createStepCounter = 0;
+    const createStepTarget = actor && actor !== "unknown" && io && typeof io.to === "function"
+      ? io.to(getUserSocketRoom(actor))
+      : io;
     const emitCreateStep = (payload = {}) => {
-      if (!io || typeof io.emit !== "function" || !createOperationId) {
+      if (!createStepTarget || typeof createStepTarget.emit !== "function" || !createOperationId) {
         return;
       }
-      io.emit("process:create:step", {
+      createStepTarget.emit("process:create:step", {
         operationId: createOperationId,
         processName: safeName,
         timestamp: Date.now(),

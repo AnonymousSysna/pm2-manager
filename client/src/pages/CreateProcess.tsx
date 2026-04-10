@@ -226,11 +226,12 @@ export default function CreateProcess() {
     const gitUrl = String(value || "");
     const inferred = inferRepoName(gitUrl);
     setForm((prev) => {
+      const previousInferred = inferRepoName(prev.git_clone_url);
       const next = { ...prev, git_clone_url: gitUrl };
-      if (!String(prev.project_path || "").trim()) {
+      if (!String(prev.project_path || "").trim() || String(prev.project_path || "").trim() === previousInferred) {
         next.project_path = inferred;
       }
-      if (!String(prev.name || "").trim()) {
+      if (!String(prev.name || "").trim() || String(prev.name || "").trim() === previousInferred) {
         next.name = inferred;
       }
       return next;

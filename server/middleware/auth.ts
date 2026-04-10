@@ -1,7 +1,7 @@
 // @ts-nocheck
-const jwt = require("jsonwebtoken");
 const { isIpAllowed, getRequestIp } = require("../utils/ipAccess");
 const { parseCookieHeader } = require("../utils/cookies");
+const { verifyAccessToken } = require("../utils/accessToken");
 
 const AUTH_COOKIE_NAME = "pm2_session";
 const REFRESH_COOKIE_NAME = "pm2_refresh";
@@ -40,12 +40,7 @@ function verifyToken(req, res, next) {
   }
 
   try {
-    const decoded = jwt.verify(token, secret);
-    if (decoded?.tokenType && decoded.tokenType !== "access") {
-      return res
-        .status(401)
-        .json({ success: false, data: null, error: "Invalid token" });
-    }
+    const decoded = verifyAccessToken(token, secret);
     req.user = decoded;
     return next();
   } catch (error) {

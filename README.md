@@ -306,7 +306,7 @@ Base paths:
 ## Security Notes
 
 - Mutating API routes require CSRF token header `x-csrf-token` matching `pm2_csrf` cookie.
-- Auth uses HttpOnly cookies (`pm2_auth`, `pm2_refresh`) plus refresh flow.
+- Auth uses HttpOnly cookies (`pm2_session`, `pm2_refresh`) plus refresh flow.
 - `.env` read/write is restricted to process working directories under app root:
   - if `PROJECTS_ROOT` ends with `apps`, that path is used
   - otherwise allowed root is `PROJECTS_ROOT/apps`

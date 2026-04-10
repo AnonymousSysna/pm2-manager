@@ -29,13 +29,59 @@ function shouldUseSecureCookies(req) {
   return Boolean(req?.secure);
 }
 
+function normalizeOrigin(value) {
+  try {
+    return new URL(String(value || "")).origin.toLowerCase();
+  } catch (_error) {
+    return "";
+  }
+}
+
+function getRequestOrigin(req) {
+  const forwardedHost = String(req?.headers?.["x-forwarded-host"] || "")
+    .split(",")[0]
+    .trim();
+  const host = forwardedHost || String(req?.headers?.host || "").trim();
+  if (!host) {
+    return "";
+  }
+
+  const forwardedProto = String(req?.headers?.["x-forwarded-proto"] || "")
+    .split(",")[0]
+    .trim()
+    .toLowerCase();
+  const protocol = forwardedProto || (shouldUseSecureCookies(req) ? "https" : "http");
+  return normalizeOrigin(`${protocol}://${host}`);
+}
+
+function getCookieSameSite(req) {
+  const override = String(process.env.COOKIE_SAME_SITE || "").trim().toLowerCase();
+  if (override === "strict") {
+    return "strict";
+  }
+  if (override === "none") {
+    return "none";
+  }
+  if (override === "lax") {
+    return "lax";
+  }
+
+  const requestOrigin = getRequestOrigin(req);
+  const callerOrigin = normalizeOrigin(req?.headers?.origin || "");
+  if (callerOrigin && requestOrigin && callerOrigin !== requestOrigin && shouldUseSecureCookies(req)) {
+    return "none";
+  }
+
+  return "lax";
+}
+
 function setCsrfCookie(res, req) {
   const secureCookie = shouldUseSecureCookies(req);
   const token = generateCsrfToken();
   res.cookie(CSRF_COOKIE_NAME, token, {
     httpOnly: false,
     secure: secureCookie,
-    sameSite: "lax",
+    sameSite: getCookieSameSite(req),
     maxAge: 24 * 60 * 60 * 1000,
     path: "/"
   });
@@ -74,6 +120,7 @@ function verifyCsrf(req, res, next) {
 module.exports = {
   CSRF_COOKIE_NAME,
   CSRF_HEADER_NAME,
+  getCookieSameSite,
   shouldUseSecureCookies,
   setCsrfCookie,
   verifyCsrf

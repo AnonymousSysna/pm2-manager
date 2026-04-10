@@ -1,7 +1,14 @@
-// @ts-nocheck
+import type { ReactNode } from "react";
 import { cn } from "../../lib/cn";
 
-export function PageIntro({ title, description, actions, className }) {
+type HeaderProps = {
+  title: ReactNode;
+  description?: ReactNode;
+  actions?: ReactNode;
+  className?: string;
+};
+
+export function PageIntro({ title, description, actions, className }: HeaderProps) {
   return (
     <section className={cn("page-panel page-intro", className)}>
       <div className="panel-title-row">
@@ -15,7 +22,7 @@ export function PageIntro({ title, description, actions, className }) {
   );
 }
 
-export function PanelHeader({ title, description, actions, className }) {
+export function PanelHeader({ title, description, actions, className }: HeaderProps) {
   return (
     <div className={cn("panel-title-row", className)}>
       <div>
@@ -27,7 +34,7 @@ export function PanelHeader({ title, description, actions, className }) {
   );
 }
 
-export function SectionHeader({ title, description, actions, className }) {
+export function SectionHeader({ title, description, actions, className }: HeaderProps) {
   return <PanelHeader title={title} description={description} actions={actions} className={className} />;
 }
 

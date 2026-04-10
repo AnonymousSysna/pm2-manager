@@ -8,11 +8,19 @@ const { verifyToken, getTokenFromRequest } = require("../middleware/auth");
 const { isIpAllowed, getRequestIp } = require("../utils/ipAccess");
 const { AUTH_COOKIE_NAME, REFRESH_COOKIE_NAME } = require("../middleware/auth");
 const { asyncHandler } = require("../middleware/asyncHandler");
-const { setCsrfCookie, CSRF_COOKIE_NAME, shouldUseSecureCookies } = require("../middleware/csrf");
+const {
+  setCsrfCookie,
+  CSRF_COOKIE_NAME,
+  shouldUseSecureCookies,
+  getCookieSameSite
+} = require("../middleware/csrf");
 const { logger } = require("../utils/logger");
 const { getAttempt, setAttempt, clearAttempt } = require("../utils/loginAttemptsStore");
+const { getTokenVersion, bumpTokenVersion } = require("../utils/authSessionStore");
 const { parseCookieHeader } = require("../utils/cookies");
 const { appendAuditEntry } = require("../utils/auditTrail");
+const { validateNewPassword } = require("../utils/passwordPolicy");
+const { disconnectUserSockets } = require("../utils/socketSessions");
 
 const router = express.Router();
 
@@ -47,51 +55,53 @@ async function writeAuthAudit(action, ip, username, success, details = null) {
 
 function clearAuthCookies(res, req) {
   const secureCookie = shouldUseSecureCookies(req);
+  const sameSite = getCookieSameSite(req);
   res.clearCookie(AUTH_COOKIE_NAME, {
     httpOnly: true,
     secure: secureCookie,
-    sameSite: "lax",
+    sameSite,
     path: "/"
   });
   res.clearCookie(REFRESH_COOKIE_NAME, {
     httpOnly: true,
     secure: secureCookie,
-    sameSite: "lax",
+    sameSite,
     path: "/"
   });
   res.clearCookie(CSRF_COOKIE_NAME, {
     httpOnly: false,
     secure: secureCookie,
-    sameSite: "lax",
+    sameSite,
     path: "/"
   });
 }
 
 function issueAuthCookies(res, req, username, jwtSecret) {
-  const nowSec = Math.floor(Date.now() / 1000);
+  const tokenVersion = getTokenVersion(username);
   const accessToken = jwt.sign(
-    { username, tokenType: "access" },
+    { username, tokenType: "access", tokenVersion },
     jwtSecret,
     { expiresIn: ACCESS_TOKEN_TTL_SEC }
   );
   const refreshToken = jwt.sign(
-    { username, tokenType: "refresh", iat2: nowSec },
+    { username, tokenType: "refresh", tokenVersion },
     jwtSecret,
     { expiresIn: REFRESH_TOKEN_TTL_SEC }
   );
 
   const secureCookie = shouldUseSecureCookies(req);
+  const sameSite = getCookieSameSite(req);
   res.cookie(AUTH_COOKIE_NAME, accessToken, {
     httpOnly: true,
     secure: secureCookie,
-    sameSite: "lax",
+    sameSite,
     maxAge: ACCESS_TOKEN_TTL_SEC * 1000,
     path: "/"
   });
   res.cookie(REFRESH_COOKIE_NAME, refreshToken, {
     httpOnly: true,
     secure: secureCookie,
-    sameSite: "lax",
+    sameSite,
     maxAge: REFRESH_TOKEN_TTL_SEC * 1000,
     path: "/"
   });
@@ -101,6 +111,11 @@ function issueAuthCookies(res, req, username, jwtSecret) {
 function getUserConfig(username) {
   const adminUser = String(process.env.PM2_USER || "").trim();
   if (!adminUser || username !== adminUser) return null;
+
+  const envHash = String(process.env.PM2_PASS_HASH || "").trim() || null;
+  if (envHash && envHash !== cachedHash) {
+    cachedHash = envHash;
+  }
 
   // Support plain PM2_PASS as a fallback (auto-hashed in memory only)
   if (!cachedHash) {
@@ -150,20 +165,31 @@ function updateEnvPasswordHash(newPasswordHash, envPath = resolvePreferredEnvPat
 
 function getLogoutUser(req) {
   const jwtSecret = String(process.env.JWT_SECRET || "").trim();
-  const token = getTokenFromRequest(req);
-  if (!jwtSecret || !token) {
+  if (!jwtSecret) {
     return null;
   }
 
-  try {
-    const decoded = jwt.verify(token, jwtSecret, { ignoreExpiration: true });
-    if (decoded?.tokenType && decoded.tokenType !== "access") {
-      return null;
+  const cookies = parseCookieHeader(req.headers.cookie || "");
+  const candidateTokens = [
+    getTokenFromRequest(req),
+    String(cookies[REFRESH_COOKIE_NAME] || "").trim()
+  ].filter(Boolean);
+
+  for (const token of candidateTokens) {
+    try {
+      const decoded = jwt.verify(token, jwtSecret, { ignoreExpiration: true });
+      if (
+        decoded?.username &&
+        (!decoded?.tokenType || decoded.tokenType === "access" || decoded.tokenType === "refresh")
+      ) {
+        return decoded;
+      }
+    } catch (_error) {
+      // Ignore invalid token candidates.
     }
-    return decoded?.username ? decoded : null;
-  } catch (_error) {
-    return null;
   }
+
+  return null;
 }
 
 router.post("/login", asyncHandler(async (req, res) => {
@@ -285,6 +311,15 @@ router.post("/refresh", asyncHandler(async (req, res) => {
     return res.status(401).json({ success: false, data: null, error: "Invalid refresh token" });
   }
 
+  const currentTokenVersion = getTokenVersion(decoded.username);
+  const tokenVersion = Number.isInteger(decoded?.tokenVersion)
+    ? decoded.tokenVersion
+    : 0;
+  if (tokenVersion !== currentTokenVersion) {
+    clearAuthCookies(res, req);
+    return res.status(401).json({ success: false, data: null, error: "Invalid refresh token" });
+  }
+
   const userConfig = getUserConfig(decoded.username);
   if (!userConfig?.hash) {
     clearAuthCookies(res, req);
@@ -318,11 +353,28 @@ router.post("/change-password", verifyToken, asyncHandler(async (req, res) => {
     });
   }
 
+  const passwordError = validateNewPassword(newPassword);
+  if (passwordError) {
+    logger.warn("auth_password_change_failed", {
+      reason: "weak_new_password",
+      username: req.user?.username || null,
+      ip: getRequestIp(req)
+    });
+    return res.status(400).json({
+      success: false,
+      data: null,
+      error: passwordError
+    });
+  }
+
   cachedHash = bcrypt.hashSync(newPassword, 10);
   delete process.env.PM2_PASS;
   process.env.PM2_PASS_HASH = cachedHash;
+  bumpTokenVersion(req.user?.username);
+  await disconnectUserSockets(req.app?.get("io"), req.user?.username);
 
   updateEnvPasswordHash(cachedHash);
+  issueAuthCookies(res, req, req.user?.username, String(process.env.JWT_SECRET || "").trim());
   logger.info("auth_password_changed", { username: req.user?.username || null, ip: getRequestIp(req) });
   return res.json({ success: true, data: { updated: true }, error: null });
 }));
@@ -344,6 +396,10 @@ router.get("/me", verifyToken, asyncHandler(async (req, res) => {
 router.post("/logout", asyncHandler(async (req, res) => {
   const ip = getRequestIp(req) || "unknown";
   const user = getLogoutUser(req);
+  if (user?.username) {
+    bumpTokenVersion(user.username);
+    await disconnectUserSockets(req.app?.get("io"), user.username);
+  }
   clearAuthCookies(res, req);
   logger.info("auth_logout", { ip, username: user?.username || null });
   await writeAuthAudit("auth.logout", ip, user?.username || "unknown", true, { reason: "success" });

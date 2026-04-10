@@ -99,6 +99,10 @@ function getPm2HomeDir() {
   return path.join(os.homedir(), ".pm2");
 }
 
+function isStartupPersistenceVerified(startupStatus, dumpExists) {
+  return Boolean(dumpExists) && startupStatus?.enabled === true;
+}
+
 async function detectStartupEnabled() {
   if (process.platform !== "linux") {
     return { supported: false, enabled: null, manager: null, service: null, output: "" };
@@ -214,7 +218,7 @@ router.post("/startup", criticalWriteLimiter, asyncHandler(async (_req, res) => 
 
   const postStartup = await detectStartupEnabled();
   const postDumpExists = await fileExists(dumpPath);
-  const persistedNow = postDumpExists && (postStartup.enabled !== false);
+  const persistedNow = isStartupPersistenceVerified(postStartup, postDumpExists);
 
   const operationSuccess = startupSuccess && saveSuccess && persistedNow;
   trackPm2Operation("startup", operationSuccess);
@@ -284,4 +288,5 @@ router.get("/info", asyncHandler(async (_req, res) => {
 }));
 
 module.exports = router;
+module.exports.isStartupPersistenceVerified = isStartupPersistenceVerified;
 
