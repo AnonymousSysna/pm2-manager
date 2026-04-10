@@ -3,17 +3,16 @@ import {
   ArrowRight,
   BellRing,
   Blocks,
-  ChevronRight,
   GitBranch,
   HardDrive,
   Lock,
   Radio,
-  Route,
   Server,
   ShieldCheck
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import Button from "../components/ui/Button";
+import { cn } from "../lib/cn";
 
 const operationalLanes = [
   {
@@ -88,38 +87,28 @@ const routePillars = [
 
 export default function Landing() {
   return (
-    <div className="min-h-screen overflow-hidden bg-[#0d1117] text-[#f4efe5]">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.16),transparent_32%),radial-gradient(circle_at_80%_18%,rgba(45,212,191,0.14),transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.03),transparent_34%)]" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/10" />
-      <div className="pointer-events-none absolute left-0 top-0 h-full w-full bg-[linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[size:72px_72px] opacity-[0.18]" />
+    <div className="marketing-shell">
+      <div className="marketing-backdrop pointer-events-none absolute inset-0" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-border/80" />
+      <div className="marketing-grid-overlay pointer-events-none absolute inset-0 opacity-20" />
 
       <header className="relative z-10">
-        <div className="mx-auto flex w-full max-w-[1280px] items-center justify-between gap-4 px-5 py-5 md:px-8">
+        <div className="marketing-container flex items-center justify-between gap-4 py-5">
           <Link to="/" className="flex items-center gap-4 text-inherit no-underline">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#f59e0b]/30 bg-[#f59e0b]/12 text-sm font-semibold tracking-[0.2em] text-[#ffd58a]">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-warning-500/30 bg-warning-500/10 text-sm font-semibold tracking-[0.2em] text-warning-300">
               PM2
             </div>
             <div>
-              <p className="text-[0.68rem] uppercase tracking-[0.28em] text-[#c9bba3]">Operations Surface</p>
-              <p className="text-lg font-semibold text-[#fff7eb]">PM2 Manager</p>
+              <p className="marketing-eyebrow text-warning-300">Operations Surface</p>
+              <p className="text-lg font-semibold text-text-1">PM2 Manager</p>
             </div>
           </Link>
 
           <div className="flex items-center gap-3">
-            <Button
-              as={Link}
-              to="/login"
-              variant="secondary"
-              className="h-10 border-[#f4efe5]/20 bg-white/5 px-4 text-[#f4efe5] hover:bg-white/10"
-            >
+            <Button as={Link} to="/login" variant="marketingSecondary" className="h-10 px-4">
               Sign In
             </Button>
-            <Button
-              as={Link}
-              to="/dashboard"
-              variant="primary"
-              className="h-10 bg-[#f59e0b] px-4 text-[#101418] hover:bg-[#ffb547]"
-            >
+            <Button as={Link} to="/dashboard" variant="marketingPrimary" className="h-10 px-4">
               Open Dashboard
             </Button>
           </div>
@@ -127,170 +116,169 @@ export default function Landing() {
       </header>
 
       <main className="relative z-10">
-        <section className="mx-auto grid w-full max-w-[1280px] gap-10 px-5 pb-14 pt-8 md:px-8 md:pb-20 md:pt-12 xl:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)] xl:items-center">
-          <div className="max-w-[680px]">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#f59e0b]/35 bg-[#f59e0b]/10 px-3 py-1.5 text-[0.72rem] uppercase tracking-[0.22em] text-[#ffd58a]">
+        <section className="marketing-container grid gap-10 pb-14 pt-8 md:pb-20 md:pt-12 xl:grid-cols-2 xl:items-center">
+          <div className="max-w-2xl">
+            <div className="marketing-pill marketing-pill-warning">
               <Radio size={14} />
               Built for operators, not for generic dashboard screenshots
             </div>
 
-            <h1 className="mt-7 text-5xl font-semibold leading-[0.96] tracking-[-0.05em] text-[#fff7eb] md:text-7xl">
+            <h1 className="marketing-hero-title mt-7">
               Run the service from the same screen where you notice it breaking.
             </h1>
-            <p className="mt-6 max-w-[620px] text-base leading-8 text-[#d7cbb8] md:text-lg">
+            <p className="mt-6 max-w-2xl text-base leading-8 text-text-2 md:text-lg">
               PM2 Manager combines process control, deploy history, logs, alerts, and Caddy routing into one operating
               surface so production work stops feeling like tab roulette.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Button
-                as={Link}
-                to="/dashboard"
-                variant="primary"
-                className="h-12 min-w-[12rem] bg-[#f59e0b] px-5 text-[#111417] hover:bg-[#ffb547]"
-              >
+              <Button as={Link} to="/dashboard" variant="marketingPrimary" className="h-12 min-w-48 px-5">
                 Enter Control Room
                 <ArrowRight size={16} />
               </Button>
-              <Button
-                as={Link}
-                to="/login"
-                variant="secondary"
-                className="h-12 min-w-[10rem] border-[#f4efe5]/18 bg-white/5 px-5 text-[#f4efe5] hover:bg-white/10"
-              >
+              <Button as={Link} to="/login" variant="marketingSecondary" className="h-12 min-w-40 px-5">
                 Authenticate
               </Button>
             </div>
 
             <div className="mt-10 grid gap-3 md:grid-cols-3">
               {operationalLanes.map((lane) => (
-                <div key={lane.label} className="rounded-[1.4rem] border border-white/10 bg-white/[0.045] p-4 backdrop-blur-sm">
-                  <p className="text-[0.68rem] uppercase tracking-[0.22em] text-[#b6a690]">{lane.label}</p>
-                  <p className="mt-3 text-lg font-semibold leading-6 text-[#fff4e4]">{lane.value}</p>
-                  <p className="mt-3 text-sm leading-6 text-[#ccbda9]">{lane.note}</p>
-                </div>
+                <article key={lane.label} className="marketing-stat-card backdrop-blur-sm">
+                  <p className="marketing-eyebrow">{lane.label}</p>
+                  <p className="mt-3 text-lg font-semibold text-text-1">{lane.value}</p>
+                  <p className="mt-3 text-sm leading-6 text-text-2">{lane.note}</p>
+                </article>
               ))}
             </div>
           </div>
 
           <div className="relative">
-            <div className="absolute -left-4 top-10 h-[86%] w-[86%] rounded-[2rem] border border-[#2dd4bf]/16 bg-[#2dd4bf]/8 blur-3xl" />
-            <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[#131922]/90 p-5 shadow-[0_30px_90px_rgba(0,0,0,0.42)] backdrop-blur md:p-6">
-              <div className="flex flex-col gap-4 border-b border-white/10 pb-5 md:flex-row md:items-start md:justify-between">
+            <div className="absolute left-0 top-10 h-4/5 w-4/5 rounded-full bg-success-500/10 blur-3xl" />
+            <article className="marketing-surface relative overflow-hidden p-5 md:p-6">
+              <div className="flex flex-col gap-4 border-b border-border/80 pb-5 md:flex-row md:items-start md:justify-between">
                 <div>
-                  <p className="text-[0.68rem] uppercase tracking-[0.24em] text-[#b6a690]">Live operations board</p>
-                  <p className="mt-2 text-2xl font-semibold text-[#fff7eb]">Production cluster / Tokyo edge</p>
-                  <p className="mt-2 max-w-md text-sm leading-6 text-[#c9bba3]">
+                  <p className="marketing-eyebrow">Live operations board</p>
+                  <h2 className="marketing-section-title mt-2">Production cluster / Tokyo edge</h2>
+                  <p className="mt-2 max-w-md text-sm leading-6 text-text-2">
                     Layout tuned around decisions an operator actually makes under pressure.
                   </p>
                 </div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-[#2dd4bf]/30 bg-[#2dd4bf]/10 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-[#7ee7d5]">
+                <div className="marketing-pill marketing-pill-success">
                   <Lock size={14} />
-                  session safe
+                  Session safe
                 </div>
               </div>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                <BoardMetric label="Online services" value="18" helper="2 clusters / 0 down" accent="text-[#7ee7d5]" />
-                <BoardMetric label="Alerts today" value="03" helper="1 unresolved" accent="text-[#ffd58a]" />
-                <BoardMetric label="Recent deploys" value="07" helper="2 pending review" accent="text-[#f6b0a9]" />
+                <BoardMetric label="Online services" value="18" helper="2 clusters / 0 down" tone="success" />
+                <BoardMetric label="Alerts today" value="03" helper="1 unresolved" tone="warning" />
+                <BoardMetric label="Recent deploys" value="07" helper="2 pending review" tone="info" />
               </div>
 
               <div className="mt-5 grid gap-4 lg:grid-cols-[1.1fr,0.9fr]">
-                <div className="rounded-[1.4rem] border border-white/8 bg-[#0f141c] p-4">
+                <section className="marketing-surface-muted p-4">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-medium text-[#fff2dd]">Service activity</p>
-                    <span className="text-[0.68rem] uppercase tracking-[0.2em] text-[#b6a690]">streaming</span>
+                    <h3 className="section-title">Service activity</h3>
+                    <span className="marketing-eyebrow">Streaming</span>
                   </div>
                   <div className="mt-4 space-y-3">
                     {boardEvents.map((event) => (
-                      <div key={event.time + event.label} className="grid grid-cols-[auto,1fr] gap-3 rounded-2xl border border-white/6 bg-white/[0.03] p-3">
-                        <div className="rounded-xl border border-white/8 bg-white/[0.04] px-2 py-1 font-mono text-xs text-[#ffd58a]">
+                      <article key={event.time + event.label} className="grid grid-cols-[auto,1fr] gap-3 rounded-xl border border-border/60 bg-surface/60 p-3">
+                        <div className="rounded-lg border border-warning-500/25 bg-warning-500/10 px-2 py-1 font-mono text-xs text-warning-300">
                           {event.time}
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-[#fff7eb]">{event.label}</p>
-                          <p className="mt-1 text-sm leading-6 text-[#c9bba3]">{event.detail}</p>
+                          <p className="text-sm font-medium text-text-1">{event.label}</p>
+                          <p className="mt-1 text-sm leading-6 text-text-2">{event.detail}</p>
                         </div>
-                      </div>
+                      </article>
                     ))}
                   </div>
-                </div>
+                </section>
 
-                <div className="rounded-[1.4rem] border border-white/8 bg-[#181f2a] p-4">
+                <section className="marketing-surface-muted p-4">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-medium text-[#fff2dd]">Control lanes</p>
-                    <Route size={16} className="text-[#7ee7d5]" />
+                    <h3 className="section-title">Control lanes</h3>
+                    <span className="marketing-eyebrow text-info-300">In view</span>
                   </div>
-                  <div className="mt-4 space-y-2.5">
+                  <ul className="mt-4 space-y-2.5">
                     {routePillars.map((item) => (
-                      <div key={item} className="flex items-center justify-between rounded-2xl border border-white/6 bg-white/[0.03] px-3 py-3">
-                        <span className="text-sm text-[#efe2cd]">{item}</span>
-                        <ChevronRight size={16} className="text-[#7ee7d5]" />
-                      </div>
+                      <li key={item} className="marketing-list-row">
+                        <span className="marketing-list-dot" aria-hidden="true" />
+                        <span>{item}</span>
+                      </li>
                     ))}
-                  </div>
-                  <div className="mt-4 rounded-2xl border border-[#f59e0b]/20 bg-[#f59e0b]/10 p-3">
-                    <p className="font-mono text-sm text-[#ffd58a]">pm2 restart api-prod --update-env</p>
-                    <p className="mt-2 text-sm leading-6 text-[#e7d5bc]">
+                  </ul>
+                  <div className="marketing-code-callout mt-4">
+                    <p className="font-mono text-sm text-warning-300">pm2 restart api-prod --update-env</p>
+                    <p className="mt-2 text-sm leading-6 text-text-2">
                       Trigger actions with enough surrounding state to understand the consequence before clicking.
                     </p>
                   </div>
-                </div>
+                </section>
               </div>
-            </div>
+            </article>
           </div>
         </section>
 
-        <section className="mx-auto w-full max-w-[1280px] px-5 pb-8 md:px-8 md:pb-10">
-          <div className="grid gap-4 lg:grid-cols-[1.05fr,0.95fr,0.95fr]">
+        <section className="marketing-container pb-10">
+          <div className="mb-6 max-w-2xl">
+            <p className="marketing-eyebrow">Why it fits operations</p>
+            <h2 className="marketing-section-title mt-3">Control, state, and release history stay in the same frame.</h2>
+            <p className="marketing-body-secondary mt-3">
+              The landing page now uses the same semantic tiers and tokenized surfaces as the app shell instead of a
+              parallel set of one-off utilities.
+            </p>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-3">
             {featureCards.map(({ title, description, icon: Icon }) => (
-              <article key={title} className="rounded-[1.6rem] border border-white/10 bg-white/[0.045] p-6">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#2dd4bf]/25 bg-[#2dd4bf]/10 text-[#7ee7d5]">
+              <article key={title} className="marketing-feature-card">
+                <div className="marketing-icon-chip h-12 w-12 rounded-2xl border-info-500/30 bg-info-500/10 text-info-300">
                   <Icon size={20} />
                 </div>
-                <h2 className="mt-6 max-w-sm text-2xl font-semibold leading-8 tracking-[-0.03em] text-[#fff7eb]">{title}</h2>
-                <p className="mt-4 text-sm leading-7 text-[#d0c2af]">{description}</p>
+                <h3 className="marketing-card-title mt-6 max-w-sm">{title}</h3>
+                <p className="mt-4 text-sm leading-7 text-text-2">{description}</p>
               </article>
             ))}
           </div>
         </section>
 
-        <section className="mx-auto grid w-full max-w-[1280px] gap-6 px-5 pb-16 md:px-8 md:pb-24 xl:grid-cols-[0.92fr,1.08fr]">
-          <div className="rounded-[1.8rem] border border-white/10 bg-[#181f2a] p-6 md:p-7">
-            <p className="text-[0.7rem] uppercase tracking-[0.24em] text-[#b6a690]">Day-one effect</p>
-            <h2 className="mt-4 max-w-md text-3xl font-semibold leading-tight tracking-[-0.04em] text-[#fff7eb]">
+        <section className="marketing-container grid gap-6 pb-16 md:pb-24 xl:grid-cols-[0.92fr,1.08fr]">
+          <section className="marketing-surface-muted p-6 md:p-7">
+            <p className="marketing-eyebrow">Day-one effect</p>
+            <h2 className="marketing-section-title mt-4 max-w-md">
               The interface should reduce operational friction, not decorate it.
             </h2>
-            <p className="mt-4 max-w-xl text-sm leading-7 text-[#d0c2af]">
+            <p className="marketing-body-secondary mt-4 max-w-xl">
               The page now anchors every section to the same container width, keeps the hero content balanced on both
               axes, and uses denser visual groupings so the screen feels assembled with intent instead of auto-generated.
             </p>
 
             <div className="mt-8 space-y-3">
               {operatingPrinciples.map(({ title, copy, icon: Icon }) => (
-                <div key={title} className="flex items-start gap-4 rounded-[1.35rem] border border-white/8 bg-white/[0.04] p-4">
-                  <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl bg-[#f59e0b]/12 text-[#ffd58a]">
+                <article key={title} className="flex items-start gap-4 rounded-xl border border-border/60 bg-surface/60 p-4">
+                  <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl bg-warning-500/10 text-warning-300">
                     <Icon size={18} />
                   </div>
                   <div>
-                    <p className="text-base font-semibold text-[#fff4e4]">{title}</p>
-                    <p className="mt-1 text-sm leading-6 text-[#cabca8]">{copy}</p>
+                    <h3 className="text-base font-semibold text-text-1">{title}</h3>
+                    <p className="mt-1 text-sm leading-6 text-text-2">{copy}</p>
                   </div>
-                </div>
+                </article>
               ))}
             </div>
-          </div>
+          </section>
 
-          <div className="rounded-[1.8rem] border border-white/10 bg-[#121821] p-6 md:p-7">
-            <div className="flex flex-col gap-3 border-b border-white/10 pb-5 md:flex-row md:items-end md:justify-between">
+          <section className="marketing-surface p-6 md:p-7">
+            <div className="flex flex-col gap-3 border-b border-border/80 pb-5 md:flex-row md:items-end md:justify-between">
               <div>
-                <p className="text-[0.7rem] uppercase tracking-[0.24em] text-[#b6a690]">Coverage map</p>
-                <h2 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-[#fff7eb]">What the product actually covers</h2>
+                <p className="marketing-eyebrow">Coverage map</p>
+                <h2 className="marketing-section-title mt-3">What the product actually covers</h2>
               </div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs uppercase tracking-[0.18em] text-[#cdbda6]">
+              <div className="marketing-pill marketing-pill-neutral">
                 <BellRing size={14} />
-                signal-aware
+                Signal-aware
               </div>
             </div>
 
@@ -301,32 +289,22 @@ export default function Landing() {
               <CoverageCard icon={BellRing} title="Alert flow" copy="Threshold notifications remain near the service they describe." />
             </div>
 
-            <div className="mt-5 rounded-[1.5rem] border border-[#2dd4bf]/18 bg-[#2dd4bf]/8 p-5">
-              <p className="text-[0.7rem] uppercase tracking-[0.22em] text-[#9deee1]">Ready to use</p>
-              <p className="mt-3 max-w-lg text-lg font-semibold leading-8 text-[#f4fffd]">
+            <div className="marketing-promo-panel mt-5">
+              <p className="marketing-eyebrow text-info-300">Ready to use</p>
+              <p className="mt-3 max-w-lg text-lg font-semibold leading-8 text-text-1">
                 Start with the dashboard, then move through logs, history, notifications, and routing without breaking
                 the mental model.
               </p>
               <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-                <Button
-                  as={Link}
-                  to="/dashboard"
-                  variant="primary"
-                  className="h-11 min-w-[11rem] bg-[#f4efe5] px-5 text-[#111417] hover:bg-white"
-                >
+                <Button as={Link} to="/dashboard" variant="marketingPrimary" className="h-11 min-w-44 px-5">
                   Launch App
                 </Button>
-                <Button
-                  as={Link}
-                  to="/login"
-                  variant="secondary"
-                  className="h-11 min-w-[9rem] border-white/20 bg-transparent px-5 text-[#f4fffd] hover:bg-white/10"
-                >
+                <Button as={Link} to="/login" variant="marketingSecondary" className="h-11 min-w-36 px-5">
                   Go to Login
                 </Button>
               </div>
             </div>
-          </div>
+          </section>
         </section>
       </main>
     </div>
@@ -337,18 +315,24 @@ function BoardMetric({
   label,
   value,
   helper,
-  accent
+  tone
 }: {
   label: string;
   value: string;
   helper: string;
-  accent: string;
+  tone: "success" | "warning" | "info";
 }) {
+  const accentClass = {
+    success: "text-success-300",
+    warning: "text-warning-300",
+    info: "text-info-300"
+  } satisfies Record<"success" | "warning" | "info", string>;
+
   return (
-    <div className="rounded-[1.2rem] border border-white/8 bg-white/[0.04] p-3.5">
-      <p className="text-[0.68rem] uppercase tracking-[0.22em] text-[#b6a690]">{label}</p>
-      <p className={`mt-2 text-3xl font-semibold ${accent}`}>{value}</p>
-      <p className="mt-1 text-sm text-[#cabca8]">{helper}</p>
+    <div className="marketing-stat-card">
+      <p className="marketing-eyebrow">{label}</p>
+      <p className={cn("mt-2 text-3xl font-semibold", accentClass[tone])}>{value}</p>
+      <p className="mt-1 text-sm text-text-2">{helper}</p>
     </div>
   );
 }
@@ -363,12 +347,12 @@ function CoverageCard({
   copy: string;
 }) {
   return (
-    <div className="rounded-[1.35rem] border border-white/8 bg-white/[0.035] p-4">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/8 bg-white/[0.05] text-[#ffd58a]">
+    <article className="rounded-xl border border-border/60 bg-surface/60 p-4">
+      <div className="marketing-icon-chip border-warning-500/25 bg-warning-500/10 text-warning-300">
         <Icon size={18} />
       </div>
-      <p className="mt-4 text-base font-semibold text-[#fff4e4]">{title}</p>
-      <p className="mt-2 text-sm leading-6 text-[#cabca8]">{copy}</p>
-    </div>
+      <h3 className="mt-4 text-base font-semibold text-text-1">{title}</h3>
+      <p className="mt-2 text-sm leading-6 text-text-2">{copy}</p>
+    </article>
   );
 }
