@@ -93,8 +93,16 @@
     @apply text-lg font-semibold text-text-1;
   }
 
+  .subsection-title {
+    @apply text-base font-semibold text-text-1;
+  }
+
   .meta-label {
-    @apply text-xs uppercase tracking-wide text-text-3;
+    @apply text-[11px] uppercase tracking-[0.18em] text-text-3;
+  }
+
+  .metric-value {
+    @apply text-base font-semibold text-text-1;
   }
 
   .page-intro {
@@ -117,12 +125,16 @@
     @apply bg-black/60;
   }
 
+  .inset-card {
+    @apply rounded-lg border border-border/80;
+  }
+
   .ops-kpi {
     @apply rounded-xl border border-border/80 bg-surface-2/80 p-3;
   }
 
   .ops-kpi-label {
-    @apply text-[11px] uppercase tracking-[0.18em] text-text-3;
+    @apply meta-label;
   }
 
   .ops-kpi-value {

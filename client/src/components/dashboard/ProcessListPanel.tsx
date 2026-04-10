@@ -5,6 +5,10 @@ import Checkbox from "../ui/Checkbox";
 import Input from "../ui/Input";
 import ProgressBar from "../ui/ProgressBar";
 import { PanelHeader } from "../ui/PageLayout";
+import { processStatusTone } from "../ui/semanticTones";
+import { InsetCard } from "../ui/Surface";
+import TextButton from "../ui/TextButton";
+import { Eyebrow, SupportingCopy } from "../ui/Typography";
 
 export default function ProcessListPanel({
   filtered,
@@ -46,7 +50,7 @@ export default function ProcessListPanel({
         )}
       />
 
-      <div className="rounded-xl border border-border/80 bg-surface-2/60 p-3">
+      <InsetCard className="rounded-xl bg-surface-2/60">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-2 text-xs text-text-2">
             <Badge tone={selectedCount > 0 ? "info" : "neutral"}>{selectedCount} selected</Badge>
@@ -72,7 +76,7 @@ export default function ProcessListPanel({
             </Button>
           </div>
         </div>
-      </div>
+      </InsetCard>
 
       <div className="space-y-3 xl:hidden">
         {filtered.map((proc) => {
@@ -104,7 +108,7 @@ export default function ProcessListPanel({
 
       <div className="hidden overflow-x-auto xl:block">
         <table className="min-w-full text-sm">
-          <thead className="border-b border-border/80 text-left text-xs uppercase tracking-[0.16em] text-text-3">
+          <thead className="meta-label border-b border-border/80 text-left">
             <tr>
               <th className="px-2 py-3">
                 <Checkbox checked={allSelected} onChange={(event) => toggleSelectAllFiltered(event.target.checked)} />
@@ -131,13 +135,9 @@ export default function ProcessListPanel({
                   </td>
                   <td className="px-2 py-4">
                     <div className="min-w-[200px]">
-                      <button
-                        type="button"
-                        className="text-left text-base font-semibold text-brand-400 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-                        onClick={() => openDetails(proc)}
-                      >
+                      <TextButton type="button" className="text-left text-base font-semibold" onClick={() => openDetails(proc)}>
                         {proc.name}
-                      </button>
+                      </TextButton>
                       <div className="mt-2 flex flex-wrap gap-2">
                         <Badge tone={proc.mode === "cluster" ? "info" : "neutral"}>{proc.mode || "fork"}</Badge>
                         {proc.id !== undefined && <Badge tone="neutral">ID {proc.id}</Badge>}
@@ -213,18 +213,14 @@ function ProcessCard({
   const anomaly = summary.anomaly || { isAnomaly: false, score: 0 };
 
   return (
-    <article className="rounded-xl border border-border/80 bg-surface-2/60 p-3">
+    <InsetCard as="article" className="rounded-xl bg-surface-2/60">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Checkbox checked={selected} onChange={(event) => toggleSelected(proc.name, event.target.checked)} />
-            <button
-              type="button"
-              className="text-left text-base font-semibold text-brand-400 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-              onClick={() => openDetails(proc)}
-            >
+            <TextButton type="button" className="text-left text-base font-semibold" onClick={() => openDetails(proc)}>
               {proc.name}
-            </button>
+            </TextButton>
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
             <StatusBadge status={proc.status} />
@@ -262,14 +258,14 @@ function ProcessCard({
           onOpenApp={onOpenApp}
         />
       </div>
-    </article>
+    </InsetCard>
   );
 }
 
 function LoadSummary({ proc, bytesToMB }) {
   return (
-    <div className="rounded-lg border border-border/80 bg-surface p-3">
-      <p className="text-[11px] uppercase tracking-[0.16em] text-text-3">Load</p>
+    <InsetCard tone="surface">
+      <Eyebrow>Load</Eyebrow>
       <div className="mt-2 space-y-2">
         <div>
           <div className="mb-1 flex items-center justify-between text-xs text-text-2">
@@ -283,33 +279,33 @@ function LoadSummary({ proc, bytesToMB }) {
           <span>{bytesToMB(proc.memory)}</span>
         </div>
       </div>
-    </div>
+    </InsetCard>
   );
 }
 
 function RuntimeSummary({ proc, summary, durationLabel }) {
   return (
-    <div className="rounded-lg border border-border/80 bg-surface p-3">
-      <p className="text-[11px] uppercase tracking-[0.16em] text-text-3">Runtime</p>
+    <InsetCard tone="surface">
+      <Eyebrow>Runtime</Eyebrow>
       <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-text-2">
         <div>
-          <p className="text-text-3">Uptime</p>
+          <SupportingCopy size="xs">Uptime</SupportingCopy>
           <p className="mt-1 font-medium text-text-1">{durationLabel(summary.upMs || proc.uptime || 0)}</p>
         </div>
         <div>
-          <p className="text-text-3">Restarts</p>
+          <SupportingCopy size="xs">Restarts</SupportingCopy>
           <p className="mt-1 font-medium text-text-1">{proc.restarts ?? 0}</p>
         </div>
         <div>
-          <p className="text-text-3">Downtime</p>
+          <SupportingCopy size="xs">Downtime</SupportingCopy>
           <p className="mt-1 font-medium text-text-1">{durationLabel(summary.downMs || 0)}</p>
         </div>
         <div>
-          <p className="text-text-3">PM2 ID</p>
+          <SupportingCopy size="xs">PM2 ID</SupportingCopy>
           <p className="mt-1 font-medium text-text-1">{proc.id ?? "-"}</p>
         </div>
       </div>
-    </div>
+    </InsetCard>
   );
 }
 
@@ -397,11 +393,5 @@ function EmptyState() {
 }
 
 function StatusBadge({ status }) {
-  const map = {
-    online: "success",
-    stopped: "warning",
-    errored: "danger"
-  };
-
-  return <Badge tone={map[status] || "neutral"}>{status || "unknown"}</Badge>;
+  return <Badge tone={processStatusTone(status)}>{status || "unknown"}</Badge>;
 }

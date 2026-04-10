@@ -1,6 +1,8 @@
 import { AlertTriangle } from "lucide-react";
 import Button from "../ui/Button";
 import { PanelHeader } from "../ui/PageLayout";
+import { InsetCard } from "../ui/Surface";
+import { SubsectionTitle, SupportingCopy } from "../ui/Typography";
 
 export default function ThresholdAlertsPanel({ alerts = [], onOpenLogs }) {
   return (
@@ -16,14 +18,14 @@ export default function ThresholdAlertsPanel({ alerts = [], onOpenLogs }) {
           .reverse()
           .slice(0, 20)
           .map((item, index) => (
-            <div key={`${item.ts}-${index}`} className="rounded-lg border border-border/80 bg-surface-2/60 p-3">
+            <InsetCard key={`${item.ts}-${index}`} className="bg-surface-2/60">
               <div className="flex items-start gap-2">
                 <AlertTriangle size={16} className={item.severity === "danger" ? "text-danger-300" : "text-warning-300"} />
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-text-1">{item.processName}</p>
-                  <p className="mt-1 text-sm text-text-2">
+                  <SubsectionTitle className="text-sm">{item.processName}</SubsectionTitle>
+                  <SupportingCopy tone="default" className="mt-1">
                     {item.metric} at {item.value} against threshold {item.threshold}
-                  </p>
+                  </SupportingCopy>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <span className="text-xs text-text-3">{new Date(item.ts).toLocaleTimeString()}</span>
                     {typeof onOpenLogs === "function" && item.processName && (
@@ -34,7 +36,7 @@ export default function ThresholdAlertsPanel({ alerts = [], onOpenLogs }) {
                   </div>
                 </div>
               </div>
-            </div>
+            </InsetCard>
           ))}
       </div>
     </section>

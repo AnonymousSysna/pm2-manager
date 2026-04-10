@@ -4,6 +4,7 @@ import toast, { getErrorMessage } from "../lib/toast";
 import { alerts as alertsApi, caddy as caddyApi, processes as processApi } from "../api";
 import { useSocket } from "../hooks/useSocket";
 import ProcessDetailModal from "../components/ProcessDetailModal";
+import Banner from "../components/ui/Banner";
 import Button from "../components/ui/Button";
 import { ConfirmDialog } from "../components/ui/Modal";
 import { PageIntro } from "../components/ui/PageLayout";
@@ -843,16 +844,8 @@ export default function Dashboard() {
         )}
       />
 
-      {reconnecting && (
-        <div className="rounded-lg border border-warning-500/40 bg-warning-500/15 px-3 py-2 text-sm text-warning-300">
-          Reconnecting. Live process updates are temporarily paused.
-        </div>
-      )}
-      {monitorError && (
-        <div className="rounded-lg border border-danger-500/40 bg-danger-500/15 px-3 py-2 text-sm text-danger-300">
-          Monitor error: {monitorError}
-        </div>
-      )}
+      {reconnecting && <Banner tone="warning">Reconnecting. Live process updates are temporarily paused.</Banner>}
+      {monitorError && <Banner tone="danger">Monitor error: {monitorError}</Banner>}
 
       <OperationsOverviewPanel
         stats={stats}

@@ -9,6 +9,8 @@ import Select from "../components/ui/Select";
 import Input from "../components/ui/Input";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 import { Skeleton } from "../components/ui/Skeleton";
+import { InsetCard } from "../components/ui/Surface";
+import { Eyebrow, SubsectionTitle, SupportingCopy } from "../components/ui/Typography";
 
 function levelIcon(level) {
   const normalized = String(level || "").toLowerCase();
@@ -183,12 +185,12 @@ export default function Notifications() {
             const shownMessage = isExpanded || !shouldTruncate ? fullMessage : `${fullMessage.slice(0, 220)}...`;
 
             return (
-              <article key={id} className="rounded-lg border border-border bg-surface-2 p-3">
+              <InsetCard key={id} as="article" className="bg-surface-2">
                 <div className="flex items-start gap-2">
                   <span className="mt-0.5">{levelIcon(item.level)}</span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-text-1">{item.title || "Notification"}</p>
-                    <p className="mt-1 whitespace-pre-wrap text-sm text-text-2">{shownMessage}</p>
+                    <SubsectionTitle className="text-sm">{item.title || "Notification"}</SubsectionTitle>
+                    <SupportingCopy tone="default" className="mt-1 whitespace-pre-wrap">{shownMessage}</SupportingCopy>
                     {(shouldTruncate || rawError) && (
                       <div className="mt-2 flex flex-wrap gap-2">
                         {shouldTruncate && (
@@ -208,13 +210,13 @@ export default function Notifications() {
                         </Button>
                       </div>
                     )}
-                    <p className="mt-2 text-xs text-text-3">
+                    <Eyebrow className="mt-2">
                       {new Date(item.ts).toLocaleString()} | {item.category || "event"}
                       {item.processName ? ` | ${item.processName}` : ""}
-                    </p>
+                    </Eyebrow>
                   </div>
                 </div>
-              </article>
+              </InsetCard>
             );
           })}
         </div>
@@ -237,7 +239,7 @@ function NotificationListSkeleton() {
   return (
     <div className="space-y-2" aria-hidden="true">
       {Array.from({ length: 4 }).map((_, index) => (
-        <article key={index} className="rounded-lg border border-border bg-surface-2 p-3">
+        <InsetCard key={index} as="article" className="bg-surface-2">
           <div className="flex items-start gap-2">
             <Skeleton className="mt-0.5 h-4 w-4 rounded-full" />
             <div className="min-w-0 flex-1 space-y-2">
@@ -251,7 +253,7 @@ function NotificationListSkeleton() {
               <Skeleton className="h-3 w-48" />
             </div>
           </div>
-        </article>
+        </InsetCard>
       ))}
     </div>
   );

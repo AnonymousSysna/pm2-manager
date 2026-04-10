@@ -20,8 +20,10 @@ import Badge from "./ui/Badge";
 import Button from "./ui/Button";
 import Modal from "./ui/Modal";
 import ProgressBar from "./ui/ProgressBar";
+import { InsetCard, StatCard } from "./ui/Surface";
 import TabGroup from "./ui/TabGroup";
 import { Skeleton } from "./ui/Skeleton";
+import { Eyebrow, SubsectionTitle, SupportingCopy } from "./ui/Typography";
 
 const tabs = ["Summary", "Environment", "Actions"];
 const SENSITIVE_ENV_KEY_PATTERN = /(pass(word)?|secret|token|api[_-]?key|private|credential|auth|pwd)/i;
@@ -174,22 +176,18 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             {summaryItems.map((item) => (
-              <div key={item.label} className="rounded-lg border border-border/80 bg-surface-2/70 p-3">
-                <p className="text-[11px] uppercase tracking-[0.16em] text-text-3">{item.label}</p>
-                {item.tone ? (
-                  <div className="mt-2">
-                    <Badge tone={item.tone}>{String(item.value)}</Badge>
-                  </div>
-                ) : (
-                  <p className="mt-2 break-all text-sm text-text-1">{String(item.value)}</p>
-                )}
-              </div>
+              <StatCard
+                key={item.label}
+                label={item.label}
+                value={item.tone ? <Badge tone={item.tone}>{String(item.value)}</Badge> : String(item.value)}
+                className="break-all"
+              />
             ))}
           </div>
 
-          <div className="rounded-lg border border-border/80 bg-surface-2/70 p-3">
+          <InsetCard>
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm font-medium text-text-1">Recent resource history</p>
+              <SubsectionTitle className="text-sm">Recent resource history</SubsectionTitle>
               <div className="flex flex-wrap gap-2">
                 {typeof onOpenLogs === "function" && (
                   <Button type="button" size="sm" variant="secondary" onClick={() => onOpenLogs(process.name)}>
@@ -214,7 +212,7 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
             </div>
             {metricsLoading && <MetricsHistorySkeleton />}
             {!metricsLoading && metricsPoints.length === 0 && (
-              <p className="text-sm text-text-3">No metrics history has been recorded yet.</p>
+              <SupportingCopy>No metrics history has been recorded yet.</SupportingCopy>
             )}
             {!metricsLoading && metricsPoints.length > 0 && (
               <div className="space-y-2">
@@ -230,16 +228,16 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
                 ))}
               </div>
             )}
-          </div>
+          </InsetCard>
         </div>
       )}
 
       {tab === "Environment" && (
-        <div className="max-h-modal-content overflow-y-auto rounded-lg border border-border/80">
+        <InsetCard className="max-h-modal-content overflow-y-auto p-0">
           <div className="flex items-center justify-between border-b border-border/80 bg-surface-2/70 p-3">
             <div>
-              <p className="text-sm font-medium text-text-1">Runtime environment</p>
-              <p className="text-xs text-text-3">{envEntries.length} variables available</p>
+              <SubsectionTitle className="text-sm">Runtime environment</SubsectionTitle>
+              <SupportingCopy size="xs">{envEntries.length} variables available</SupportingCopy>
             </div>
             {hasSensitiveEnv && (
               <Button
@@ -253,7 +251,7 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
             )}
           </div>
           {envEntries.length === 0 ? (
-            <p className="p-4 text-sm text-text-3">No PM2 environment variables were returned for this process.</p>
+            <SupportingCopy className="p-4">No PM2 environment variables were returned for this process.</SupportingCopy>
           ) : (
             envEntries.map(([key, value]) => (
               <div key={key} className="grid grid-cols-[minmax(0,1fr),minmax(0,1fr),40px] items-center gap-2 border-b border-border/70 p-2 text-xs last:border-b-0">
@@ -282,7 +280,7 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
               </div>
             ))
           )}
-        </div>
+        </InsetCard>
       )}
 
       {tab === "Actions" && (

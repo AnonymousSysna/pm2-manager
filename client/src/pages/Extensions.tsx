@@ -9,6 +9,9 @@ import InsetPanel from "../components/ui/InsetPanel";
 import Select from "../components/ui/Select";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 import { Skeleton } from "../components/ui/Skeleton";
+import StatusText from "../components/ui/StatusText";
+import { InsetCard } from "../components/ui/Surface";
+import { Eyebrow, SubsectionTitle, SupportingCopy } from "../components/ui/Typography";
 
 export default function Extensions() {
   const [loading, setLoading] = useState(true);
@@ -176,16 +179,16 @@ export default function Extensions() {
             </div>
           ) : (
             <div className="min-w-0 flex-1">
-              <h3 className="panel-heading">Caddy</h3>
-              <p className="text-sm text-text-3">
+              <SubsectionTitle>Caddy</SubsectionTitle>
+              <SupportingCopy>
                 Platform: <span className="text-text-2">{status.platform || "unknown"}</span>
-              </p>
-              <p className="text-sm text-text-3">
+              </SupportingCopy>
+              <SupportingCopy>
                 Status:{" "}
-                <span className={status.installed ? "text-success-300" : "text-warning-300"}>
+                <StatusText tone={status.installed ? "success" : "warning"}>
                   {status.installed ? `Installed${status.version ? ` (${status.version})` : ""}` : "Not installed"}
-                </span>
-              </p>
+                </StatusText>
+              </SupportingCopy>
             </div>
           )}
           {loading ? (
@@ -242,7 +245,7 @@ export default function Extensions() {
           {interpreterState.interpreters.map((item) => (
             <InsetPanel key={item.key}>
               <div className="flex flex-wrap items-center gap-2">
-                <h4 className="text-sm font-semibold text-text-1">{item.displayName}</h4>
+                <SubsectionTitle className="text-sm">{item.displayName}</SubsectionTitle>
                 <Badge tone={item.installed ? "success" : "warning"}>{item.installed ? "Installed" : "Not found"}</Badge>
                 {item.clusterCapable ? <Badge tone="info">Cluster capable</Badge> : null}
                 <span className="text-xs text-text-3">
@@ -270,12 +273,12 @@ export default function Extensions() {
                 <div className="mt-1 text-xs text-text-3">
                   <p>
                     Install status:{" "}
-                    <span className={item.installer?.canInstall ? "text-success-300" : "text-warning-300"}>
+                    <StatusText as="span" tone={item.installer?.canInstall ? "success" : "warning"}>
                       {item.installer?.canInstall ? "Ready" : "Blocked"}
-                    </span>
+                    </StatusText>
                   </p>
                   {item.installer?.reason && (
-                    <p className="text-warning-300">{item.installer.reason}</p>
+                    <StatusText as="p" tone="warning">{item.installer.reason}</StatusText>
                   )}
                   {Array.isArray(item.installer?.availableManagers) && item.installer.availableManagers.length > 0 && (
                     <p>
@@ -296,7 +299,7 @@ export default function Extensions() {
 
         <InsetPanel className="mt-4">
           <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="text-sm font-semibold text-text-1">Node Runtime Manager</p>
+            <SubsectionTitle className="text-sm">Node Runtime Manager</SubsectionTitle>
             <Button
               type="button"
               variant="secondary"
@@ -342,9 +345,9 @@ export default function Extensions() {
                   | System Node: <span className="text-text-2">{nodeRuntimeState.data?.systemNode?.version || "-"}</span>
                 </p>
                 {Array.isArray(nodeRuntimeState.data?.managers) && nodeRuntimeState.data.managers.map((manager) => (
-                  <div key={manager.manager} className="rounded border border-border bg-surface p-2">
+                  <InsetCard key={manager.manager} padding="sm" tone="surface">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-xs font-semibold text-text-2">{manager.displayName}</p>
+                      <Eyebrow>{manager.displayName}</Eyebrow>
                       <Badge tone={manager.installed ? "success" : "warning"}>
                         {manager.installed ? "Installed" : "Missing"}
                       </Badge>
@@ -366,7 +369,7 @@ export default function Extensions() {
                         ))}
                       </div>
                     )}
-                  </div>
+                  </InsetCard>
                 ))}
               </>
             )}
@@ -402,14 +405,14 @@ function NodeRuntimeSkeleton() {
     <div className="space-y-2" aria-hidden="true">
       <Skeleton className="h-3 w-56" />
       {Array.from({ length: 2 }).map((_, index) => (
-        <div key={index} className="rounded border border-border bg-surface p-2">
+        <InsetCard key={index} padding="sm" tone="surface">
           <div className="flex items-center gap-2">
             <Skeleton className="h-4 w-24" />
             <Skeleton className="h-5 w-20" />
           </div>
           <Skeleton className="mt-2 h-3 w-48" />
           <Skeleton className="mt-2 h-10 w-full" />
-        </div>
+        </InsetCard>
       ))}
     </div>
   );

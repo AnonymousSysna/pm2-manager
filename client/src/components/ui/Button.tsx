@@ -1,4 +1,5 @@
 import { cn } from "../../lib/cn";
+import { getSemanticOutlineButtonClasses } from "./semanticTones";
 
 const variants = {
   primary: "bg-brand-600 text-white hover:bg-brand-500 focus-visible:ring-brand-400",
@@ -9,11 +10,14 @@ const variants = {
   info: "bg-info-600 text-white hover:bg-info-500 focus-visible:ring-info-300",
   outline: "border border-border/90 bg-transparent text-text-2 hover:bg-surface-2 focus-visible:ring-brand-400",
   outlinePrimary: "border border-brand-500/60 bg-transparent text-brand-400 hover:bg-brand-500/10 focus-visible:ring-brand-400",
-  outlineSuccess: "border border-success-500/60 bg-transparent text-success-300 hover:bg-success-500/10 focus-visible:ring-success-300",
-  outlineDanger: "border border-danger-500/60 bg-transparent text-danger-300 hover:bg-danger-500/10 focus-visible:ring-danger-300",
-  outlineWarning: "border border-warning-500/60 bg-transparent text-warning-300 hover:bg-warning-500/10 focus-visible:ring-warning-300",
-  outlineInfo: "border border-info-500/60 bg-transparent text-info-300 hover:bg-info-500/10 focus-visible:ring-info-300",
   ghost: "text-text-2 hover:bg-surface-2 focus-visible:ring-brand-400"
+};
+
+const outlineToneByVariant = {
+  outlineSuccess: "success",
+  outlineDanger: "danger",
+  outlineWarning: "warning",
+  outlineInfo: "info"
 };
 
 const sizes = {
@@ -38,7 +42,9 @@ export default function Button({
         "inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-all active:enabled:translate-y-px",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
         "disabled:cursor-not-allowed disabled:opacity-50",
-        variants[variant] || variants.primary,
+        outlineToneByVariant[variant]
+          ? getSemanticOutlineButtonClasses(outlineToneByVariant[variant])
+          : variants[variant] || variants.primary,
         sizes[size] || sizes.md,
         className
       )}

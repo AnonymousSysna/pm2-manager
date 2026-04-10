@@ -10,6 +10,10 @@ const sizeMap = {
   xl: "max-w-3xl"
 };
 
+const dialogPanelClasses = "border border-border bg-surface text-text-1 shadow-xl";
+const dialogHeaderClasses = "mb-4 flex items-start justify-between gap-3";
+const dialogFooterClasses = "mt-5 flex flex-wrap justify-end gap-2";
+
 export default function Modal({
   title,
   description,
@@ -57,9 +61,9 @@ export default function Modal({
           aria-modal="true"
           aria-labelledby={titleId}
           aria-describedby={description ? descriptionId : undefined}
-          className={cn("absolute right-0 top-0 h-full w-full max-w-xl border-l border-border bg-surface p-6 text-text-1 shadow-xl", className)}
+          className={cn("absolute right-0 top-0 h-full w-full max-w-xl border-l p-5", dialogPanelClasses, className)}
         >
-          <div className="mb-4 flex items-start justify-between gap-3">
+          <div className={dialogHeaderClasses}>
             <div className="min-w-0 flex-1">
               <h2 id={titleId} className="panel-heading">{title}</h2>
               {description ? <p id={descriptionId} className="panel-muted mt-1">{description}</p> : null}
@@ -71,7 +75,7 @@ export default function Modal({
             ) : null}
           </div>
           <div className={bodyClassName}>{children}</div>
-          {actions ? <div className="mt-4 flex flex-wrap justify-end gap-2">{actions}</div> : null}
+          {actions ? <div className={dialogFooterClasses}>{actions}</div> : null}
         </aside>
       </div>
     );
@@ -94,9 +98,9 @@ export default function Modal({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
-        className={cn("relative z-10 w-full rounded-xl border border-border bg-surface p-4 shadow-xl", sizeMap[size] || sizeMap.md, className)}
+        className={cn("relative z-10 w-full rounded-xl p-5", dialogPanelClasses, sizeMap[size] || sizeMap.md, className)}
       >
-        <div className="mb-3 flex items-start justify-between gap-3">
+        <div className={dialogHeaderClasses}>
           <div className="min-w-0 flex-1">
             <h2 id={titleId} className="panel-heading">{title}</h2>
             {description ? <p id={descriptionId} className="panel-muted mt-1">{description}</p> : null}
@@ -108,7 +112,7 @@ export default function Modal({
           ) : null}
         </div>
         <div className={bodyClassName}>{children}</div>
-        {actions ? <div className="mt-4 flex flex-wrap justify-end gap-2">{actions}</div> : null}
+        {actions ? <div className={dialogFooterClasses}>{actions}</div> : null}
       </div>
     </div>
   );

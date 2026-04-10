@@ -1,7 +1,10 @@
 import { AlertTriangle, History, ScrollText, ServerCrash, ShieldCheck, ShieldX } from "lucide-react";
 import Badge from "../ui/Badge";
+import Banner from "../ui/Banner";
 import Button from "../ui/Button";
 import { PanelHeader } from "../ui/PageLayout";
+import { InsetCard, StatCard } from "../ui/Surface";
+import { SubsectionTitle, SupportingCopy } from "../ui/Typography";
 
 function buildAttentionItems({ alerts = [], processes = [], monitoringSummary = [] }) {
   const items = [];
@@ -111,29 +114,25 @@ export default function OperationsOverviewPanel({
       />
 
       <div className="grid gap-3 md:grid-cols-4">
-        <div className="ops-kpi">
-          <p className="ops-kpi-label">Fleet</p>
-          <p className="ops-kpi-value">{stats?.online ?? 0} / {stats?.total ?? 0}</p>
-          <p className="ops-kpi-note">Processes online right now</p>
-        </div>
-        <div className="ops-kpi">
-          <p className="ops-kpi-label">Attention</p>
-          <p className="ops-kpi-value text-warning-300">{attentionCount}</p>
-          <p className="ops-kpi-note">Errored, stopped, or anomalous processes</p>
-        </div>
-        <div className="ops-kpi">
-          <p className="ops-kpi-label">Recent Alerts</p>
-          <p className="ops-kpi-value">{alerts.length}</p>
-          <p className="ops-kpi-note">Threshold hits in the current socket session</p>
-        </div>
-        <div className="ops-kpi">
-          <p className="ops-kpi-label">Healthy</p>
-          <p className="ops-kpi-value text-success-300">{healthyCount}</p>
-          <p className="ops-kpi-note">Online processes without active alert noise</p>
-        </div>
+        <StatCard label="Fleet" value={`${stats?.online ?? 0} / ${stats?.total ?? 0}`} note="Processes online right now" tone="elevated" />
+        <StatCard
+          label="Attention"
+          value={attentionCount}
+          valueClassName="text-warning-300"
+          note="Errored, stopped, or anomalous processes"
+          tone="elevated"
+        />
+        <StatCard label="Recent Alerts" value={alerts.length} note="Threshold hits in the current socket session" tone="elevated" />
+        <StatCard
+          label="Healthy"
+          value={healthyCount}
+          valueClassName="text-success-300"
+          note="Online processes without active alert noise"
+          tone="elevated"
+        />
       </div>
 
-      <div className="rounded-xl border border-border/80 bg-surface-2/50 p-3">
+      <InsetCard className="rounded-xl bg-surface-2/50">
         <div className="mb-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             {attentionCount > 0 ? (
@@ -141,9 +140,9 @@ export default function OperationsOverviewPanel({
             ) : (
               <ShieldCheck size={16} className="text-success-300" />
             )}
-            <p className="text-sm font-medium text-text-1">
+            <SubsectionTitle className="text-sm">
               {attentionCount > 0 ? "Attention queue" : "No active incidents"}
-            </p>
+            </SubsectionTitle>
           </div>
           {attentionCount > 0 && (
             <Button type="button" size="sm" variant="secondary" onClick={onOpenHistory}>
@@ -153,22 +152,21 @@ export default function OperationsOverviewPanel({
         </div>
 
         {attentionItems.length === 0 ? (
-          <div className="flex items-center gap-3 rounded-lg border border-success-500/30 bg-success-500/10 px-3 py-2 text-sm text-success-300">
-            <ShieldX size={16} className="rotate-180" />
+          <Banner tone="success" icon={<ShieldX size={16} className="rotate-180" />}>
             No current errors, stops, or anomaly spikes.
-          </div>
+          </Banner>
         ) : (
           <div className="space-y-2">
             {attentionItems.map((item) => (
-              <div key={item.key} className="flex flex-col gap-3 rounded-lg border border-border/80 bg-surface px-3 py-3 lg:flex-row lg:items-center">
+              <InsetCard key={item.key} tone="surface" className="flex flex-col gap-3 lg:flex-row lg:items-center">
                 <div className="flex min-w-0 flex-1 items-start gap-3">
                   <ServerCrash size={16} className={item.tone === "danger" ? "text-danger-300" : item.tone === "warning" ? "text-warning-300" : "text-info-300"} />
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-medium text-text-1">{item.processName}</p>
+                      <SubsectionTitle className="text-sm">{item.processName}</SubsectionTitle>
                       <Badge tone={item.tone}>{item.label}</Badge>
                     </div>
-                    <p className="mt-1 text-xs text-text-3">{item.detail}</p>
+                    <SupportingCopy size="xs" className="mt-1">{item.detail}</SupportingCopy>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -181,11 +179,11 @@ export default function OperationsOverviewPanel({
                     History
                   </Button>
                 </div>
-              </div>
+              </InsetCard>
             ))}
           </div>
         )}
-      </div>
+      </InsetCard>
     </section>
   );
 }

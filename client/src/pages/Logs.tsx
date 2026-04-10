@@ -14,6 +14,7 @@ import Input from "../components/ui/Input";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 import { Skeleton } from "../components/ui/Skeleton";
 import StatusText from "../components/ui/StatusText";
+import { Eyebrow } from "../components/ui/Typography";
 
 function levelFromLine(line) {
   const text = String(line || "").toUpperCase();
@@ -416,7 +417,7 @@ export default function Logs() {
           )}
           {Array.isArray(createSummary?.details?.steps) && createSummary.details.steps.length > 0 && (
             <InsetPanel className="mt-2" padding="sm">
-              <p className="text-xs font-semibold text-text-2">Create Steps</p>
+              <Eyebrow>Create Steps</Eyebrow>
               <div className="mt-1 space-y-1 text-xs text-text-3">
                 {createSummary.details.steps.map((step, idx) => (
                   <p key={`${step.label}-${idx}`}>

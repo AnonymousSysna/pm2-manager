@@ -1,3 +1,4 @@
+import Banner from "../ui/Banner";
 import Button from "../ui/Button";
 import Checkbox from "../ui/Checkbox";
 import Field from "../ui/Field";
@@ -6,6 +7,8 @@ import { ConfirmDialog } from "../ui/Modal";
 import Modal from "../ui/Modal";
 import Select from "../ui/Select";
 import { Skeleton } from "../ui/Skeleton";
+import { InsetCard } from "../ui/Surface";
+import { Eyebrow } from "../ui/Typography";
 
 export function DeployProcessModal({
   process,
@@ -32,7 +35,7 @@ export function DeployProcessModal({
     >
       <div className="space-y-4">
         {deploySubmitting && (
-          <div className="rounded-lg border border-border/80 bg-surface-2/70 p-3">
+          <InsetCard>
             <div className="flex items-center gap-2 text-sm text-text-2">
               <Skeleton className="h-4 w-24 rounded-full" />
               Deployment running. Keep this tab open.
@@ -43,7 +46,7 @@ export function DeployProcessModal({
                 This is taking longer than expected. Check git access, build output, and network access on the host.
               </p>
             )}
-          </div>
+          </InsetCard>
         )}
 
         <Field label="Branch override">
@@ -212,19 +215,19 @@ export function DotEnvEditorModal({
       {dotEnvLoading ? (
         <DotEnvEditorSkeleton />
       ) : (
-        <div className="max-h-80 space-y-3 overflow-y-auto rounded-lg border border-border/80 bg-surface-2/70 p-3">
+        <InsetCard className="max-h-80 space-y-3 overflow-y-auto">
           {dotEnvValidationError && (
-            <div className="rounded-lg border border-warning-500/40 bg-warning-500/10 p-2 text-xs text-warning-300">
+            <Banner tone="warning" className="text-xs">
               <p>{dotEnvValidationError}</p>
               <p className="mt-1">Fix malformed lines before saving changes.</p>
-            </div>
+            </Banner>
           )}
           {dotEnvFields.length === 0 && (
             <p className="text-sm text-text-3">No editable entries were found.</p>
           )}
           {dotEnvFields.map((item, index) => (
             <div key={`${item.key}-${index}`} className="grid grid-cols-1 gap-2 md:grid-cols-[220px,1fr] md:items-center">
-              <label className="text-xs font-semibold text-text-2">{item.key}</label>
+              <Eyebrow as="label">{item.key}</Eyebrow>
               <DotEnvValueInput
                 valueType={item.valueType}
                 value={item.value}
@@ -235,7 +238,7 @@ export function DotEnvEditorModal({
               />
             </div>
           ))}
-        </div>
+        </InsetCard>
       )}
 
       <div className="mt-4 flex justify-end gap-2">
@@ -278,9 +281,9 @@ export function DotEnvDiffModal({
       disableOverlayClose={dotEnvSaving}
       className="z-[60]"
     >
-      <div className="max-h-80 space-y-2 overflow-y-auto rounded-lg border border-border/80 bg-surface-2/70 p-3">
+      <InsetCard className="max-h-80 space-y-2 overflow-y-auto">
         {dotEnvDiffEntries.map((entry) => (
-          <div key={entry.key} className="rounded-lg border border-border/80 bg-surface px-3 py-2 text-sm">
+          <InsetCard key={entry.key} padding="sm" tone="surface" className="text-sm">
             <p className="font-semibold text-text-1">{entry.key}</p>
             <p className="text-xs text-text-3">
               - {entry.sensitive && !dotEnvRevealValues ? "*****" : entry.before}
@@ -288,9 +291,9 @@ export function DotEnvDiffModal({
             <p className="text-xs text-success-300">
               + {entry.sensitive && !dotEnvRevealValues ? "*****" : entry.after}
             </p>
-          </div>
+          </InsetCard>
         ))}
-      </div>
+      </InsetCard>
 
       <div className="mt-4 flex justify-end gap-2">
         <Button type="button" variant="secondary" disabled={dotEnvSaving} onClick={onClose}>
@@ -356,8 +359,8 @@ export function ProcessActionDialog({ actionDialog, loadingAction, onClose, onSu
         />
       </Field>
       {Array.isArray(actionDialog.recentCommits) && actionDialog.recentCommits.length > 0 && (
-        <div className="mt-3 rounded-lg border border-border/80 bg-surface-2/70 p-3 text-xs text-text-3">
-          <p className="mb-2 font-semibold text-text-2">Recent commits</p>
+        <InsetCard className="mt-3 text-xs text-text-3">
+          <Eyebrow className="mb-2">Recent commits</Eyebrow>
           <div className="space-y-1">
             {actionDialog.recentCommits.map((item) => (
               <p key={item.hash || item.shortHash}>
@@ -365,7 +368,7 @@ export function ProcessActionDialog({ actionDialog, loadingAction, onClose, onSu
               </p>
             ))}
           </div>
-        </div>
+        </InsetCard>
       )}
     </Modal>
   );
@@ -409,7 +412,7 @@ function DotEnvValueInput({ valueType, value, onChange, disabled, sensitive = fa
 
 function DotEnvEditorSkeleton() {
   return (
-    <div className="rounded-lg border border-border/80 bg-surface-2/70 p-3" aria-hidden="true">
+    <InsetCard aria-hidden="true">
       <div className="space-y-3">
         {Array.from({ length: 5 }).map((_, index) => (
           <div key={index} className="grid grid-cols-1 gap-2 md:grid-cols-[220px,1fr] md:items-center">
@@ -418,6 +421,6 @@ function DotEnvEditorSkeleton() {
           </div>
         ))}
       </div>
-    </div>
+    </InsetCard>
   );
 }

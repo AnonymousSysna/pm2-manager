@@ -5,6 +5,8 @@ import { useSocket } from "../hooks/useSocket";
 import { auth, caddy as caddyApi } from "../api";
 import Badge from "./ui/Badge";
 import Button from "./ui/Button";
+import NavItem from "./ui/NavItem";
+import { Eyebrow } from "./ui/Typography";
 
 const staticLinks = [
   { to: "/dashboard", label: "Operations", icon: Activity },
@@ -33,17 +35,16 @@ function NavLinks({ pathname, links, onNavigate }) {
       {links.map(({ to, label, icon: Icon }) => {
         const active = pathname === to;
         return (
-          <Link
+          <NavItem
             key={to}
+            as={Link}
             to={to}
             onClick={onNavigate}
-            className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 ${
-              active ? "bg-brand-500/20 text-brand-400" : "text-text-2 hover:bg-surface-2"
-            }`}
+            active={active}
           >
             <Icon size={16} />
             {label}
-          </Link>
+          </NavItem>
         );
       })}
     </nav>
@@ -116,17 +117,12 @@ export default function Layout() {
       <header className="sticky top-0 z-30 border-b border-border bg-surface/95 backdrop-blur">
         <div className="mx-auto flex max-w-layout items-center justify-between px-4 py-3 md:px-6">
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setMobileOpen(true)}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 md:hidden"
-              aria-label="Open navigation"
-            >
+            <Button type="button" variant="secondary" size="icon" onClick={() => setMobileOpen(true)} className="md:hidden" aria-label="Open navigation">
               <Menu size={18} />
-            </button>
+            </Button>
             <div className="hidden h-8 w-8 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-bg md:flex">PM2</div>
             <div>
-              <p className="text-xs uppercase tracking-wide text-text-3">PM2 Manager</p>
+              <Eyebrow>PM2 Manager</Eyebrow>
               <p className="page-title">{title}</p>
             </div>
           </div>
@@ -171,14 +167,9 @@ export default function Layout() {
           <aside className="relative h-full w-nav-drawer max-w-xs border-r border-border bg-surface p-4">
             <div className="mb-4 flex items-center justify-between border-b border-border pb-3">
               <p className="font-semibold text-text-1">Menu</p>
-              <button
-                type="button"
-                onClick={() => setMobileOpen(false)}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-                aria-label="Close navigation"
-              >
+              <Button type="button" variant="secondary" size="icon" onClick={() => setMobileOpen(false)} aria-label="Close navigation">
                 <X size={16} />
-              </button>
+              </Button>
             </div>
             <NavLinks pathname={location.pathname} links={links} onNavigate={() => setMobileOpen(false)} />
             <Button type="button" variant="secondary" onClick={logout} className="mt-4 w-full justify-start">
