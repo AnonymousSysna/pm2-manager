@@ -1,11 +1,9 @@
 // @ts-nocheck
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Radar, ShieldAlert, Workflow } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import toast, { getErrorMessage } from "../lib/toast";
 import { alerts as alertsApi, caddy as caddyApi, processes as processApi } from "../api";
 import { useSocket } from "../hooks/useSocket";
-import Banner from "../components/ui/Banner";
 import ProcessDetailModal from "../components/ProcessDetailModal";
 import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
@@ -15,7 +13,7 @@ import Input from "../components/ui/Input";
 import { ConfirmDialog } from "../components/ui/Modal";
 import Modal from "../components/ui/Modal";
 import Select from "../components/ui/Select";
-import { PanelHeader } from "../components/ui/PageLayout";
+import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 import { Skeleton } from "../components/ui/Skeleton";
 import StatCardsSection from "../components/dashboard/StatCardsSection";
 import SystemResourcesPanel from "../components/dashboard/SystemResourcesPanel";
@@ -320,7 +318,6 @@ export default function Dashboard() {
   ]), [checklist]);
 
   const checklistDoneCount = checklistItems.filter((item) => item.done).length;
-  const onlinePercent = stats.total > 0 ? Math.round((stats.online / stats.total) * 100) : 0;
 
   const dependencyEdges = useMemo(() => {
     const edges = [];
@@ -840,80 +837,29 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="space-y-5">
-      <section className="relative overflow-hidden rounded-[1.75rem] border border-border bg-[radial-gradient(circle_at_top_left,rgba(99,102,241,0.18),transparent_28%),radial-gradient(circle_at_80%_20%,rgba(59,130,246,0.16),transparent_24%),linear-gradient(135deg,rgba(15,23,42,0.96),rgba(17,24,39,0.88))] px-5 py-5 text-text-1">
-        <div className="pointer-events-none absolute inset-y-0 right-[18%] w-px bg-white/8" />
-        <div className="pointer-events-none absolute right-6 top-6 h-32 w-32 rounded-full border border-white/10 bg-white/5 blur-2xl" />
-        <div className="relative grid gap-5 xl:grid-cols-[1.35fr,0.9fr]">
-          <div>
-            <p className="text-[0.7rem] uppercase tracking-[0.34em] text-brand-400">Operations Deck</p>
-            <h1 className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight text-white md:text-4xl">
-              Run the fleet like an instrument panel, not a stack of generic cards.
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
-              Watch service health, spot pressure early, and jump straight into lifecycle actions from one control deck.
-            </p>
-            <div className="mt-5 grid gap-3 md:grid-cols-3">
-              <HeroPill icon={Activity} label="Online ratio" value={`${onlinePercent}%`} />
-              <HeroPill icon={Radar} label="Live alerts" value={alerts.length} />
-              <HeroPill icon={Workflow} label="Dependency links" value={dependencyEdges.length} />
-            </div>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-            <div className="rounded-[1.25rem] border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
-              <p className="text-[0.65rem] uppercase tracking-[0.24em] text-slate-400">Current posture</p>
-              <div className="mt-3 flex items-end justify-between gap-3">
-                <div>
-                  <p className="text-4xl font-semibold text-white">{stats.online}</p>
-                  <p className="text-sm text-slate-300">online services</p>
-                </div>
-                <div className="text-right text-sm text-slate-300">
-                  <p>{stats.errored} errored</p>
-                  <p>{stats.stopped} stopped</p>
-                </div>
-              </div>
-            </div>
-            <div className="rounded-[1.25rem] border border-white/10 bg-black/20 p-4">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <p className="text-[0.65rem] uppercase tracking-[0.24em] text-slate-400">Signal feed</p>
-                <span className="rounded-full bg-white/10 px-2 py-1 text-[0.65rem] uppercase tracking-[0.2em] text-slate-300">
-                  live
-                </span>
-              </div>
-              <div className="space-y-2 text-sm">
-                <SignalRow tone={reconnecting ? "warning" : "success"} icon={Radar} label="Socket" value={reconnecting ? "reconnecting" : "stable"} />
-                <SignalRow tone={monitorError ? "danger" : "info"} icon={ShieldAlert} label="Monitor" value={monitorError ? "degraded" : "nominal"} />
-                <SignalRow tone={checklistDoneCount === checklistItems.length ? "success" : "warning"} icon={Workflow} label="Setup" value={`${checklistDoneCount}/${checklistItems.length} complete`} />
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+    <div className="space-y-4">
+      <PageIntro
+        title="Operations Dashboard"
+        description="Monitor process health, inspect activity, and run lifecycle actions from a single control surface."
+      />
 
-      {(reconnecting || monitorError) && (
-        <div className="grid gap-2">
-          {reconnecting && (
-            <Banner tone="warning">
-              Reconnecting. Live process updates are temporarily paused.
-            </Banner>
-          )}
-          {monitorError && (
-            <Banner tone="danger">
-              Monitor error: {monitorError}
-            </Banner>
-          )}
+      {reconnecting && (
+        <div className="rounded-md border border-warning-500/40 bg-warning-500/15 px-3 py-2 text-sm text-warning-300">
+          Reconnecting... Live process updates are temporarily paused.
+        </div>
+      )}
+      {monitorError && (
+        <div className="rounded-md border border-danger-500/40 bg-danger-500/15 px-3 py-2 text-sm text-danger-300">
+          Monitor error: {monitorError}
         </div>
       )}
 
       <StatCardsSection stats={stats} />
 
       {!checklist.dismissed && (
-        <section className="rounded-[1.5rem] border border-border bg-surface p-4">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <PanelHeader
-              title={`Setup Checklist (${checklistDoneCount}/${checklistItems.length})`}
-              description="Get the control plane fully operational before you scale the service set."
-            />
+        <section className="page-panel">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <PanelHeader title={`Setup Checklist (${checklistDoneCount}/${checklistItems.length})`} />
             <Button
               type="button"
               size="sm"
@@ -926,15 +872,12 @@ export default function Dashboard() {
               Dismiss
             </Button>
           </div>
-          <div className="grid gap-2 lg:grid-cols-2">
+          <div className="space-y-2">
             {checklistItems.map((item) => (
-              <div key={item.key} className="flex items-center justify-between gap-3 rounded-[1.1rem] border border-border bg-surface-2/80 px-3 py-3 text-sm">
+              <div key={item.key} className="flex items-center justify-between gap-2 rounded border border-border bg-surface-2 px-3 py-2 text-sm">
                 <div className="flex items-center gap-2">
                   <Badge tone={item.done ? "success" : "warning"}>{item.done ? "Done" : "Todo"}</Badge>
-                  <div>
-                    <span className="block text-text-2">{item.label}</span>
-                    <span className="text-xs text-text-3">{item.done ? "Configured and active" : "Still needs setup"}</span>
-                  </div>
+                  <span className="text-text-2">{item.label}</span>
                 </div>
                 {!item.done && (
                   <Button type="button" size="sm" variant="outlineInfo" onClick={() => navigate(item.to)}>
@@ -949,18 +892,16 @@ export default function Dashboard() {
 
       <SystemResourcesPanel systemResources={systemResources} bytesToGB={bytesToGB} />
 
-      <div className="grid gap-4 xl:grid-cols-[1.25fr,0.95fr]">
-        <MetricsHistoryPanel
-          chartProcess={chartProcess}
-          onChartProcessChange={setChartProcess}
-          processes={processes}
-          historyPoints={historyPoints}
-        />
-        <div className="space-y-4">
-          <ThresholdAlertsPanel alerts={alerts} />
-          <DependencyGraphPanel dependencyEdges={dependencyEdges} />
-        </div>
-      </div>
+      <DependencyGraphPanel dependencyEdges={dependencyEdges} />
+
+      <MetricsHistoryPanel
+        chartProcess={chartProcess}
+        onChartProcessChange={setChartProcess}
+        processes={processes}
+        historyPoints={historyPoints}
+      />
+
+      <ThresholdAlertsPanel alerts={alerts} />
 
       <ProcessListPanel
         filtered={filtered}
@@ -1308,37 +1249,6 @@ function openProcessUrl(port) {
   }
   const target = `${window.location.protocol}//${window.location.hostname}:${value}`;
   window.open(target, "_blank", "noopener,noreferrer");
-}
-
-function HeroPill({ icon: Icon, label, value }) {
-  return (
-    <div className="rounded-[1.15rem] border border-white/10 bg-black/20 px-3 py-3">
-      <div className="flex items-center gap-2 text-slate-400">
-        <Icon size={14} />
-        <span className="text-[0.65rem] uppercase tracking-[0.22em]">{label}</span>
-      </div>
-      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
-    </div>
-  );
-}
-
-function SignalRow({ tone, icon: Icon, label, value }) {
-  const toneClasses = {
-    success: "text-success-300",
-    warning: "text-warning-300",
-    danger: "text-danger-300",
-    info: "text-info-300"
-  };
-
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2">
-      <div className="flex items-center gap-2">
-        <Icon size={14} className={toneClasses[tone] || toneClasses.info} />
-        <span className="text-slate-300">{label}</span>
-      </div>
-      <span className={`text-sm font-medium ${toneClasses[tone] || toneClasses.info}`}>{value}</span>
-    </div>
-  );
 }
 
 function DotEnvValueInput({ valueType, value, onChange, disabled, sensitive = false, revealed = false }) {

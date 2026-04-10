@@ -28,69 +28,37 @@ function SparkLine({ points, accessor, stroke }) {
   const path = toPath(points, width, height, accessor);
 
   return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      className="h-32 w-full rounded-[1.1rem] border border-border bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.05),transparent_45%),linear-gradient(180deg,rgba(7,12,22,0.9),rgba(16,24,39,0.95))]"
-    >
-      {Array.from({ length: 5 }).map((_, index) => {
-        const y = (height / 4) * index;
-        return <line key={index} x1="0" x2={width} y1={y} y2={y} stroke="rgba(148,163,184,0.12)" strokeWidth="1" />;
-      })}
+    <svg viewBox={`0 0 ${width} ${height}`} className="h-28 w-full rounded border border-border bg-surface-2">
       <path d={path} fill="none" stroke={stroke} strokeWidth="2" />
     </svg>
   );
 }
 
 export default function MetricsHistoryPanel({ chartProcess, onChartProcessChange, processes = [], historyPoints = [] }) {
-  const latestPoint = historyPoints[historyPoints.length - 1] || null;
-  const peakCpu = historyPoints.length > 0 ? Math.max(...historyPoints.map((point) => Number(point.cpu || 0))) : 0;
-  const peakMemory = historyPoints.length > 0 ? Math.max(...historyPoints.map((point) => Number(point.memory || 0) / 1024 / 1024)) : 0;
-
   return (
-    <section className="rounded-[1.5rem] border border-border bg-surface p-4">
-      <div className="space-y-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <PanelHeader title="Performance Trace" description="Recent CPU and memory pressure for the selected service." />
-          <div className="w-full max-w-xs">
-            <p className="mb-1 text-xs uppercase tracking-[0.24em] text-text-3">Trace target</p>
-            <Select value={chartProcess} onChange={(e) => onChartProcessChange(e.target.value)} className="w-full">
-              {processes.map((proc) => (
-                <option key={proc.name} value={proc.name}>
-                  {proc.name}
-                </option>
-              ))}
-            </Select>
-          </div>
+    <section>
+      <div className="page-panel space-y-3">
+        <PanelHeader title="CPU / Memory History" />
+        <Select value={chartProcess} onChange={(e) => onChartProcessChange(e.target.value)} className="w-full">
+          {processes.map((proc) => (
+            <option key={proc.name} value={proc.name}>
+              {proc.name}
+            </option>
+          ))}
+        </Select>
+        <div>
+          <p className="mb-1 text-xs text-text-3">CPU %</p>
+          <SparkLine points={historyPoints} accessor={(point) => Number(point.cpu || 0)} stroke="rgb(var(--color-brand-500))" />
         </div>
-        <div className="grid gap-3 md:grid-cols-3">
-          <MetricChip label="Current CPU" value={`${Number(latestPoint?.cpu || 0).toFixed(1)}%`} />
-          <MetricChip label="Peak CPU" value={`${peakCpu.toFixed(1)}%`} />
-          <MetricChip label="Peak Memory" value={`${peakMemory.toFixed(1)} MB`} />
-        </div>
-        <div className="grid gap-4 xl:grid-cols-2">
-          <div>
-            <p className="mb-2 text-xs uppercase tracking-[0.24em] text-text-3">CPU %</p>
-            <SparkLine points={historyPoints} accessor={(point) => Number(point.cpu || 0)} stroke="rgb(var(--color-brand-400))" />
-          </div>
-          <div>
-            <p className="mb-2 text-xs uppercase tracking-[0.24em] text-text-3">Memory MB</p>
-            <SparkLine
-              points={historyPoints}
-              accessor={(point) => Number(point.memory || 0) / 1024 / 1024}
-              stroke="rgb(var(--color-info-300))"
-            />
-          </div>
+        <div>
+          <p className="mb-1 text-xs text-text-3">Memory MB</p>
+          <SparkLine
+            points={historyPoints}
+            accessor={(point) => Number(point.memory || 0) / 1024 / 1024}
+            stroke="rgb(var(--color-info-500))"
+          />
         </div>
       </div>
     </section>
-  );
-}
-
-function MetricChip({ label, value }) {
-  return (
-    <div className="rounded-[1.1rem] border border-border bg-surface-2/70 px-3 py-3">
-      <p className="text-[0.65rem] uppercase tracking-[0.24em] text-text-3">{label}</p>
-      <p className="mt-2 text-xl font-semibold text-text-1">{value}</p>
-    </div>
   );
 }
