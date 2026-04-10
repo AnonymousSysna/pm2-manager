@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useState } from "react";
 import { DownloadCloud, PackageCheck, TerminalSquare } from "lucide-react";
 import { caddy as caddyApi, processes as processApi } from "../api";

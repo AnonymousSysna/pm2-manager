@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import toast, { getErrorMessage } from "../lib/toast";

@@ -1,4 +1,3 @@
-// @ts-nocheck
 export default function StatCardsSection({ stats = {} }) {
   return (
     <section className="grid grid-cols-1 gap-4 md:grid-cols-4">

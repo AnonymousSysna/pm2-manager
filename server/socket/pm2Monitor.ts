@@ -1,4 +1,3 @@
-// @ts-nocheck
 const pm2 = require("pm2");
 const { listProcesses } = require("../controllers/processController");
 const { isIpAllowed, getSocketIp } = require("../utils/ipAccess");

@@ -1,4 +1,3 @@
-// @ts-nocheck
 function normalizeIp(raw) {
   const value = String(raw || "").trim();
   if (!value) {

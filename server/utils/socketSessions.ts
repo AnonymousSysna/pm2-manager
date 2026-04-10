@@ -1,4 +1,3 @@
-// @ts-nocheck
 const SOCKET_USER_ROOM_PREFIX = "user:";
 
 function getUserSocketRoom(username) {

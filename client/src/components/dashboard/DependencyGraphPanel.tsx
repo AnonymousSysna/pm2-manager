@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Badge from "../ui/Badge";
 import { PanelHeader } from "../ui/PageLayout";
 

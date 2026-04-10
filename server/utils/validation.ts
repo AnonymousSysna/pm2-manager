@@ -1,4 +1,3 @@
-// @ts-nocheck
 const path = require("path");
 
 const PROCESS_NAME_PATTERN = /^[A-Za-z0-9:_-]{1,100}$/;

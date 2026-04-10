@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { logger, serializeError } = require("../utils/logger");
 
 class AppError extends Error {

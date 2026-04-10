@@ -1,4 +1,3 @@
-// @ts-nocheck
 function getClientIp(req) {
   return String(req.ip || req.socket?.remoteAddress || "unknown");
 }

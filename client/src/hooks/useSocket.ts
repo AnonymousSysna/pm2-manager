@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useMemo, useState } from "react";
 import { io } from "socket.io-client";
 import { processes as processApi } from "../api";

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { AlertTriangle } from "lucide-react";
 import { PanelHeader } from "../ui/PageLayout";
 

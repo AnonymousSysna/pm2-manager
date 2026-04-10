@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useState } from "react";
 import { caddy as caddyApi } from "../api";
 import toast, { getErrorMessage } from "../lib/toast";

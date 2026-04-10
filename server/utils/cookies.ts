@@ -1,4 +1,3 @@
-// @ts-nocheck
 function parseCookieHeader(cookieHeader) {
   const raw = String(cookieHeader || "");
   if (!raw) {

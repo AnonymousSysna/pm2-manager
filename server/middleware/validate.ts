@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { sanitizeProcessName } = require("../utils/validation");
 
 function validateProcessParam(req, res, next) {

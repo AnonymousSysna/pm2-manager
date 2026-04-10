@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { isIpAllowed, getRequestIp } = require("../utils/ipAccess");
 const { parseCookieHeader } = require("../utils/cookies");
 const { verifyAccessToken } = require("../utils/accessToken");

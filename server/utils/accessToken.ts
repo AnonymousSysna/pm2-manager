@@ -1,4 +1,3 @@
-// @ts-nocheck
 const jwt = require("jsonwebtoken");
 const { getTokenVersion } = require("./authSessionStore");
 

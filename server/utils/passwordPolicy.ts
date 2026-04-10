@@ -1,4 +1,3 @@
-// @ts-nocheck
 const MIN_PASSWORD_LENGTH = 10;
 const DISALLOWED_PASSWORDS = new Set([
   "admin",

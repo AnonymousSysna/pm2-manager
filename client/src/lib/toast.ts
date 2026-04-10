@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { gooeyToast } from "goey-toast";
 
 export function getErrorMessage(error, fallback = "Operation failed") {

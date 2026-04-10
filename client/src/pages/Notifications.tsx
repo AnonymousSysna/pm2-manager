@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useMemo, useState } from "react";
 import { Bell, AlertTriangle, Info, Siren, RefreshCw } from "lucide-react";
 import toast, { getErrorMessage } from "../lib/toast";

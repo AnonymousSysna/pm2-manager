@@ -1,4 +1,3 @@
-// @ts-nocheck
 function nowIso() {
   return new Date().toISOString();
 }

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { PanelHeader } from "../ui/PageLayout";
 import { Skeleton, SkeletonText } from "../ui/Skeleton";
 

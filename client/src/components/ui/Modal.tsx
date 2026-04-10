@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useId } from "react";
 import { X } from "lucide-react";
 import { cn } from "../../lib/cn";

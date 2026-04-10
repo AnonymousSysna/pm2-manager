@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Terminal } from "lucide-react";
 import { useSearchParams } from "react-router-dom";

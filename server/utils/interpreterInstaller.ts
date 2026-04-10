@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { spawn } = require("child_process");
 
 const COMMAND_TIMEOUT_MS = Number.isFinite(Number(process.env.COMMAND_TIMEOUT_MS))

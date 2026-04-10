@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Select from "../ui/Select";
 import { PanelHeader } from "../ui/PageLayout";
 

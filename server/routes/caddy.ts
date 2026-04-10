@@ -1,4 +1,3 @@
-// @ts-nocheck
 const express = require("express");
 const { verifyToken } = require("../middleware/auth");
 const { asyncHandler } = require("../middleware/asyncHandler");

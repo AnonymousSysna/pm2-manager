@@ -1,4 +1,3 @@
-// @ts-nocheck
 
 function normalizeMessage(input) {
   return String(input || "").trim();
@@ -66,4 +65,3 @@ module.exports = {
   withPermissionHint,
   normalizeCommand
 };
-

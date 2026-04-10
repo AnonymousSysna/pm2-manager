@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useMemo, useState } from "react";
 import { Copy, Play, Square, RefreshCw, RotateCcw, Trash2, Download, Hammer, ShieldAlert, History, AlarmClock } from "lucide-react";
 import toast from "../lib/toast";
