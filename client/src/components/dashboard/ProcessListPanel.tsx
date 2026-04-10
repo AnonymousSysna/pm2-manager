@@ -109,7 +109,7 @@ export default function ProcessListPanel({
                   />
                   <button
                     type="button"
-                    className="whitespace-nowrap text-left font-semibold text-info-300 underline-offset-2 hover:underline"
+                    className="whitespace-nowrap text-left font-semibold text-info-300 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info-300"
                     onClick={() => openDetails(proc)}
                   >
                     {proc.name}

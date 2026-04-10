@@ -5,6 +5,7 @@ import toast, { getErrorMessage } from "../lib/toast";
 import { alerts as alertsApi } from "../api";
 import { useSocket } from "../hooks/useSocket";
 import Button from "../components/ui/Button";
+import { ConfirmDialog } from "../components/ui/Modal";
 import Select from "../components/ui/Select";
 import Input from "../components/ui/Input";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
@@ -29,6 +30,7 @@ export default function Notifications() {
   const [category, setCategory] = useState("all");
   const [query, setQuery] = useState("");
   const [expandedById, setExpandedById] = useState({});
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
 
   const copyText = async (text) => {
     const value = String(text ?? "");
@@ -106,16 +108,13 @@ export default function Notifications() {
   }, [items, level, category, query]);
 
   const clearHistory = async () => {
-    if (!window.confirm("Clear all notification history?")) {
-      return;
-    }
-
     try {
       const result = await alertsApi.clearHistory();
       if (!result.success) {
         throw new Error(result.error || "Failed to clear notification history");
       }
       setItems([]);
+      setClearConfirmOpen(false);
       toast.success("Notification history cleared");
     } catch (error) {
       toast.error(getErrorMessage(error, "Failed to clear notification history"));
@@ -156,7 +155,7 @@ export default function Notifications() {
               <RefreshCw size={15} />
               Reload
             </Button>
-            <Button variant="danger" onClick={clearHistory}>
+            <Button variant="danger" onClick={() => setClearConfirmOpen(true)}>
               Clear History
             </Button>
           </div>
@@ -221,6 +220,16 @@ export default function Notifications() {
           })}
         </div>
       </section>
+
+      {clearConfirmOpen && (
+        <ConfirmDialog
+          title="Clear Notification History"
+          description="Delete all stored notification history? Live notifications will still appear as they arrive."
+          confirmLabel="Clear History"
+          onClose={() => setClearConfirmOpen(false)}
+          onConfirm={clearHistory}
+        />
+      )}
     </div>
   );
 }

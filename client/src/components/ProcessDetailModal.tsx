@@ -1,10 +1,11 @@
 // @ts-nocheck
 import { useEffect, useMemo, useState } from "react";
-import { X, Copy, Play, Square, RefreshCw, RotateCcw, Trash2, Download, Hammer, ShieldAlert, History, AlarmClock } from "lucide-react";
+import { Copy, Play, Square, RefreshCw, RotateCcw, Trash2, Download, Hammer, ShieldAlert, History, AlarmClock } from "lucide-react";
 import toast from "../lib/toast";
 import { processes as processApi } from "../api";
 import Button from "./ui/Button";
 import Badge from "./ui/Badge";
+import Modal from "./ui/Modal";
 import ProgressBar from "./ui/ProgressBar";
 import TabGroup from "./ui/TabGroup";
 import { Skeleton } from "./ui/Skeleton";
@@ -140,16 +141,7 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
   };
 
   return (
-    <div className="fixed inset-0 z-50">
-      <button type="button" className="surface-overlay absolute inset-0" aria-label="Close panel" onClick={onClose} />
-      <aside className="absolute right-0 top-0 h-full w-full max-w-xl border-l border-border bg-surface p-6 text-text-1 shadow-xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="panel-heading">{process.name}</h2>
-          <Button type="button" variant="ghost" size="icon" onClick={onClose}>
-            <X size={20} />
-          </Button>
-        </div>
-
+    <Modal title={process.name} onClose={onClose} position="right" closeLabel="Close process details">
         <TabGroup items={tabs} value={tab} onChange={setTab} className="mb-4" />
 
         {tab === "Overview" && (
@@ -322,8 +314,7 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
             </Button>
           </div>
         )}
-      </aside>
-    </div>
+    </Modal>
   );
 }
 

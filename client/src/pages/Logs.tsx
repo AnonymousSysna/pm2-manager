@@ -9,10 +9,12 @@ import Banner from "../components/ui/Banner";
 import Button from "../components/ui/Button";
 import Checkbox from "../components/ui/Checkbox";
 import InsetPanel from "../components/ui/InsetPanel";
+import { ConfirmDialog } from "../components/ui/Modal";
 import Select from "../components/ui/Select";
 import Input from "../components/ui/Input";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 import { Skeleton } from "../components/ui/Skeleton";
+import StatusText from "../components/ui/StatusText";
 
 function levelFromLine(line) {
   const text = String(line || "").toUpperCase();
@@ -127,6 +129,7 @@ export default function Logs() {
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [showCreateHint, setShowCreateHint] = useState(launchSource === "create" && Boolean(defaultProcess));
   const [createSummary, setCreateSummary] = useState(null);
+  const [flushConfirmOpen, setFlushConfirmOpen] = useState(false);
   const { logsByProcess, processes, connected } = useSocket();
   const containerRef = useRef(null);
   const liveCursorRef = useRef(new Map());
@@ -344,9 +347,6 @@ export default function Logs() {
     if (!selected || combinedView) {
       return;
     }
-    if (!window.confirm(`Flush logs for ${selected}?`)) {
-      return;
-    }
     try {
       await toast.promise(
         processApi.flush(selected).then((result) => {
@@ -362,6 +362,7 @@ export default function Logs() {
         }
       );
       setEntries([]);
+      setFlushConfirmOpen(false);
     } catch (_error) {
       // Toast is handled by toast.promise.
     }
@@ -399,9 +400,9 @@ export default function Logs() {
         <Banner tone="neutral" className="text-base">
           <p className="text-text-2">
             Socket:{" "}
-            <span className={connected ? "text-success-300" : "text-warning-300"}>
+            <StatusText tone={connected ? "success" : "warning"}>
               {connected ? "connected" : "disconnected"}
-            </span>
+            </StatusText>
             {" | "}
             Process:{" "}
             <span className="text-text-1">{selected}</span>
@@ -467,7 +468,7 @@ export default function Logs() {
           Combined view
         </label>
 
-        <Button type="button" variant="danger" onClick={flush} disabled={combinedView || !selected}>
+        <Button type="button" variant="danger" onClick={() => setFlushConfirmOpen(true)} disabled={combinedView || !selected}>
           Flush Logs
         </Button>
         <Button type="button" variant="secondary" onClick={() => setEntries([])}>
@@ -521,6 +522,16 @@ export default function Logs() {
         </section>
       )}
 
+      {flushConfirmOpen && selected && (
+        <ConfirmDialog
+          title="Flush Logs"
+          description={`Flush stored stdout and stderr logs for ${selected}? This clears the persisted log files for that process.`}
+          confirmLabel="Flush Logs"
+          onClose={() => setFlushConfirmOpen(false)}
+          onConfirm={flush}
+        />
+      )}
+
       <section ref={containerRef} className="h-log-viewer overflow-y-auto rounded-xl border border-border bg-surface p-3 font-mono text-sm sm:p-4 sm:text-base">
         <PanelHeader title="Log Stream" className="mb-3 font-sans" />
         {!selected && !combinedView && (
@@ -539,20 +550,20 @@ export default function Logs() {
         )}
 
         {visibleEntries.map((entry, index) => {
-          const levelClass = {
-            error: "text-danger-300",
-            warn: "text-warning-300",
-            info: "text-info-300",
-            debug: "text-text-3",
-            plain: entry.type === "stderr" ? "text-warning-300" : "text-success-300"
+          const levelTone = {
+            error: "danger",
+            warn: "warning",
+            info: "info",
+            debug: "neutral",
+            plain: entry.type === "stderr" ? "warning" : "success"
           }[entry.level || "plain"];
 
           return (
             <div key={`${entry.timestamp}-${index}-${entry.processName || "p"}`} className="mb-1">
               <span className="mr-2 text-text-3">[{new Date(entry.timestamp).toLocaleTimeString()}]</span>
               <span className="mr-2 text-xs text-brand-400">{entry.processName || "-"}</span>
-              <span className={`mr-2 text-xs uppercase ${levelClass}`}>{entry.level || "plain"}</span>
-              <span className={levelClass}>{entry.data}</span>
+              <StatusText tone={levelTone} className="mr-2 text-xs uppercase">{entry.level || "plain"}</StatusText>
+              <StatusText tone={levelTone}>{entry.data}</StatusText>
             </div>
           );
         })}

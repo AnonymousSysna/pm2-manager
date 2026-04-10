@@ -120,7 +120,7 @@ export default function Layout() {
             <button
               type="button"
               onClick={() => setMobileOpen(true)}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface-2 md:hidden"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 md:hidden"
               aria-label="Open navigation"
             >
               <Menu size={18} />
@@ -128,7 +128,7 @@ export default function Layout() {
             <div className="hidden h-8 w-8 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-bg md:flex">PM2</div>
             <div>
               <p className="text-xs uppercase tracking-wide text-text-3">PM2 Manager</p>
-              <h1 className="page-title">{title}</h1>
+              <p className="page-title">{title}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -175,7 +175,7 @@ export default function Layout() {
               <button
                 type="button"
                 onClick={() => setMobileOpen(false)}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface-2"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
                 aria-label="Close navigation"
               >
                 <X size={16} />

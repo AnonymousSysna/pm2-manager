@@ -16,8 +16,8 @@ describe("design system contracts", () => {
       </div>
     );
 
-    expect(screen.getByRole("heading", { level: 2, name: "Settings" })).toHaveClass("page-heading");
-    expect(screen.getByRole("heading", { level: 3, name: "PM2 Daemon Controls" })).toHaveClass("panel-heading");
+    expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toHaveClass("page-heading");
+    expect(screen.getByRole("heading", { level: 2, name: "PM2 Daemon Controls" })).toHaveClass("panel-heading");
   });
 
   it("does not ship undefined brand-300 utility usage", () => {

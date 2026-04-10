@@ -6,8 +6,10 @@ import Banner from "../components/ui/Banner";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
 import InsetPanel from "../components/ui/InsetPanel";
+import { ConfirmDialog } from "../components/ui/Modal";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 import { Skeleton } from "../components/ui/Skeleton";
+import StatusText from "../components/ui/StatusText";
 
 export default function Caddy() {
   const [loading, setLoading] = useState(true);
@@ -140,9 +142,9 @@ export default function Caddy() {
           <div className="text-sm text-text-2">
             <p>
               Caddy status:{" "}
-              <span className={status.installed ? "text-success-300" : "text-warning-300"}>
+              <StatusText tone={status.installed ? "success" : "warning"}>
                 {status.installed ? "Installed" : "Not installed"}
-              </span>
+              </StatusText>
             </p>
             <p className="text-text-3">Caddyfile: {status.caddyfilePath || "-"}</p>
           </div>
@@ -209,17 +211,17 @@ export default function Caddy() {
                   <p className="text-text-3">reverse_proxy {item.upstream}</p>
                   <p className="text-xs text-text-3">
                     HTTPS:{" "}
-                    <span
-                      className={
+                    <StatusText
+                      tone={
                         item?.https?.state === "active"
-                          ? "text-success-300"
+                          ? "success"
                           : item?.https?.state === "warning"
-                            ? "text-warning-300"
-                            : "text-danger-300"
+                            ? "warning"
+                            : "danger"
                       }
                     >
                       {item?.https?.state || "unknown"}
-                    </span>
+                    </StatusText>
                     {item?.https?.message ? ` (${item.https.message})` : ""}
                   </p>
                 </div>
@@ -250,45 +252,18 @@ export default function Caddy() {
       </section>
 
       {pendingDeleteDomain && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <button
-            type="button"
-            className="surface-overlay absolute inset-0"
-            aria-label="Close delete confirmation"
-            onClick={() => {
-              if (!deletingDomain) {
-                setPendingDeleteDomain("");
-              }
-            }}
-          />
-          <div className="relative z-10 w-full max-w-md rounded-lg border border-border bg-surface p-4 shadow-xl">
-            <PanelHeader title="Delete Domain" className="mb-2" />
-            <p className="text-sm text-text-2">
-              Delete reverse proxy for <span className="font-semibold">{pendingDeleteDomain}</span>?
-            </p>
-            <p className="mt-1 text-xs text-text-3">
-              This removes it from managed domains and updates the Caddyfile.
-            </p>
-            <div className="mt-4 flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={Boolean(deletingDomain)}
-                onClick={() => setPendingDeleteDomain("")}
-              >
-                No
-              </Button>
-              <Button
-                type="button"
-                variant="danger"
-                disabled={Boolean(deletingDomain)}
-                onClick={() => deleteProxy(pendingDeleteDomain)}
-              >
-                {deletingDomain ? "Deleting..." : "Yes, Delete"}
-              </Button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title="Delete Domain"
+          description={`Delete reverse proxy for ${pendingDeleteDomain}? This removes it from managed domains and updates the Caddyfile.`}
+          confirmLabel={deletingDomain ? "Deleting..." : "Yes, Delete"}
+          confirmDisabled={Boolean(deletingDomain)}
+          onClose={() => {
+            if (!deletingDomain) {
+              setPendingDeleteDomain("");
+            }
+          }}
+          onConfirm={() => deleteProxy(pendingDeleteDomain)}
+        />
       )}
     </div>
   );

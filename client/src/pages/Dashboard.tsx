@@ -1,6 +1,5 @@
 // @ts-nocheck
 import { useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import toast, { getErrorMessage } from "../lib/toast";
 import { alerts as alertsApi, caddy as caddyApi, processes as processApi } from "../api";
@@ -9,7 +8,10 @@ import ProcessDetailModal from "../components/ProcessDetailModal";
 import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
 import Checkbox from "../components/ui/Checkbox";
+import Field from "../components/ui/Field";
 import Input from "../components/ui/Input";
+import { ConfirmDialog } from "../components/ui/Modal";
+import Modal from "../components/ui/Modal";
 import Select from "../components/ui/Select";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 import { Skeleton } from "../components/ui/Skeleton";
@@ -76,6 +78,7 @@ export default function Dashboard() {
     memoryThreshold: ""
   });
   const [metaSaving, setMetaSaving] = useState(false);
+  const [metaResetConfirmOpen, setMetaResetConfirmOpen] = useState(false);
   const [dotEnvByProcess, setDotEnvByProcess] = useState({});
   const [npmCapabilitiesByProcess, setNpmCapabilitiesByProcess] = useState({});
   const [editingDotEnvProcess, setEditingDotEnvProcess] = useState(null);
@@ -97,6 +100,7 @@ export default function Dashboard() {
   const [deploySubmitting, setDeploySubmitting] = useState(false);
   const [deployStartedAt, setDeployStartedAt] = useState(0);
   const [deployElapsedSec, setDeployElapsedSec] = useState(0);
+  const [actionDialog, setActionDialog] = useState(null);
   const [systemResources, setSystemResources] = useState(null);
   const [checklist, setChecklist] = useState({
     hasProcess: false,
@@ -339,50 +343,9 @@ export default function Dashboard() {
     return edges.sort((a, b) => (`${a.from}:${a.to}`).localeCompare(`${b.from}:${b.to}`));
   }, [processMeta]);
 
-  const callAction = async (action, name, overridePayload) => {
-    const confirmed = action !== "delete" || window.confirm(`Delete process ${name}?`);
-    if (!confirmed) {
-      return;
-    }
-
+  const executeAction = async (action, name, actionPayload) => {
     setLoadingAction((prev) => ({ ...prev, [`${name}:${action}`]: true }));
     try {
-      let actionPayload = undefined;
-      if (action === "deploy") {
-        actionPayload = overridePayload || {};
-      }
-      if (action === "rollback") {
-        const commitsResult = await processApi.gitCommits(name, 10);
-        const commits = commitsResult?.success ? commitsResult.data?.commits || [] : [];
-        const commitChoices = commits
-          .slice(0, 5)
-          .map((item) => `${item.shortHash} ${item.subject}`)
-          .join("\n");
-        const targetCommit = (window.prompt(
-          `Rollback target commit (leave blank for previous commit HEAD~1)\n${commitChoices ? `Recent commits:\n${commitChoices}` : ""}`,
-          ""
-        ) ?? "").trim();
-        actionPayload = { targetCommit, restartMode: "restart" };
-      }
-      if (action === "duplicate") {
-        const targetName = (window.prompt(`Duplicate ${name} as`, `${name}-copy`) ?? "").trim();
-        if (!targetName) {
-          return;
-        }
-        actionPayload = { targetName };
-      }
-      if (action === "schedule") {
-        const current = processes.find((item) => item.name === name)?.cronRestart || "";
-        const nextCron = window.prompt(
-          "Set cron restart expression. Leave blank to disable.\nExample: 0 4 * * *",
-          current
-        );
-        if (nextCron === null) {
-          return;
-        }
-        actionPayload = { cron_restart: String(nextCron || "").trim() || null };
-      }
-
       const handlers = {
         start: processApi.start,
         stop: processApi.stop,
@@ -430,11 +393,85 @@ export default function Dashboard() {
         const latest = processes.find((item) => item.name === name) || selectedProcess;
         openDetails(latest);
       }
+      return true;
     } catch (_error) {
       // Toast handled by toast.promise.
+      return false;
     } finally {
       setLoadingAction((prev) => ({ ...prev, [`${name}:${action}`]: false }));
     }
+  };
+
+  const callAction = async (action, name, overridePayload) => {
+    if (action === "deploy") {
+      return executeAction(action, name, overridePayload || {});
+    }
+
+    if (action === "delete") {
+      setActionDialog({
+        mode: "confirm",
+        action,
+        name,
+        title: `Delete ${name}`,
+        description: "This removes the process from PM2 management."
+      });
+      return false;
+    }
+
+    if (action === "duplicate") {
+      setActionDialog({
+        mode: "input",
+        action,
+        name,
+        title: `Duplicate ${name}`,
+        description: "Create a new PM2 process using the same base configuration.",
+        label: "New process name",
+        placeholder: `${name}-copy`,
+        value: `${name}-copy`,
+        confirmLabel: "Duplicate Process"
+      });
+      return false;
+    }
+
+    if (action === "schedule") {
+      const current = processes.find((item) => item.name === name)?.cronRestart || "";
+      setActionDialog({
+        mode: "input",
+        action,
+        name,
+        title: `Schedule Restart: ${name}`,
+        description: "Leave blank to disable. Example: 0 4 * * *",
+        label: "Cron expression",
+        placeholder: "0 4 * * *",
+        value: current,
+        confirmLabel: "Save Schedule"
+      });
+      return false;
+    }
+
+    if (action === "rollback") {
+      try {
+        const commitsResult = await processApi.gitCommits(name, 10);
+        const commits = commitsResult?.success ? commitsResult.data?.commits || [] : [];
+        setActionDialog({
+          mode: "input",
+          action,
+          name,
+          title: `Rollback ${name}`,
+          description: "Leave blank to roll back to the previous commit (HEAD~1).",
+          label: "Target commit (optional)",
+          placeholder: "HEAD~1 or commit SHA",
+          value: "",
+          confirmLabel: "Run Rollback",
+          recentCommits: commits.slice(0, 5)
+        });
+      } catch (error) {
+        toast.error(getErrorMessage(error, "Unable to load recent commits"));
+      }
+      return false;
+    }
+
+    return executeAction(action, name, overridePayload);
   };
 
   const openDeployModal = (proc) => {
@@ -459,13 +496,15 @@ export default function Dashboard() {
     try {
       setDeploySubmitting(true);
       setDeployStartedAt(Date.now());
-      await callAction("deploy", deployingProcess.name, {
+      const success = await callAction("deploy", deployingProcess.name, {
         branch: String(deployForm.branch || "").trim(),
         installDependencies: Boolean(deployForm.installDependencies),
         runBuild: Boolean(deployForm.runBuild),
         restartMode: deployForm.restartMode === "reload" ? "reload" : "restart"
       });
-      setDeployingProcess(null);
+      if (success) {
+        setDeployingProcess(null);
+      }
     } finally {
       setDeploySubmitting(false);
       setDeployStartedAt(0);
@@ -730,11 +769,6 @@ export default function Dashboard() {
       return;
     }
 
-    const confirmed = window.confirm(`Clear metadata for ${editingMetaProcess.name}?`);
-    if (!confirmed) {
-      return;
-    }
-
     try {
       setMetaSaving(true);
       const result = await processApi.clearMeta(editingMetaProcess.name);
@@ -743,6 +777,7 @@ export default function Dashboard() {
       }
       toast.success(`Cleared metadata for ${editingMetaProcess.name}`);
       setEditingMetaProcess(null);
+      setActionDialog(null);
       refreshCatalog();
     } catch (error) {
       toast.error(getErrorMessage(error, "Unable to clear process metadata"));
@@ -766,6 +801,38 @@ export default function Dashboard() {
       openProcessUrl(port);
     } catch (error) {
       toast.error(getErrorMessage(error, "Unable to open app URL"));
+    }
+  };
+
+  const submitActionDialog = async () => {
+    if (!actionDialog?.action || !actionDialog?.name) {
+      return;
+    }
+
+    const action = actionDialog.action;
+    const name = actionDialog.name;
+    let actionPayload;
+
+    if (action === "duplicate") {
+      const targetName = String(actionDialog.value || "").trim();
+      if (!targetName) {
+        toast.error("Duplicate target name is required");
+        return;
+      }
+      actionPayload = { targetName };
+    }
+
+    if (action === "schedule") {
+      actionPayload = { cron_restart: String(actionDialog.value || "").trim() || null };
+    }
+
+    if (action === "rollback") {
+      actionPayload = { targetCommit: String(actionDialog.value || "").trim(), restartMode: "restart" };
+    }
+
+    const success = await executeAction(action, name, actionPayload);
+    if (success) {
+      setActionDialog(null);
     }
   };
 
@@ -871,33 +938,13 @@ export default function Dashboard() {
       )}
 
       {deployingProcess && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <button
-            type="button"
-            className="surface-overlay absolute inset-0"
-            aria-label="Close deploy editor"
-            onClick={() => {
-              if (!deploySubmitting) {
-                setDeployingProcess(null);
-              }
-            }}
-          />
-          <div className="relative z-10 w-full max-w-xl rounded-lg border border-border bg-surface p-4 shadow-xl">
-            <PanelHeader
-              title={`Deploy: ${deployingProcess.name}`}
-              className="mb-3"
-              actions={(
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  disabled={deploySubmitting}
-                  onClick={() => setDeployingProcess(null)}
-                >
-                  <X size={18} />
-                </Button>
-              )}
-            />
+        <Modal
+          title={`Deploy: ${deployingProcess.name}`}
+          onClose={() => setDeployingProcess(null)}
+          disableClose={deploySubmitting}
+          disableOverlayClose={deploySubmitting}
+        >
+          <>
             <div className="space-y-3">
               {deploySubmitting && (
                 <div className="rounded-md border border-border bg-surface-2 p-3">
@@ -913,15 +960,14 @@ export default function Dashboard() {
                   )}
                 </div>
               )}
-              <label className="space-y-1">
-                <span className="text-xs text-text-3">Branch (optional)</span>
+              <Field label="Branch (optional)">
                 <Input
                   value={deployForm.branch}
                   onChange={(e) => setDeployForm((prev) => ({ ...prev, branch: e.target.value }))}
                   placeholder="leave blank for current branch"
                   disabled={deploySubmitting}
                 />
-              </label>
+              </Field>
               {Boolean(npmCapabilitiesByProcess[deployingProcess.name]?.hasPackageJson) ? (
                 <label className="flex items-center gap-2 text-sm text-text-2">
                   <Checkbox
@@ -946,8 +992,7 @@ export default function Dashboard() {
               ) : (
                 <p className="text-xs text-text-3">npm run build is hidden: no build script in package.json.</p>
               )}
-              <label className="space-y-1">
-                <span className="text-xs text-text-3">After deploy</span>
+              <Field label="After deploy">
                 <Select
                   value={deployForm.restartMode}
                   onChange={(e) => setDeployForm((prev) => ({ ...prev, restartMode: e.target.value }))}
@@ -956,7 +1001,7 @@ export default function Dashboard() {
                   <option value="restart">Restart</option>
                   <option value="reload">Reload</option>
                 </Select>
-              </label>
+              </Field>
             </div>
             <div className="mt-4 flex justify-end gap-2">
               <Button type="button" variant="secondary" disabled={deploySubmitting} onClick={() => setDeployingProcess(null)}>
@@ -971,99 +1016,62 @@ export default function Dashboard() {
                 {deploySubmitting ? "Deploying..." : "Deploy"}
               </Button>
             </div>
-          </div>
-        </div>
+          </>
+        </Modal>
       )}
 
       {editingMetaProcess && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <button
-            type="button"
-            className="surface-overlay absolute inset-0"
-            aria-label="Close metadata editor"
-            onClick={() => setEditingMetaProcess(null)}
-          />
-          <div className="relative z-10 w-full max-w-2xl rounded-lg border border-border bg-surface p-4 shadow-xl">
-            <PanelHeader
-              title={`Edit Metadata: ${editingMetaProcess.name}`}
-              className="mb-3"
-              actions={(
-                <Button type="button" variant="ghost" size="icon" onClick={() => setEditingMetaProcess(null)}>
-                  <X size={18} />
-                </Button>
-              )}
-            />
+        <Modal title={`Edit Metadata: ${editingMetaProcess.name}`} onClose={() => setEditingMetaProcess(null)} size="lg">
+          <>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <label className="space-y-1">
-                <span className="text-xs text-text-3">Dependencies (comma-separated)</span>
+              <Field label="Dependencies (comma-separated)">
                 <Input
                   value={metaForm.dependencies}
                   onChange={(e) => setMetaForm((prev) => ({ ...prev, dependencies: e.target.value }))}
                   placeholder="redis-worker,db-sync"
                 />
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs text-text-3">CPU alert threshold (%)</span>
+              </Field>
+              <Field label="CPU alert threshold (%)">
                 <Input
                   value={metaForm.cpuThreshold}
                   onChange={(e) => setMetaForm((prev) => ({ ...prev, cpuThreshold: e.target.value }))}
                   placeholder="80"
                 />
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs text-text-3">Memory alert threshold (MB)</span>
+              </Field>
+              <Field label="Memory alert threshold (MB)">
                 <Input
                   value={metaForm.memoryThreshold}
                   onChange={(e) => setMetaForm((prev) => ({ ...prev, memoryThreshold: e.target.value }))}
                   placeholder="512"
                 />
-              </label>
+              </Field>
             </div>
             <div className="mt-4 flex justify-between gap-2">
-              <Button type="button" variant="danger" disabled={metaSaving} onClick={clearMetaForEditingProcess}>
+              <Button type="button" variant="danger" disabled={metaSaving} onClick={() => setMetaResetConfirmOpen(true)}>
                 Reset Metadata
               </Button>
               <div className="flex gap-2">
-              <Button type="button" variant="secondary" onClick={() => setEditingMetaProcess(null)}>
-                Cancel
-              </Button>
-              <Button type="button" variant="success" disabled={metaSaving} onClick={submitMetaModal}>
-                Save Metadata
-              </Button>
+                <Button type="button" variant="secondary" onClick={() => setEditingMetaProcess(null)}>
+                  Cancel
+                </Button>
+                <Button type="button" variant="success" disabled={metaSaving} onClick={submitMetaModal}>
+                  Save Metadata
+                </Button>
               </div>
             </div>
-          </div>
-        </div>
+          </>
+        </Modal>
       )}
 
       {editingDotEnvProcess && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <button
-            type="button"
-            className="surface-overlay absolute inset-0"
-            aria-label="Close .env editor"
-            onClick={() => {
-              if (!dotEnvSaving) {
-                setEditingDotEnvProcess(null);
-              }
-            }}
-          />
-          <div className="relative z-10 w-full max-w-3xl rounded-lg border border-border bg-surface p-4 shadow-xl">
-            <PanelHeader
-              title={`Edit .env: ${editingDotEnvProcess.name}`}
-              className="mb-3"
-              actions={(
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  disabled={dotEnvSaving}
-                  onClick={() => setEditingDotEnvProcess(null)}
-                >
-                  <X size={18} />
-                </Button>
-              )}
-            />
+        <Modal
+          title={`Edit .env: ${editingDotEnvProcess.name}`}
+          onClose={() => setEditingDotEnvProcess(null)}
+          size="xl"
+          disableClose={dotEnvSaving}
+          disableOverlayClose={dotEnvSaving}
+        >
+          <>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs text-text-3">Fields are inferred from existing `.env` values.</p>
               <Button
@@ -1122,24 +1130,19 @@ export default function Dashboard() {
                 Save .env
               </Button>
             </div>
-          </div>
-        </div>
+          </>
+        </Modal>
       )}
 
       {dotEnvDiffOpen && editingDotEnvProcess && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-          <button
-            type="button"
-            className="surface-overlay absolute inset-0"
-            aria-label="Close .env diff preview"
-            onClick={() => {
-              if (!dotEnvSaving) {
-                setDotEnvDiffOpen(false);
-              }
-            }}
-          />
-          <div className="relative z-10 w-full max-w-2xl rounded-lg border border-border bg-surface p-4 shadow-xl">
-            <PanelHeader title="Review .env Changes" className="mb-3" />
+        <Modal
+          title="Review .env Changes"
+          onClose={() => setDotEnvDiffOpen(false)}
+          size="lg"
+          disableClose={dotEnvSaving}
+          disableOverlayClose={dotEnvSaving}
+          className="z-[60]"
+        >
             <p className="mb-3 text-sm text-text-3">
               Confirm before saving to avoid accidental overwrite.
             </p>
@@ -1164,8 +1167,76 @@ export default function Dashboard() {
                 {dotEnvSaving ? "Saving..." : "Confirm Save"}
               </Button>
             </div>
-          </div>
-        </div>
+        </Modal>
+      )}
+
+      {actionDialog?.mode === "confirm" && (
+        <ConfirmDialog
+          title={actionDialog.title}
+          description={actionDialog.description}
+          confirmLabel={actionDialog.action === "delete" ? "Delete Process" : "Confirm"}
+          onClose={() => setActionDialog(null)}
+          onConfirm={submitActionDialog}
+          confirmDisabled={Boolean(loadingAction[`${actionDialog.name}:${actionDialog.action}`])}
+        />
+      )}
+
+      {actionDialog?.mode === "input" && (
+        <Modal
+          title={actionDialog.title}
+          description={actionDialog.description}
+          onClose={() => setActionDialog(null)}
+          size="md"
+          actions={(
+            <>
+              <Button type="button" variant="secondary" onClick={() => setActionDialog(null)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant={actionDialog.action === "rollback" ? "warning" : "info"}
+                onClick={submitActionDialog}
+                disabled={Boolean(loadingAction[`${actionDialog.name}:${actionDialog.action}`])}
+              >
+                {actionDialog.confirmLabel}
+              </Button>
+            </>
+          )}
+        >
+          <Field label={actionDialog.label}>
+            <Input
+              value={actionDialog.value}
+              placeholder={actionDialog.placeholder}
+              onChange={(event) => setActionDialog((prev) => ({ ...prev, value: event.target.value }))}
+            />
+          </Field>
+          {Array.isArray(actionDialog.recentCommits) && actionDialog.recentCommits.length > 0 && (
+            <div className="mt-3 rounded-md border border-border bg-surface-2 p-3 text-xs text-text-3">
+              <p className="mb-2 font-semibold text-text-2">Recent commits</p>
+              <div className="space-y-1">
+                {actionDialog.recentCommits.map((item) => (
+                  <p key={item.hash || item.shortHash}>
+                    <span className="font-semibold text-text-2">{item.shortHash}</span> {item.subject}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {metaResetConfirmOpen && editingMetaProcess && (
+        <ConfirmDialog
+          title="Reset Metadata"
+          description={`Clear saved metadata for ${editingMetaProcess.name}?`}
+          confirmLabel="Reset Metadata"
+          onClose={() => setMetaResetConfirmOpen(false)}
+          onConfirm={async () => {
+            await clearMetaForEditingProcess();
+            setMetaResetConfirmOpen(false);
+          }}
+          confirmDisabled={metaSaving}
+        />
       )}
     </div>
   );

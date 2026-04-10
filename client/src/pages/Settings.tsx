@@ -6,8 +6,12 @@ import { auth, pm2Admin, alerts as alertsApi, processes as processApi } from "..
 import Banner from "../components/ui/Banner";
 import Button from "../components/ui/Button";
 import Checkbox from "../components/ui/Checkbox";
+import Field from "../components/ui/Field";
+import FileInput from "../components/ui/FileInput";
 import Input from "../components/ui/Input";
 import InsetPanel from "../components/ui/InsetPanel";
+import { ConfirmDialog } from "../components/ui/Modal";
+import RangeInput from "../components/ui/RangeInput";
 import Select from "../components/ui/Select";
 import { PageIntro, SectionHeader } from "../components/ui/PageLayout";
 
@@ -25,6 +29,7 @@ export default function Settings() {
   const [channelSeverity, setChannelSeverity] = useState("warning");
   const [channelEnabled, setChannelEnabled] = useState(true);
   const [startupLoading, setStartupLoading] = useState(false);
+  const [pendingAction, setPendingAction] = useState(null);
   const fileRef = useRef(null);
 
   useEffect(() => {
@@ -51,11 +56,7 @@ export default function Settings() {
       });
   }, []);
 
-  const runAction = async (label, fn, confirmText) => {
-    if (confirmText && !window.confirm(confirmText)) {
-      return;
-    }
-
+  const executeAction = async (label, fn) => {
     try {
       await toast.promise(
         fn().then((result) => {
@@ -73,6 +74,14 @@ export default function Settings() {
     } catch (_error) {
       // Toast is handled by toast.promise.
     }
+  };
+
+  const runAction = (label, fn, confirmText) => {
+    if (confirmText) {
+      setPendingAction({ label, fn, confirmText });
+      return;
+    }
+    executeAction(label, fn);
   };
 
   const saveDashboardSettings = () => {
@@ -287,17 +296,14 @@ export default function Settings() {
       <section className="page-panel">
         <SectionHeader title="Dashboard Settings" className="mb-3" />
         <div className="space-y-3 text-base text-text-2">
-          <label className="block">
-            Poll interval: {pollSeconds}s
-            <input
-              type="range"
+          <Field label={`Poll interval: ${pollSeconds}s`}>
+            <RangeInput
               min="1"
               max="10"
               value={pollSeconds}
               onChange={(e) => setPollSeconds(Number(e.target.value))}
-              className="mt-2 w-full accent-brand-500"
             />
-          </label>
+          </Field>
           <label className="flex items-center gap-2">
             <Checkbox checked={autoScroll} onChange={(e) => setAutoScroll(e.target.checked)} />
             Auto-scroll logs
@@ -314,7 +320,7 @@ export default function Settings() {
           <Button variant="secondary" onClick={exportConfig}>
             Export Config JSON
           </Button>
-          <Input ref={fileRef} type="file" accept="application/json" onChange={onImportFile} className="max-w-sm file:mr-3 file:rounded-md file:border-0 file:bg-surface file:px-3 file:py-1.5 file:text-sm file:text-text-1" />
+          <FileInput ref={fileRef} accept="application/json" onChange={onImportFile} className="max-w-sm" />
         </div>
       </section>
 
@@ -397,6 +403,20 @@ export default function Settings() {
           </Button>
         </div>
       </section>
+
+      {pendingAction && (
+        <ConfirmDialog
+          title={pendingAction.label}
+          description={pendingAction.confirmText}
+          confirmLabel={pendingAction.label}
+          onClose={() => setPendingAction(null)}
+          onConfirm={async () => {
+            const action = pendingAction;
+            setPendingAction(null);
+            await executeAction(action.label, action.fn);
+          }}
+        />
+      )}
     </div>
   );
 }

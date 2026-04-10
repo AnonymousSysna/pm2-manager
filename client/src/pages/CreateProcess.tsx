@@ -6,7 +6,10 @@ import { processes } from "../api";
 import { useSocket } from "../hooks/useSocket";
 import Button from "../components/ui/Button";
 import Checkbox from "../components/ui/Checkbox";
+import Field from "../components/ui/Field";
 import Input from "../components/ui/Input";
+import { ConfirmDialog } from "../components/ui/Modal";
+import Modal from "../components/ui/Modal";
 import Select from "../components/ui/Select";
 import Textarea from "../components/ui/Textarea";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
@@ -190,6 +193,7 @@ export default function CreateProcess() {
   const [launchElapsedSec, setLaunchElapsedSec] = useState(0);
   const [createOperationId, setCreateOperationId] = useState("");
   const [revealSensitiveEnv, setRevealSensitiveEnv] = useState(false);
+  const [templateDialog, setTemplateDialog] = useState(null);
   const [nodeRuntimeState, setNodeRuntimeState] = useState({
     loading: false,
     data: null
@@ -325,7 +329,14 @@ export default function CreateProcess() {
   };
 
   const saveTemplate = () => {
-    const templateName = (window.prompt("Template name", selectedTemplate || form.name || "") || "").trim();
+    setTemplateDialog({
+      mode: "save",
+      value: selectedTemplate || form.name || ""
+    });
+  };
+
+  const confirmSaveTemplate = () => {
+    const templateName = String(templateDialog?.value || "").trim();
     if (!templateName) {
       return;
     }
@@ -336,6 +347,7 @@ export default function CreateProcess() {
     };
     setTemplates((prev) => ({ ...prev, [templateName]: templatePayload }));
     setSelectedTemplate(templateName);
+    setTemplateDialog(null);
     toast.success(`Saved template: ${templateName}`);
   };
 
@@ -363,15 +375,17 @@ export default function CreateProcess() {
       toast.error("Select a template to delete");
       return;
     }
-    if (!window.confirm(`Delete template "${selectedTemplate}"?`)) {
-      return;
-    }
+    setTemplateDialog({ mode: "delete" });
+  };
+
+  const confirmDeleteTemplate = () => {
     setTemplates((prev) => {
       const next = { ...prev };
       delete next[selectedTemplate];
       return next;
     });
     setSelectedTemplate("");
+    setTemplateDialog(null);
     toast.success("Template deleted");
   };
 
@@ -973,6 +987,43 @@ export default function CreateProcess() {
           </div>
         </div>
       )}
+
+      {templateDialog?.mode === "save" && (
+        <Modal
+          title="Save Template"
+          description="Save the current create-process configuration as a reusable template."
+          onClose={() => setTemplateDialog(null)}
+          size="sm"
+          actions={(
+            <>
+              <Button type="button" variant="secondary" onClick={() => setTemplateDialog(null)}>
+                Cancel
+              </Button>
+              <Button type="button" variant="success" onClick={confirmSaveTemplate} disabled={!String(templateDialog?.value || "").trim()}>
+                Save Template
+              </Button>
+            </>
+          )}
+        >
+          <Field label="Template Name" required>
+            <Input
+              value={templateDialog.value}
+              onChange={(event) => setTemplateDialog((prev) => ({ ...prev, value: event.target.value }))}
+              placeholder="my-app-template"
+            />
+          </Field>
+        </Modal>
+      )}
+
+      {templateDialog?.mode === "delete" && (
+        <ConfirmDialog
+          title="Delete Template"
+          description={`Delete template "${selectedTemplate}"? This cannot be undone.`}
+          confirmLabel="Delete Template"
+          onClose={() => setTemplateDialog(null)}
+          onConfirm={confirmDeleteTemplate}
+        />
+      )}
     </section>
   );
 }
@@ -1003,18 +1054,6 @@ function StepBadge({ active, done, children }) {
     >
       {children}
     </span>
-  );
-}
-
-function Field({ label, required, children }) {
-  return (
-    <label className="block space-y-1 text-sm text-text-2">
-      <span>
-        {label}
-        {required ? " *" : ""}
-      </span>
-      {children}
-    </label>
   );
 }
 

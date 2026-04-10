@@ -43,16 +43,16 @@
   --color-brand-600: 67 56 202;
   --color-success-300: 21 128 61;
   --color-success-500: 22 163 74;
-  --color-success-600: 21 128 61;
-  --color-danger-300: 185 28 28;
-  --color-danger-500: 220 38 38;
-  --color-danger-600: 185 28 28;
-  --color-warning-300: 180 83 9;
-  --color-warning-500: 217 119 6;
-  --color-warning-600: 180 83 9;
-  --color-info-300: 30 64 175;
-  --color-info-500: 37 99 235;
-  --color-info-600: 30 64 175;
+  --color-success-600: 20 83 45;
+  --color-danger-300: 220 38 38;
+  --color-danger-500: 185 28 28;
+  --color-danger-600: 127 29 29;
+  --color-warning-300: 217 119 6;
+  --color-warning-500: 180 83 9;
+  --color-warning-600: 146 64 14;
+  --color-info-300: 37 99 235;
+  --color-info-500: 30 64 175;
+  --color-info-600: 30 58 138;
 }
 
 @layer base {
