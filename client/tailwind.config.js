@@ -4,8 +4,7 @@ export default {
   theme: {
     extend: {
       maxWidth: {
-        layout: "1600px",
-        marketing: "1280px"
+        layout: "1600px"
       },
       spacing: {
         header: "72px"

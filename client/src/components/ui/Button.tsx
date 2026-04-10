@@ -3,9 +3,6 @@ import { cn } from "../../lib/cn";
 const variants = {
   primary: "bg-brand-600 text-white hover:bg-brand-500 focus-visible:ring-brand-400",
   secondary: "border border-border bg-transparent text-text-1 hover:bg-surface-2 focus-visible:ring-brand-400",
-  marketingPrimary: "bg-warning-500 text-bg hover:bg-warning-300 focus-visible:ring-warning-300",
-  marketingSecondary: "border border-border bg-surface/70 text-text-1 hover:bg-surface-2 focus-visible:ring-warning-300",
-  marketingGhost: "text-text-2 hover:bg-surface-2 focus-visible:ring-warning-300",
   success: "bg-success-600 text-white hover:bg-success-500 focus-visible:ring-success-300",
   danger: "bg-danger-600 text-white hover:bg-danger-500 focus-visible:ring-danger-300",
   warning: "bg-warning-600 text-white hover:bg-warning-500 focus-visible:ring-warning-300",

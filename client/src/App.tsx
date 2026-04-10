@@ -4,7 +4,6 @@ import RequireAuth from "./components/RequireAuth";
 import { Skeleton } from "./components/ui/Skeleton";
 
 const Layout = lazy(() => import("./components/Layout"));
-const Landing = lazy(() => import("./pages/Landing"));
 const Login = lazy(() => import("./pages/Login"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const CreateProcess = lazy(() => import("./pages/CreateProcess"));
@@ -150,59 +149,6 @@ function LoginRouteFallback() {
           <Skeleton className="h-10 w-full" />
         </div>
       </div>
-    </div>
-  );
-}
-
-function LandingRouteFallback() {
-  return (
-    <div className="min-h-screen bg-bg text-text-1">
-      <header className="border-b border-border bg-surface/90">
-        <div className="mx-auto flex max-w-layout items-center justify-between px-4 py-4 md:px-6">
-          <div className="flex items-center gap-3">
-            <Skeleton className="h-10 w-10 rounded-full" />
-            <div className="space-y-2">
-              <Skeleton className="h-3 w-28" />
-              <Skeleton className="h-5 w-32" />
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <Skeleton className="h-10 w-28" />
-            <Skeleton className="h-10 w-32" />
-          </div>
-        </div>
-      </header>
-      <main className="mx-auto max-w-layout px-4 py-14 md:px-6 md:py-20">
-        <div className="flex flex-col items-center text-center">
-          <Skeleton className="h-8 w-64 rounded-full" />
-          <Skeleton className="mt-6 h-12 w-full max-w-3xl" />
-          <Skeleton className="mt-4 h-12 w-full max-w-2xl" />
-          <Skeleton className="mt-6 h-5 w-full max-w-xl" />
-          <Skeleton className="mt-2 h-5 w-full max-w-lg" />
-          <div className="mt-8 flex w-full max-w-md flex-col gap-3 sm:flex-row">
-            <Skeleton className="h-11 flex-1" />
-            <Skeleton className="h-11 flex-1" />
-          </div>
-        </div>
-        <div className="mt-10 grid gap-3 md:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <div key={index} className="page-panel">
-              <Skeleton className="h-3 w-28" />
-              <Skeleton className="mt-3 h-5 w-full" />
-            </div>
-          ))}
-        </div>
-        <div className="mt-4 grid gap-4 lg:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <div key={index} className="page-panel">
-              <Skeleton className="h-11 w-11 rounded-xl" />
-              <Skeleton className="mt-5 h-6 w-40" />
-              <Skeleton className="mt-3 h-4 w-full" />
-              <Skeleton className="mt-2 h-4 w-5/6" />
-            </div>
-          ))}
-        </div>
-      </main>
     </div>
   );
 }
@@ -684,14 +630,7 @@ function LazyRoute({ children, fallback = <DashboardPageFallback /> }) {
 export default function App() {
   return (
     <Routes>
-      <Route
-        path="/"
-        element={(
-          <LazyRoute fallback={<LandingRouteFallback />}>
-            <Landing />
-          </LazyRoute>
-        )}
-      />
+      <Route path="/" element={<Navigate to="/login" replace />} />
       <Route
         path="/login"
         element={(
@@ -777,7 +716,7 @@ export default function App() {
         </Route>
       </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
 }
