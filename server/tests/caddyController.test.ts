@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const tls = require("tls");
 const { EventEmitter } = require("events");
 const { PassThrough } = require("stream");
 
@@ -200,6 +201,58 @@ test("deleteReverseProxy restores managed files when reload fails", async () => 
     assert.equal(await fs.promises.readFile(managedSitesPath, "utf8"), JSON.stringify(originalSites, null, 2));
     assert.equal(await fs.promises.readFile(caddyfilePath, "utf8"), originalCaddyfile);
   } finally {
+    harness.restore();
+    await fs.promises.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("getCaddyStatus tolerates malformed TLS certificate expiry data", async () => {
+  const tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "pm2-manager-caddy-status-"));
+  const managedSitesPath = path.join(tempRoot, "caddy-managed-sites.json");
+  const caddyfilePath = path.join(tempRoot, "Caddyfile");
+
+  await fs.promises.writeFile(
+    managedSitesPath,
+    JSON.stringify({ "broken-cert.example.com": "127.0.0.1:3000" }, null, 2),
+    "utf8"
+  );
+
+  const harness = loadControllerWithMockedSpawn(
+    {},
+    {
+      managedSitesPath,
+      caddyfilePath
+    }
+  );
+  const originalTlsConnect = tls.connect;
+
+  tls.connect = (_options, onSecureConnect) => {
+    const socket = new EventEmitter();
+    socket.getPeerCertificate = () => ({
+      valid_to: "not-a-date",
+      issuer: { CN: "Test CA" }
+    });
+    socket.destroy = () => {};
+    socket.end = () => {};
+
+    process.nextTick(() => {
+      onSecureConnect();
+    });
+
+    return socket;
+  };
+
+  try {
+    const result = await harness.controller.getCaddyStatus();
+    assert.equal(result.success, true);
+    const site = result.data.managedSites.find((entry) => entry.domain === "broken-cert.example.com");
+    assert.ok(site);
+    assert.equal(site.https.state, "warning");
+    assert.match(site.https.message, /expiry could not be parsed/i);
+    assert.equal(site.https.validTo, null);
+    assert.equal(site.https.issuer, "Test CA");
+  } finally {
+    tls.connect = originalTlsConnect;
     harness.restore();
     await fs.promises.rm(tempRoot, { recursive: true, force: true });
   }

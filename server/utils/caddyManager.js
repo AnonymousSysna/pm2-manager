@@ -479,6 +479,20 @@ async function checkHttpsStatus(domain) {
   }
 
   return new Promise((resolve) => {
+    let settled = false;
+    const finish = (socket, payload) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(payload);
+      try {
+        socket.destroy();
+      } catch (_error) {
+        // Best-effort cleanup.
+      }
+    };
+
     const socket = tls.connect(
       {
         host: trimmed,
@@ -488,27 +502,38 @@ async function checkHttpsStatus(domain) {
         timeout: 5000
       },
       () => {
-        const certificate = socket.getPeerCertificate(true);
-        const validTo = certificate?.valid_to ? new Date(certificate.valid_to).toISOString() : null;
-        const now = Date.now();
-        const expiresAt = validTo ? Date.parse(validTo) : NaN;
-        const expired = Number.isFinite(expiresAt) ? expiresAt <= now : false;
-        resolve({
-          state: expired ? "warning" : "active",
-          message: expired ? "Certificate is expired" : "TLS certificate detected",
-          validTo,
-          issuer: certificate?.issuer?.O || certificate?.issuer?.CN || null
-        });
-        socket.end();
+        try {
+          const certificate = socket.getPeerCertificate(true);
+          const rawValidTo = certificate?.valid_to ? String(certificate.valid_to).trim() : "";
+          const expiresAt = rawValidTo ? Date.parse(rawValidTo) : NaN;
+          const validTo = Number.isFinite(expiresAt) ? new Date(expiresAt).toISOString() : null;
+          const expired = Number.isFinite(expiresAt) ? expiresAt <= Date.now() : false;
+          const hasCertificate = Boolean(certificate && Object.keys(certificate).length > 0);
+
+          finish(socket, {
+            state: validTo ? (expired ? "warning" : "active") : hasCertificate ? "warning" : "unknown",
+            message: validTo
+              ? (expired ? "Certificate is expired" : "TLS certificate detected")
+              : hasCertificate
+                ? "TLS certificate detected but expiry could not be parsed"
+                : "TLS handshake completed but no certificate details were returned",
+            validTo,
+            issuer: certificate?.issuer?.O || certificate?.issuer?.CN || null
+          });
+        } catch (error) {
+          finish(socket, {
+            state: "warning",
+            message: error?.message || "TLS certificate inspection failed"
+          });
+        }
       }
     );
 
     socket.on("timeout", () => {
-      resolve({ state: "inactive", message: "TLS probe timed out on port 443" });
-      socket.destroy();
+      finish(socket, { state: "inactive", message: "TLS probe timed out on port 443" });
     });
     socket.on("error", (error) => {
-      resolve({ state: "inactive", message: error?.message || "TLS probe failed" });
+      finish(socket, { state: "inactive", message: error?.message || "TLS probe failed" });
     });
   });
 }
