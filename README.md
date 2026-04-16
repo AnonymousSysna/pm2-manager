@@ -23,9 +23,23 @@ Linux/macOS:
 curl -fsSL https://raw.githubusercontent.com/AnonymousSysna/pm2-manager/main/scripts/onetap.sh | bash
 ```
 
+Linux/macOS with optional SSL setup:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AnonymousSysna/pm2-manager/main/scripts/onetap.sh | bash -s -- --setup-ssl --domain pm2.example.com
+```
+
 Windows PowerShell:
 
 ```powershell
+powershell -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/AnonymousSysna/pm2-manager/main/scripts/onetap.ps1 | iex"
+```
+
+Windows PowerShell with optional SSL setup:
+
+```powershell
+$env:PM2_MANAGER_SETUP_SSL="true"
+$env:PM2_MANAGER_DOMAIN="pm2.example.com"
 powershell -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/AnonymousSysna/pm2-manager/main/scripts/onetap.ps1 | iex"
 ```
 
@@ -65,9 +79,15 @@ npm --prefix server install
 npm --prefix client install
 ```
 
-## One-Tap Start
+## One-Tap Installer
 
-Runs clone/pull, dependency install, client build, `.env` bootstrap, and PM2 start/restart.
+The installer always treats pm2-manager install and SSL enablement as separate phases:
+
+- Base install succeeds on Linux, macOS, or Windows without requiring SSL.
+- Base install performs clone/pull, dependency install, client build, `.env` bootstrap, and PM2 start/restart.
+- If the current shell has enough privilege for package/service changes, the same installer can optionally install Caddy, write the reverse proxy config, validate/reload it, and report whether HTTPS is actually active.
+- If the current shell is not privileged enough, pm2-manager still installs normally on local/internal HTTP and the installer prints exact admin/root follow-up steps for SSL later.
+- Local/internal HTTP on the app port remains a valid success path until domain, DNS, and port `80/443` prerequisites are satisfied.
 
 Linux/macOS:
 
@@ -85,16 +105,33 @@ Optional overrides:
 
 - `REPO_URL=<git-url>` to use a different repository
 - `PM2_MANAGER_DIR=<install-path>` to choose target directory
+- `PM2_MANAGER_PORT=<port>` or `--port <port>` to set the local app port
+- `PM2_MANAGER_DOMAIN=<fqdn>` or `--domain <fqdn>` for reverse proxy / HTTPS setup
+- `PM2_MANAGER_SETUP_SSL=true|false` or `--setup-ssl` / `--no-setup-ssl`
+- `PM2_MANAGER_INSTALL_CADDY=true|false` or `--install-caddy` / `--no-install-caddy`
+- `PM2_MANAGER_UPSTREAM=<host:port>` or `--upstream <host:port>` to override the reverse-proxy upstream
 
 If you are already inside this repo, run:
 
 ```bash
-npm run onetap:linux
+npm run onetap -- --port 8000
 ```
 
 ```powershell
-npm run onetap:windows
+npm run onetap -- --setup-ssl --domain pm2.example.com
 ```
+
+Typical scenarios:
+
+- Privileged install with SSL:
+  `npm run onetap -- --setup-ssl --domain pm2.example.com`
+- Privileged install without SSL:
+  `npm run onetap -- --no-setup-ssl`
+- Non-privileged install:
+  `npm run onetap -- --setup-ssl --domain pm2.example.com`
+  The installer will keep the HTTP install, skip system SSL changes, and print admin follow-up commands.
+- Later admin SSL enablement:
+  re-run the same installer as root / sudo-capable user / Administrator with `--setup-ssl --install-caddy --domain <fqdn>`
 
 ## Environment Variables
 

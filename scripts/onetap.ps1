@@ -1,6 +1,8 @@
 param(
   [string]$TargetDir = $env:PM2_MANAGER_DIR,
-  [string]$RepoUrl = $env:REPO_URL
+  [string]$RepoUrl = $env:REPO_URL,
+  [Parameter(ValueFromRemainingArguments = $true)]
+  [string[]]$InstallerArgs
 )
 
 $ErrorActionPreference = "Stop"
@@ -42,44 +44,12 @@ if ((Test-Path $rootPackage) -and ((Get-Content $rootPackage -Raw) -match '"name
   Set-Location $appDir
 }
 
-Write-Host "Installing dependencies..."
-npm install
-npm --prefix server install
-npm --prefix client install
-
-Write-Host "Building client..."
-npm run build
-
-if (-not (Test-Path .env)) {
-  Write-Host "Generating .env with random credentials..."
-  Copy-Item .env.example .env
-
-  $pm2User = "admin_$(node -e "process.stdout.write(require('crypto').randomBytes(3).toString('hex'))")"
-  $pm2Pass = node -e "process.stdout.write(require('crypto').randomBytes(12).toString('base64url'))"
-  $jwtSecret = node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))"
-  $metricsToken = node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))"
-
-  Add-Content .env ""
-  Add-Content .env "# one-tap generated credentials"
-  Add-Content .env "PM2_USER=$pm2User"
-  Add-Content .env "PM2_PASS=$pm2Pass"
-  Add-Content .env "JWT_SECRET=$jwtSecret"
-  Add-Content .env "METRICS_TOKEN=$metricsToken"
-  Add-Content .env "CORS_ALLOWED_ORIGINS=http://localhost:8000"
-
-  Write-Host "Created .env"
-  Write-Host "Login user: $pm2User"
-  Write-Host "Login pass: $pm2Pass"
+$forwarded = @("--app-dir", $appDir)
+if ($InstallerArgs) {
+  $forwarded += $InstallerArgs
 }
 
-npm --prefix server exec pm2 -- describe pm2-dashboard *> $null
-if ($LASTEXITCODE -eq 0) {
-  Write-Host "Restarting existing pm2-dashboard..."
-  npm run pm2:restart
-} else {
-  Write-Host "Starting pm2-dashboard..."
-  npm run pm2:start
+& node (Join-Path $appDir "scripts\onetap.js") @forwarded
+if ($LASTEXITCODE -ne 0) {
+  exit $LASTEXITCODE
 }
-
-Write-Host "Done. Open http://localhost:8000"
-npm run pm2:logs

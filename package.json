@@ -8,6 +8,7 @@
     "dev:client": "npm --prefix client run dev",
     "build": "npm --prefix client run build",
     "start": "npm --prefix server run start",
+    "onetap": "node ./scripts/onetap.js",
     "typecheck": "npm --prefix client run typecheck && npm --prefix server run typecheck",
     "pm2:start": "npm --prefix server exec pm2 -- start ../ecosystem.config.js",
     "pm2:stop": "npm --prefix server exec pm2 -- stop pm2-dashboard",
@@ -15,8 +16,9 @@
     "pm2:logs": "npm --prefix server exec pm2 -- logs pm2-dashboard",
     "pm2:save": "npm --prefix server exec pm2 -- save",
     "deploy": "npm run build && npm run pm2:start",
-    "onetap:linux": "bash ./scripts/onetap.sh",
-    "onetap:windows": "powershell -ExecutionPolicy Bypass -File .\\scripts\\onetap.ps1"
+    "onetap:linux": "node ./scripts/onetap.js",
+    "onetap:windows": "node ./scripts/onetap.js",
+    "test:installer": "node scripts/onetap.test.js"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
