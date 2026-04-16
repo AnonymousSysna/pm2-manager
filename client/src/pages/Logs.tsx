@@ -133,6 +133,7 @@ export default function Logs() {
   const { logsByProcess, processes, connected } = useSocket();
   const containerRef = useRef(null);
   const liveCursorRef = useRef(new Map());
+  const logsRequestIdRef = useRef(0);
 
   useEffect(() => {
     if (launchSource !== "create" || !defaultProcess) {
@@ -173,8 +174,14 @@ export default function Logs() {
 
   useEffect(() => {
     if (!selected && !combinedView) {
+      logsRequestIdRef.current += 1;
+      setLogsLoading(false);
       return;
     }
+
+    const requestId = logsRequestIdRef.current + 1;
+    logsRequestIdRef.current = requestId;
+    let active = true;
 
     const loadLogs = async () => {
       setLogsLoading(true);
@@ -223,16 +230,27 @@ export default function Logs() {
           }
         }
 
+        if (!active || logsRequestIdRef.current !== requestId) {
+          return;
+        }
         liveCursorRef.current = nextCursor;
         setEntries(nextEntries.slice(-Math.max(100, lineCount * Math.max(1, targets.length))));
       } catch (error) {
+        if (!active || logsRequestIdRef.current !== requestId) {
+          return;
+        }
         toast.error(error?.response?.data?.error || error.message || "Unable to fetch logs");
       } finally {
-        setLogsLoading(false);
+        if (active && logsRequestIdRef.current === requestId) {
+          setLogsLoading(false);
+        }
       }
     };
 
     loadLogs();
+    return () => {
+      active = false;
+    };
   }, [selected, lineCount, combinedView, combinedTargets, processOptions, refreshNonce]);
 
   useEffect(() => {

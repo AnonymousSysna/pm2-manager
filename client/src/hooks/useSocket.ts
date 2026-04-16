@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { createContext, createElement, useContext, useEffect, useMemo, useState } from "react";
 import { io } from "socket.io-client";
 import { processes as processApi } from "../api";
+
+const SocketContext = createContext(null);
 
 function readPollInterval() {
   const stored = Number(localStorage.getItem("pm2_poll_interval_ms") || 2000);
   return Number.isFinite(stored) && stored > 0 ? stored : 2000;
 }
 
-export function useSocket() {
+export function SocketProvider({ children }) {
   const [processes, setProcesses] = useState([]);
   const [logsByProcess, setLogsByProcess] = useState({});
   const [alerts, setAlerts] = useState([]);
@@ -16,7 +18,6 @@ export function useSocket() {
   const [monitorError, setMonitorError] = useState("");
   const [connected, setConnected] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
-
   const [pollInterval, setPollInterval] = useState(readPollInterval());
 
   useEffect(() => {
@@ -40,36 +41,28 @@ export function useSocket() {
       query: { interval: String(pollInterval) }
     });
 
-    socket.on("connect", () => {
+    const handleConnect = () => {
       setConnected(true);
       setReconnecting(false);
       setMonitorError("");
-    });
-    socket.on("disconnect", () => {
+    };
+    const handleDisconnect = () => {
       setConnected(false);
       setReconnecting(true);
-    });
-    socket.on("connect_error", () => {
+    };
+    const handleConnectError = () => {
       setConnected(false);
       setReconnecting(true);
-    });
-    socket.io.on("reconnect_attempt", () => {
+    };
+    const handleReconnectAttempt = () => {
       setReconnecting(true);
-    });
-    socket.io.on("reconnect_error", () => {
-      setReconnecting(true);
-    });
-    socket.io.on("reconnect_failed", () => {
-      setReconnecting(true);
-    });
-
-    socket.on("processes:update", (data) => {
+    };
+    const handleProcessesUpdate = (data) => {
       if (Array.isArray(data)) {
         setProcesses(data);
       }
-    });
-
-    socket.on("processes:delta", (payload) => {
+    };
+    const handleProcessesDelta = (payload) => {
       if (!payload || !Array.isArray(payload.upserts) || !Array.isArray(payload.removed)) {
         return;
       }
@@ -84,9 +77,8 @@ export function useSocket() {
         }
         return Array.from(index.values());
       });
-    });
-
-    socket.on("process:log", (payload) => {
+    };
+    const handleProcessLog = (payload) => {
       if (!payload?.processName) {
         return;
       }
@@ -95,29 +87,27 @@ export function useSocket() {
         const next = [...existing, payload].slice(-1000);
         return { ...prev, [payload.processName]: next };
       });
-    });
-
-    socket.on("monitor:alerts", (items) => {
+    };
+    const handleMonitorAlerts = (items) => {
       if (!Array.isArray(items) || items.length === 0) {
         return;
       }
       setAlerts((prev) => [...prev, ...items].slice(-200));
-    });
-    socket.on("monitor:error", (payload) => {
+    };
+    const handleMonitorError = (payload) => {
       const message = String(payload?.message || "").trim();
       if (!message) {
         return;
       }
       setMonitorError(message);
-    });
-
-    socket.on("notifications:new", (items) => {
+    };
+    const handleNotifications = (items) => {
       if (!Array.isArray(items) || items.length === 0) {
         return;
       }
       setNotifications((prev) => [...prev, ...items].slice(-400));
-    });
-    socket.on("process:create:step", (payload) => {
+    };
+    const handleCreateStep = (payload) => {
       const operationId = String(payload?.operationId || "").trim();
       const stepId = String(payload?.stepId || "").trim();
       const label = String(payload?.label || "").trim();
@@ -126,7 +116,21 @@ export function useSocket() {
         return;
       }
       setCreateStepEvents((prev) => [...prev, payload].slice(-200));
-    });
+    };
+
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
+    socket.on("connect_error", handleConnectError);
+    socket.io.on("reconnect_attempt", handleReconnectAttempt);
+    socket.io.on("reconnect_error", handleReconnectAttempt);
+    socket.io.on("reconnect_failed", handleReconnectAttempt);
+    socket.on("processes:update", handleProcessesUpdate);
+    socket.on("processes:delta", handleProcessesDelta);
+    socket.on("process:log", handleProcessLog);
+    socket.on("monitor:alerts", handleMonitorAlerts);
+    socket.on("monitor:error", handleMonitorError);
+    socket.on("notifications:new", handleNotifications);
+    socket.on("process:create:step", handleCreateStep);
 
     return () => {
       socket.disconnect();
@@ -158,15 +162,27 @@ export function useSocket() {
     };
   }, [pollInterval]);
 
-  return {
-    processes,
-    logsByProcess,
-    alerts,
-    notifications,
-    createStepEvents,
-    monitorError,
-    connected,
-    reconnecting
-  };
+  const value = useMemo(
+    () => ({
+      processes,
+      logsByProcess,
+      alerts,
+      notifications,
+      createStepEvents,
+      monitorError,
+      connected,
+      reconnecting
+    }),
+    [processes, logsByProcess, alerts, notifications, createStepEvents, monitorError, connected, reconnecting]
+  );
+
+  return createElement(SocketContext.Provider, { value }, children);
 }
 
+export function useSocket() {
+  const value = useContext(SocketContext);
+  if (!value) {
+    throw new Error("useSocket must be used within <SocketProvider>");
+  }
+  return value;
+}

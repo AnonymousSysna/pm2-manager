@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast, { getErrorMessage } from "../lib/toast";
 import { alerts as alertsApi, caddy as caddyApi, processes as processApi } from "../api";
@@ -92,6 +92,7 @@ export default function Dashboard() {
   const [deployElapsedSec, setDeployElapsedSec] = useState(0);
   const [actionDialog, setActionDialog] = useState(null);
   const [systemResources, setSystemResources] = useState(null);
+  const metricsRequestIdRef = useRef(0);
   const [checklist, setChecklist] = useState({
     hasProcess: false,
     hasAlertChannel: false,
@@ -186,20 +187,36 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!chartProcess) {
+      metricsRequestIdRef.current += 1;
       setHistoryPoints([]);
       return;
     }
 
+    const requestId = metricsRequestIdRef.current + 1;
+    metricsRequestIdRef.current = requestId;
+    let active = true;
+
     processApi
       .metrics(chartProcess, 180)
       .then((result) => {
+        if (!active || metricsRequestIdRef.current !== requestId) {
+          return;
+        }
         if (result.success && Array.isArray(result.data)) {
           setHistoryPoints(result.data);
+          return;
         }
+        setHistoryPoints([]);
       })
       .catch(() => {
-        setHistoryPoints([]);
+        if (active && metricsRequestIdRef.current === requestId) {
+          setHistoryPoints([]);
+        }
       });
+
+    return () => {
+      active = false;
+    };
   }, [chartProcess]);
 
   useEffect(() => {
