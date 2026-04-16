@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast, { getErrorMessage } from "../lib/toast";
-import { alerts as alertsApi, caddy as caddyApi, processes as processApi } from "../api";
+import { alerts as alertsApi, processes as processApi } from "../api";
 import { useSocket } from "../hooks/useSocket";
 import ProcessDetailModal from "../components/ProcessDetailModal";
 import Banner from "../components/ui/Banner";
@@ -97,7 +97,7 @@ export default function Dashboard() {
     hasProcess: false,
     hasAlertChannel: false,
     hasStartupPersistence: localStorage.getItem("pm2_onboarding_startup_checked") === "true",
-    hasDomain: false,
+    hasDomain: localStorage.getItem("pm2_onboarding_has_domain") === "true",
     dismissed: localStorage.getItem("pm2_onboarding_checklist_dismissed") === "true"
   });
 
@@ -148,16 +148,14 @@ export default function Dashboard() {
 
   const refreshOnboardingChecklist = async () => {
     try {
-      const [processResult, channelResult, caddyResult] = await Promise.all([
+      const [processResult, channelResult] = await Promise.all([
         processApi.list(),
-        alertsApi.listChannels(),
-        caddyApi.status()
+        alertsApi.listChannels()
       ]);
       setChecklist((prev) => ({
         ...prev,
         hasProcess: Boolean(processResult?.success && Array.isArray(processResult.data) && processResult.data.length > 0),
         hasAlertChannel: Boolean(channelResult?.success && Array.isArray(channelResult.data) && channelResult.data.length > 0),
-        hasDomain: Boolean(caddyResult?.success && Array.isArray(caddyResult.data?.managedSites) && caddyResult.data.managedSites.length > 0),
         hasStartupPersistence: prev.hasStartupPersistence || localStorage.getItem("pm2_onboarding_startup_checked") === "true"
       }));
     } catch (_error) {

@@ -34,7 +34,12 @@ export default function Caddy() {
       if (!result.success) {
         throw new Error(result.error || "Unable to read Caddy status");
       }
-      setStatus((prev) => ({ ...prev, ...(result.data || {}) }));
+      const nextStatus = result.data || {};
+      localStorage.setItem(
+        "pm2_onboarding_has_domain",
+        Array.isArray(nextStatus.managedSites) && nextStatus.managedSites.length > 0 ? "true" : "false"
+      );
+      setStatus((prev) => ({ ...prev, ...nextStatus }));
     } catch (error) {
       toast.error(getErrorMessage(error, "Unable to read Caddy status"));
     } finally {
