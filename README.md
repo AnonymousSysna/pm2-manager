@@ -1,41 +1,62 @@
 # PM2 Dashboard
 
-Web app for operating PM2-managed services with real-time monitoring, deployment tools, and auditability.
+Web app for operating PM2-managed services with real-time monitoring, deployment tools, audit history, dotenv editing, and optional Caddy reverse-proxy management.
 
-- Backend: Express + Socket.IO (`server/`)
-- Frontend: React + Vite + Tailwind (`client/`)
-- Auth: JWT cookies (access + refresh) + CSRF token
-- Features: process lifecycle controls, create/deploy/rollback, logs, notification channels, restart/deploy/audit history, metadata, `.env` editor, Caddy integration, interpreter detection
+- Backend: Express + Socket.IO in `server/`
+- Frontend: React + Vite + Tailwind in `client/`
+- Auth: JWT cookies plus CSRF protection
+- Default app URL: `http://<host>:8000`
 
-Default app URL: `http://<host>:8000`
+## What It Includes
 
-## Quick Start (One Tap)
+- Process lifecycle controls: start, stop, restart, reload, delete
+- Create / duplicate / deploy / rollback workflows
+- Live metrics, logs, restart history, deployment history, audit trail
+- Alert channel management and notification history
+- Process metadata and `.env` editing
+- PM2 daemon actions
+- Optional Caddy install / status / reverse proxy management
+- Interpreter detection
 
-NPM (recommended once published):
+## Choose Your Flow
 
-```bash
-npx @anonymoussysna/pm2-manager-cli
-```
+Use one of these paths:
 
-Linux/macOS:
+1. Quick install with the one-tap installer
+2. Manual production install on a server
+3. Local development
+
+If you already have the app installed and only want to update it, jump to `Updating an Existing Install`.
+
+## Requirements
+
+- Node.js 18+ (`20+` recommended)
+- npm
+- git
+
+Caddy is optional. The app should work without it.
+
+## Quick Install
+
+### Linux or macOS
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/AnonymousSysna/pm2-manager/main/scripts/onetap.sh | bash
 ```
 
-Linux/macOS with optional SSL setup:
+### Linux or macOS with SSL setup
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/AnonymousSysna/pm2-manager/main/scripts/onetap.sh | bash -s -- --setup-ssl --domain pm2.example.com
 ```
 
-Windows PowerShell:
+### Windows PowerShell
 
 ```powershell
 powershell -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/AnonymousSysna/pm2-manager/main/scripts/onetap.ps1 | iex"
 ```
 
-Windows PowerShell with optional SSL setup:
+### Windows PowerShell with SSL setup
 
 ```powershell
 $env:PM2_MANAGER_SETUP_SSL="true"
@@ -43,35 +64,35 @@ $env:PM2_MANAGER_DOMAIN="pm2.example.com"
 powershell -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/AnonymousSysna/pm2-manager/main/scripts/onetap.ps1 | iex"
 ```
 
-## Current Webapp Modules
+### What the installer does
 
-- Dashboard: live process status, metrics charts, bulk actions, deploy/rollback, metadata editing, `.env` editing, app URL quick-open (when port is known)
-- Create: process creation workflow with live step events
-- Logs: per-process logs and log actions
-- Notifications: in-app notification history + alert event visibility
-- History: deployment history, restart history, audit trail (all paginated)
-- Settings: PM2 daemon controls, auth password change, dashboard preferences, config export/import, alert channel management
-- Extensions: Caddy install/status and interpreter catalog detection
-- Caddy: reverse proxy management (only shown when Caddy is available)
+- Clones or updates the repo
+- Installs dependencies
+- Builds the client
+- Bootstraps `.env` if needed
+- Starts or restarts the dashboard with PM2
+- Optionally installs and configures Caddy if you requested SSL and the current shell has enough privilege
 
-## Project Structure
+### Important note about SSL
 
-```text
-.
-|- server/              # API routes, PM2 control, sockets, stores
-|- client/              # React UI
-|- logs/                # JSON/JSONL data stores
-|- ecosystem.config.js  # PM2 app definition for this dashboard
-`- package.json         # root scripts
+The installer treats app install and SSL setup as separate phases:
+
+- Base install can succeed without Caddy
+- SSL setup only succeeds after DNS, domain, and system privilege requirements are satisfied
+- If SSL setup cannot be completed, the dashboard should still be usable on its app port
+
+## Manual Production Install
+
+Use this if you want the cleanest step-by-step server setup.
+
+### 1. Clone the repo
+
+```bash
+git clone https://github.com/AnonymousSysna/pm2-manager.git
+cd pm2-manager
 ```
 
-## Requirements
-
-- Node.js 18+ (or 20+ recommended)
-- npm
-- git
-
-## Install
+### 2. Install dependencies
 
 ```bash
 npm install
@@ -79,63 +100,11 @@ npm --prefix server install
 npm --prefix client install
 ```
 
-## One-Tap Installer
-
-The installer always treats pm2-manager install and SSL enablement as separate phases:
-
-- Base install succeeds on Linux, macOS, or Windows without requiring SSL.
-- Base install performs clone/pull, dependency install, client build, `.env` bootstrap, and PM2 start/restart.
-- If the current shell has enough privilege for package/service changes, the same installer can optionally install Caddy, write the reverse proxy config, validate/reload it, and report whether HTTPS is actually active.
-- If the current shell is not privileged enough, pm2-manager still installs normally on local/internal HTTP and the installer prints exact admin/root follow-up steps for SSL later.
-- Local/internal HTTP on the app port remains a valid success path until domain, DNS, and port `80/443` prerequisites are satisfied.
-
-Linux/macOS:
+### 3. Create the environment file
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AnonymousSysna/pm2-manager/main/scripts/onetap.sh | bash
+cp .env.example .env
 ```
-
-Windows PowerShell:
-
-```powershell
-powershell -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/AnonymousSysna/pm2-manager/main/scripts/onetap.ps1 | iex"
-```
-
-Optional overrides:
-
-- `REPO_URL=<git-url>` to use a different repository
-- `PM2_MANAGER_DIR=<install-path>` to choose target directory
-- `PM2_MANAGER_PORT=<port>` or `--port <port>` to set the local app port
-- `PM2_MANAGER_DOMAIN=<fqdn>` or `--domain <fqdn>` for reverse proxy / HTTPS setup
-- `PM2_MANAGER_SETUP_SSL=true|false` or `--setup-ssl` / `--no-setup-ssl`
-- `PM2_MANAGER_INSTALL_CADDY=true|false` or `--install-caddy` / `--no-install-caddy`
-- `PM2_MANAGER_UPSTREAM=<host:port>` or `--upstream <host:port>` to override the reverse-proxy upstream
-
-If you are already inside this repo, run:
-
-```bash
-npm run onetap -- --port 8000
-```
-
-```powershell
-npm run onetap -- --setup-ssl --domain pm2.example.com
-```
-
-Typical scenarios:
-
-- Privileged install with SSL:
-  `npm run onetap -- --setup-ssl --domain pm2.example.com`
-- Privileged install without SSL:
-  `npm run onetap -- --no-setup-ssl`
-- Non-privileged install:
-  `npm run onetap -- --setup-ssl --domain pm2.example.com`
-  The installer will keep the HTTP install, skip system SSL changes, and print admin follow-up commands.
-- Later admin SSL enablement:
-  re-run the same installer as root / sudo-capable user / Administrator with `--setup-ssl --install-caddy --domain <fqdn>`
-
-## Environment Variables
-
-Use root `.env.example` as baseline, then add optional advanced keys as needed.
 
 Required keys:
 
@@ -145,6 +114,147 @@ PM2_PASS_HASH=$2a$10$replace_with_bcrypt_hash
 JWT_SECRET=replace_with_long_random_secret
 METRICS_TOKEN=replace_with_long_random_token
 ```
+
+### 4. Build the client
+
+```bash
+npm run build
+```
+
+Important:
+
+- `npm run build` builds the frontend into `client/dist`
+- Pulling new code is not enough for frontend changes; you must rebuild before restarting production
+
+### 5. Start the dashboard with PM2
+
+```bash
+npm run pm2:start
+```
+
+Optional but recommended after confirming it works:
+
+```bash
+npm run pm2:save
+```
+
+### 6. Open the app
+
+Visit:
+
+```text
+http://<server-ip>:8000
+```
+
+### 7. Only if you want a domain and HTTPS: install Caddy later
+
+You do not need Caddy for the base app to run.
+
+- Install Caddy from the `Extensions` page, or
+- Re-run the one-tap installer with SSL options, or
+- Install Caddy manually and configure reverse proxy later
+
+## Updating an Existing Install
+
+This is the safe update flow:
+
+### 1. Pull the latest code
+
+```bash
+cd ~/pm2-manager
+git pull
+```
+
+### 2. Install dependencies if package files changed
+
+```bash
+npm install
+npm --prefix server install
+npm --prefix client install
+```
+
+### 3. Rebuild the client
+
+```bash
+npm run build
+```
+
+### 4. Restart the app
+
+```bash
+pm2 restart pm2-dashboard --update-env
+```
+
+Or from the repo:
+
+```bash
+npm run pm2:restart
+```
+
+### 5. Verify logs if something looks wrong
+
+```bash
+tail -n 100 logs/err.log
+tail -n 100 logs/out.log
+```
+
+## Local Development
+
+### 1. Install dependencies
+
+```bash
+npm install
+npm --prefix server install
+npm --prefix client install
+```
+
+### 2. Create `.env`
+
+```bash
+cp .env.example .env
+```
+
+### 3. Start both apps
+
+```bash
+npm run dev
+```
+
+Defaults:
+
+- Frontend: `http://localhost:5173`
+- Backend: `http://localhost:8000`
+- Health endpoint: `http://localhost:8000/health`
+
+When `VITE_API_URL` is unset, Vite proxies `/api` and `/socket.io` to the backend.
+
+## One-Tap Installer Options
+
+Supported overrides:
+
+- `REPO_URL=<git-url>`
+- `PM2_MANAGER_DIR=<install-path>`
+- `PM2_MANAGER_PORT=<port>` or `--port <port>`
+- `PM2_MANAGER_DOMAIN=<fqdn>` or `--domain <fqdn>`
+- `PM2_MANAGER_SETUP_SSL=true|false` or `--setup-ssl` / `--no-setup-ssl`
+- `PM2_MANAGER_INSTALL_CADDY=true|false` or `--install-caddy` / `--no-install-caddy`
+- `PM2_MANAGER_UPSTREAM=<host:port>` or `--upstream <host:port>`
+
+If you are already inside this repo:
+
+```bash
+npm run onetap -- --port 8000
+```
+
+With SSL:
+
+```bash
+npm run onetap -- --setup-ssl --domain pm2.example.com
+```
+
+## Environment Variables
+
+Use `.env.example` as the starting point.
 
 Core runtime defaults:
 
@@ -159,7 +269,7 @@ COMMAND_TIMEOUT_MS=300000
 LOG_TAIL_MAX_BYTES=1048576
 ```
 
-Advanced optional keys currently supported by the backend:
+Advanced optional keys supported by the backend:
 
 ```env
 # Auth/session tuning
@@ -215,11 +325,12 @@ METRICS_HISTORY_WRITE_THROTTLE_MS=1000
 ```
 
 Notes:
-- `AUTH_ALLOWED_IPS` is a comma-separated allowlist for login/API/socket/metrics access.
-- `TRUST_PROXY=1` should be set behind reverse proxies (Nginx/Cloudflare).
-- `COOKIE_SECURE` can be empty (auto), `true`, or `false`.
-- `CORS_ALLOWED_ORIGINS` accepts comma-separated origins.
-- For auth, you can use `PM2_PASS` (plain) or `PM2_PASS_HASH`; hashed is recommended.
+
+- `AUTH_ALLOWED_IPS` is a comma-separated allowlist for login, API, socket, and metrics access
+- `TRUST_PROXY=1` should be set behind a reverse proxy
+- `COOKIE_SECURE` can be empty, `true`, or `false`
+- `CORS_ALLOWED_ORIGINS` accepts comma-separated origins
+- You can use `PM2_PASS` or `PM2_PASS_HASH`; hashed is recommended
 
 ## Password Hash Setup
 
@@ -228,26 +339,9 @@ cd server
 node -e "const bcrypt=require('bcryptjs'); const p=process.argv[1]; if(!p){process.exit(1);} console.log(bcrypt.hashSync(p,10));" "YourStrongPassword"
 ```
 
-## Development
+## PM2 Commands
 
-```bash
-npm run dev
-```
-
-Defaults:
-- Frontend: `http://localhost:5173`
-- Backend: `http://localhost:8000`
-- Health: `http://localhost:8000/health`
-- When `VITE_API_URL` is unset, the Vite dev server proxies `/api` and `/socket.io` to `http://localhost:8000`.
-
-## Build and Run
-
-```bash
-npm run build
-npm run start
-```
-
-With PM2:
+From the repo root:
 
 ```bash
 npm run pm2:start
@@ -263,9 +357,73 @@ One-command deploy:
 npm run deploy
 ```
 
+## Caddy Notes
+
+- Caddy is optional
+- The dashboard should run without Caddy installed
+- `GET /api/v1/caddy/status` is an authenticated API route, not a public page
+- If you open API routes directly in the browser, expect JSON responses, not HTML pages
+- A healthy unauthenticated hit to `/api/v1/caddy/status` should return `401`, not a rendered page
+
+## Troubleshooting
+
+### I pulled the latest code but nothing changed
+
+You probably forgot the client build step.
+
+Run:
+
+```bash
+git pull
+npm run build
+pm2 restart pm2-dashboard --update-env
+```
+
+### `/api/v1/caddy/status` returns `ERR_EMPTY_RESPONSE`
+
+Check the backend logs:
+
+```bash
+tail -f logs/err.log logs/out.log
+```
+
+Then test locally on the server:
+
+```bash
+curl -i http://127.0.0.1:8000/api/v1/caddy/status
+```
+
+Notes:
+
+- This route requires auth
+- If the app is healthy, an unauthenticated request should return `401` JSON
+- If the browser shows `ERR_EMPTY_RESPONSE`, the backend is usually crashing or resetting the connection
+
+### I want to know what process is serving port `8000`
+
+```bash
+ss -ltnp | grep :8000
+pm2 show pm2-dashboard
+```
+
+### I restarted PM2 but need fresh logs
+
+```bash
+pm2 flush
+pm2 restart pm2-dashboard --update-env
+tail -f logs/err.log logs/out.log
+```
+
+### Caddy is not installed yet
+
+That should not prevent the dashboard from starting.
+
+Base app first, reverse proxy later.
+
 ## API Overview
 
 Base paths:
+
 - Primary: `/api/v1/...`
 - Compatibility alias: `/api/...`
 
@@ -342,12 +500,10 @@ Base paths:
 
 ## Security Notes
 
-- Mutating API routes require CSRF token header `x-csrf-token` matching `pm2_csrf` cookie.
-- Auth uses HttpOnly cookies (`pm2_session`, `pm2_refresh`) plus refresh flow.
-- `.env` read/write is restricted to process working directories under app root:
-  - if `PROJECTS_ROOT` ends with `apps`, that path is used
-  - otherwise allowed root is `PROJECTS_ROOT/apps`
-- If a process directory is outside allowed root, dotenv endpoints return `403`.
+- Mutating API routes require CSRF token header `x-csrf-token` matching `pm2_csrf` cookie
+- Auth uses HttpOnly cookies `pm2_session` and `pm2_refresh` plus refresh flow
+- `.env` read and write is restricted to process working directories under the configured app root
+- If a process directory is outside the allowed root, dotenv endpoints return `403`
 
 ## Testing and Typecheck
 
@@ -359,5 +515,5 @@ npm --prefix client test
 
 ## Deployment Notes
 
-- In production mode, server serves `client/dist` and handles SPA fallback routing.
-- Set strong values for `PM2_USER`, `PM2_PASS_HASH` (or `PM2_PASS`), `JWT_SECRET`, and `METRICS_TOKEN` before exposing the app.
+- In production mode, the server serves `client/dist`
+- Set strong values for `PM2_USER`, `PM2_PASS_HASH` or `PM2_PASS`, `JWT_SECRET`, and `METRICS_TOKEN` before exposing the app
