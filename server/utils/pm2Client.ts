@@ -1,5 +1,9 @@
 const pm2 = require("pm2");
-const { withPermissionHint } = require("./permissionHints.js");
+const permissionHints = require("./permissionHints.js");
+const withPermissionHint =
+  typeof permissionHints?.withPermissionHint === "function"
+    ? permissionHints.withPermissionHint
+    : (message) => String(message || "Operation failed");
 
 function withPM2(action) {
   return new Promise((resolve) => {

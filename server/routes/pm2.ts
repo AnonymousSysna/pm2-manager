@@ -7,7 +7,11 @@ const pm2Package = require("pm2/package.json");
 const { spawn } = require("child_process");
 const { verifyToken } = require("../middleware/auth");
 const { withPM2 } = require("../utils/pm2Client");
-const { withPermissionHint } = require("../utils/permissionHints.js");
+const permissionHints = require("../utils/permissionHints.js");
+const withPermissionHint =
+  typeof permissionHints?.withPermissionHint === "function"
+    ? permissionHints.withPermissionHint
+    : (message) => String(message || "Operation failed");
 const { readLimiter, criticalWriteLimiter } = require("../middleware/rateLimit");
 const { asyncHandler } = require("../middleware/asyncHandler");
 const { trackPm2Operation } = require("../middleware/metrics");
