@@ -142,6 +142,12 @@ const INTERPRETER_CATALOG = [
     ]
   }
 ];
+const STATIC_SITE_DEFAULT_PORT = 3000;
+const STATIC_SITE_CANDIDATES = [
+  { relativeEntry: "index.html", relativeServeDir: "." },
+  { relativeEntry: path.join("public", "index.html"), relativeServeDir: "public" },
+  { relativeEntry: path.join("dist", "index.html"), relativeServeDir: "dist" }
+];
 
 /**
  * @typedef {Object} CreateProcessConfig
@@ -222,6 +228,59 @@ function sanitizeGitRef(value, fieldName, { allowEmpty = false } = {}) {
     throw new Error(`${fieldName} exceeds max length 200`);
   }
   return normalized;
+}
+
+async function pathIsReadableFile(filePath) {
+  try {
+    const stat = await fs.promises.stat(filePath);
+    return stat.isFile();
+  } catch (_error) {
+    return false;
+  }
+}
+
+async function commandExists(command) {
+  const probe = process.platform === "win32" ? "where" : "which";
+  try {
+    await runCommand(probe, [command], process.cwd());
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
+async function detectStaticSiteProject(projectDir) {
+  for (const candidate of STATIC_SITE_CANDIDATES) {
+    const entryPath = path.join(projectDir, candidate.relativeEntry);
+    if (await pathIsReadableFile(entryPath)) {
+      const serveDir = path.resolve(projectDir, candidate.relativeServeDir);
+      return {
+        isStaticSite: true,
+        entryPath,
+        serveDir
+      };
+    }
+  }
+
+  return {
+    isStaticSite: false,
+    entryPath: "",
+    serveDir: ""
+  };
+}
+
+async function resolveStaticSiteServer() {
+  const candidates = process.platform === "win32"
+    ? ["py", "python", "python3"]
+    : ["python3", "python"];
+
+  for (const candidate of candidates) {
+    if (await commandExists(candidate)) {
+      return candidate;
+    }
+  }
+
+  return "";
 }
 
 async function writeAudit(action, actorOrContext, payload = {}) {
@@ -1447,7 +1506,7 @@ async function createProcess(config, actorContext = "unknown") {
 
     const safeName = sanitizeProcessName(name, "process name");
     processNameForAudit = safeName;
-    const normalizedPort = parsePortValue(port);
+    let normalizedPort = parsePortValue(port);
     let createStepCounter = 0;
     const createStepTarget = actor && actor !== "unknown" && io && typeof io.to === "function"
       ? io.to(getUserSocketRoom(actor))
@@ -1516,6 +1575,7 @@ async function createProcess(config, actorContext = "unknown") {
     let finalCwd = normalizedCwd;
     let resolvedInterpreterOverride = "";
     let resolvedNodeVersion = normalizeVersion(node_version);
+    let forceForkMode = false;
 
     const projectPathInput = String(project_path || "").trim();
     if (projectPathInput) {
@@ -1590,109 +1650,146 @@ async function createProcess(config, actorContext = "unknown") {
       try {
         await fs.promises.access(packageJsonPath, fs.constants.R_OK);
       } catch (_error) {
-        throw new Error(`package.json not found at: ${packageJsonPath}`);
-      }
-
-      const packageJson = JSON.parse(await fs.promises.readFile(packageJsonPath, "utf8"));
-      const scripts = packageJson.scripts || {};
-      let npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
-      const startScriptName = String(start_script || "start").trim() || "start";
-      const shouldUseNodeRuntime = isNodeInterpreterValue(interpreter);
-      let npmCommandArgsBuilder = (nextArgs = []) => nextArgs;
-      let stepCommandOptions = {};
-
-      if (!resolvedNodeVersion && shouldUseNodeRuntime) {
-        resolvedNodeVersion = await detectNodeVersionFromProject(projectDir);
-      }
-
-      if (resolvedNodeVersion && shouldUseNodeRuntime) {
-        const runtime = await resolveNodeRuntimeForVersion(resolvedNodeVersion, {
-          autoInstall: Boolean(auto_install_node)
-        });
-        if (runtime) {
-          resolvedNodeVersion = normalizeVersion(runtime.version);
-          resolvedInterpreterOverride = String(runtime.nodePath || "").trim();
-          npmCmd = runtime.npmCommand || npmCmd;
-          npmCommandArgsBuilder = runtime.wrapNpmArgs || ((nextArgs = []) => nextArgs);
+        const staticSite = await detectStaticSiteProject(projectDir);
+        if (!staticSite.isStaticSite) {
+          throw new Error(`package.json not found at: ${packageJsonPath}`);
         }
-      }
 
-      if (install_dependencies) {
-        const installArgs = getNpmInstallArgs({ includeDev: Boolean(run_build) });
-        await runCreateStep(
-          "npm:install",
-          npmCmd,
-          npmCommandArgsBuilder(installArgs),
-          projectDir,
-          stepCommandOptions
-        );
-        const nestedInstallDirs = await resolveNestedInstallDirs(projectDir, safeName);
-        for (const installDir of nestedInstallDirs) {
-          await runCreateStep(
-            "npm:install:nested",
-            npmCmd,
-            npmCommandArgsBuilder(installArgs),
-            installDir,
-            stepCommandOptions
+        const staticServerCommand = await resolveStaticSiteServer();
+        if (!staticServerCommand) {
+          throw new Error(
+            `Static site detected at ${staticSite.entryPath}, but no supported static file server was found. Install python3/python or use Script Path mode.`
           );
         }
+
+        normalizedPort = normalizedPort || STATIC_SITE_DEFAULT_PORT;
+        finalScript = staticServerCommand;
+        finalArgs = `-m http.server ${normalizedPort}`;
+        finalCwd = staticSite.serveDir;
+        resolvedInterpreterOverride = "none";
+        forceForkMode = true;
+        createSteps.push({
+          label: "static:detect",
+          success: true,
+          durationMs: 0,
+          output: `Static site detected (${path.relative(projectDir, staticSite.entryPath) || "index.html"}) -> ${staticServerCommand} -m http.server ${normalizedPort}`
+        });
+        emitCreateStep({
+          stepId: `static:detect#${++createStepCounter}`,
+          label: "static:detect",
+          status: "success",
+          durationMs: 0
+        });
       }
 
-      if (run_build) {
-        if (!scripts.build) {
-          throw new Error(`Missing "build" script in ${packageJsonPath}`);
+      if (!finalScript || !String(finalScript).trim()) {
+        throw new Error(`Unable to determine runtime for project: ${projectDir}`);
+      }
+
+      if (resolvedInterpreterOverride === "none") {
+        finalCwd = resolveSafePath(String(finalCwd || projectDir), PROJECTS_ROOT, "cwd");
+      } else {
+        const packageJson = JSON.parse(await fs.promises.readFile(packageJsonPath, "utf8"));
+        const scripts = packageJson.scripts || {};
+        let npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+        const startScriptName = String(start_script || "start").trim() || "start";
+        const shouldUseNodeRuntime = isNodeInterpreterValue(interpreter);
+        let npmCommandArgsBuilder = (nextArgs = []) => nextArgs;
+        let stepCommandOptions = {};
+
+        if (!resolvedNodeVersion && shouldUseNodeRuntime) {
+          resolvedNodeVersion = await detectNodeVersionFromProject(projectDir);
         }
-        try {
+
+        if (resolvedNodeVersion && shouldUseNodeRuntime) {
+          const runtime = await resolveNodeRuntimeForVersion(resolvedNodeVersion, {
+            autoInstall: Boolean(auto_install_node)
+          });
+          if (runtime) {
+            resolvedNodeVersion = normalizeVersion(runtime.version);
+            resolvedInterpreterOverride = String(runtime.nodePath || "").trim();
+            npmCmd = runtime.npmCommand || npmCmd;
+            npmCommandArgsBuilder = runtime.wrapNpmArgs || ((nextArgs = []) => nextArgs);
+          }
+        }
+
+        if (install_dependencies) {
+          const installArgs = getNpmInstallArgs({ includeDev: Boolean(run_build) });
           await runCreateStep(
-            "npm:build",
+            "npm:install",
             npmCmd,
-            npmCommandArgsBuilder(["run", "build"]),
+            npmCommandArgsBuilder(installArgs),
             projectDir,
             stepCommandOptions
           );
-        } catch (error) {
-          const missingModule = extractMissingModule(error?.message || "");
-          if (missingModule) {
-            if (install_dependencies) {
-              const preferredNestedDir = await resolvePreferredNestedAppDir(projectDir, safeName);
-              const installTargetDir = preferredNestedDir || projectDir;
-              try {
-                await runCreateStep(
-                  "npm:install-missing-module",
-                  npmCmd,
-                  npmCommandArgsBuilder(["install", "--include=dev", "--save-dev", missingModule]),
-                  installTargetDir,
-                  stepCommandOptions
-                );
-                await runCreateStep(
-                  "npm:build:retry",
-                  npmCmd,
-                  npmCommandArgsBuilder(["run", "build"]),
-                  projectDir,
-                  stepCommandOptions
-                );
-              } catch (_retryError) {
+          const nestedInstallDirs = await resolveNestedInstallDirs(projectDir, safeName);
+          for (const installDir of nestedInstallDirs) {
+            await runCreateStep(
+              "npm:install:nested",
+              npmCmd,
+              npmCommandArgsBuilder(installArgs),
+              installDir,
+              stepCommandOptions
+            );
+          }
+        }
+
+        if (run_build) {
+          if (!scripts.build) {
+            throw new Error(`Missing "build" script in ${packageJsonPath}`);
+          }
+          try {
+            await runCreateStep(
+              "npm:build",
+              npmCmd,
+              npmCommandArgsBuilder(["run", "build"]),
+              projectDir,
+              stepCommandOptions
+            );
+          } catch (error) {
+            const missingModule = extractMissingModule(error?.message || "");
+            if (missingModule) {
+              if (install_dependencies) {
+                const preferredNestedDir = await resolvePreferredNestedAppDir(projectDir, safeName);
+                const installTargetDir = preferredNestedDir || projectDir;
+                try {
+                  await runCreateStep(
+                    "npm:install-missing-module",
+                    npmCmd,
+                    npmCommandArgsBuilder(["install", "--include=dev", "--save-dev", missingModule]),
+                    installTargetDir,
+                    stepCommandOptions
+                  );
+                  await runCreateStep(
+                    "npm:build:retry",
+                    npmCmd,
+                    npmCommandArgsBuilder(["run", "build"]),
+                    projectDir,
+                    stepCommandOptions
+                  );
+                } catch (_retryError) {
+                  throw new Error(
+                    `${error.message}\nHint: missing dependency "${missingModule}". Auto-install + retry failed in ${installTargetDir}.`
+                  );
+                }
+              } else {
                 throw new Error(
-                  `${error.message}\nHint: missing dependency "${missingModule}". Auto-install + retry failed in ${installTargetDir}.`
+                  `${error.message}\nHint: missing dependency "${missingModule}". If this is a nested app (for example apps/${safeName}), run npm install in that app directory or enable "Run npm install before start".`
                 );
               }
-            } else {
-              throw new Error(
-                `${error.message}\nHint: missing dependency "${missingModule}". If this is a nested app (for example apps/${safeName}), run npm install in that app directory or enable "Run npm install before start".`
-              );
             }
+            throw error;
           }
-          throw error;
         }
-      }
 
-      if (!scripts[startScriptName]) {
-        throw new Error(`Missing "${startScriptName}" script in ${packageJsonPath}`);
-      }
+        if (!scripts[startScriptName]) {
+          throw new Error(`Missing "${startScriptName}" script in ${packageJsonPath}`);
+        }
 
-      finalScript = npmCmd;
-      finalArgs = npmCommandArgsBuilder(["run", startScriptName]).join(" ");
-      finalCwd = projectDir;
+        finalScript = npmCmd;
+        finalArgs = npmCommandArgsBuilder(["run", startScriptName]).join(" ");
+        finalCwd = projectDir;
+      }
     }
 
     if (resolvedNodeVersion && isNodeInterpreterValue(interpreter) && !resolvedInterpreterOverride) {
@@ -1723,12 +1820,16 @@ async function createProcess(config, actorContext = "unknown") {
     const safeCwd = resolveSafePath(String(finalCwd || process.cwd()), PROJECTS_ROOT, "cwd");
 
     const parsedInstances = Number(instances || 1);
-    const safeInstances = Number.isFinite(parsedInstances)
+    const safeInstances = forceForkMode
+      ? 1
+      : Number.isFinite(parsedInstances)
       ? Math.min(64, Math.max(1, Math.floor(parsedInstances)))
       : 1;
 
     const incomingMode = String(exec_mode || "fork").trim();
-    const safeExecMode =
+    const safeExecMode = forceForkMode
+      ? "fork"
+      :
       incomingMode === "cluster" || incomingMode === "cluster_mode" ? "cluster" : "fork";
 
     const processConfig = {

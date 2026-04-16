@@ -112,7 +112,7 @@ const MAX_MEMORY_RESTART_PATTERN = /^\d+(M|G|K|m|g|k)$/;
 const DEFAULT_RUNTIME_HINT = {
   interpreter: "node",
   execMode: "cluster",
-  reason: "Node.js app detected"
+  reason: "Node.js app detected. Project and Git modes also auto-detect plain static sites when index.html exists without package.json."
 };
 
 function inferRuntimeHint(mode, form) {
@@ -631,13 +631,18 @@ export default function CreateProcess() {
               )}
 
               {mode === "project" && (
-                <Field label="Project Directory" required>
-                  <Input
-                    value={form.project_path}
-                    onChange={(e) => update("project_path", e.target.value)}
-                    placeholder="/root/my-app"
-                  />
-                </Field>
+                <>
+                  <Field label="Project Directory" required>
+                    <Input
+                      value={form.project_path}
+                      onChange={(e) => update("project_path", e.target.value)}
+                      placeholder="/root/my-app"
+                    />
+                  </Field>
+                  <SupportingCopy size="xs">
+                    If this directory contains <code>index.html</code> but no <code>package.json</code>, PM2 Manager will auto-host it as a static site on the port you choose.
+                  </SupportingCopy>
+                </>
               )}
 
               {mode === "git" && (
@@ -665,6 +670,9 @@ export default function CreateProcess() {
                       placeholder="repo-name or relative/path/inside/allowed/root"
                     />
                   </Field>
+                  <SupportingCopy size="xs">
+                    Plain static repos are supported. If the clone contains <code>index.html</code> and no <code>package.json</code>, PM2 Manager will auto-serve it instead of expecting an npm start script.
+                  </SupportingCopy>
 
                   <Field label=".env File Content (Optional)">
                     <Textarea
@@ -781,6 +789,11 @@ export default function CreateProcess() {
 
               <Field label="Port">
                 <Input type="number" value={form.port} onChange={(e) => update("port", e.target.value)} />
+                {(mode === "project" || mode === "git") && (
+                  <SupportingCopy size="xs" className="mt-1">
+                    For auto-detected static sites, this port is used by the built-in static server. If left blank, PM2 Manager uses <code>3000</code>.
+                  </SupportingCopy>
+                )}
               </Field>
 
               <label className="flex items-center gap-3 text-sm text-text-2">
