@@ -550,13 +550,24 @@ async function getCaddyStatus() {
     ...(caddyfileSites || {}),
     ...(sites || {})
   };
-  const sslStatusByDomain = {};
-  await Promise.all(
-    Object.keys(mergedSites).map(async (domain) => {
-      sslStatusByDomain[domain] = await checkHttpsStatus(domain);
-    })
-  );
   const payload = getStatusPayload(caddyStatus, installInfo, sites, caddyfileSites);
+  const sslStatusByDomain = {};
+
+  if (!caddyStatus.installed || !caddyStatus.available) {
+    Object.keys(mergedSites).forEach((domain) => {
+      sslStatusByDomain[domain] = {
+        state: "unknown",
+        message: "HTTPS probe skipped because Caddy is not installed or unavailable"
+      };
+    });
+  } else {
+    await Promise.all(
+      Object.keys(mergedSites).map(async (domain) => {
+        sslStatusByDomain[domain] = await checkHttpsStatus(domain);
+      })
+    );
+  }
+
   payload.managedSites = payload.managedSites.map((site) => ({
     ...site,
     https: sslStatusByDomain[site.domain] || { state: "unknown", message: "No TLS data" }

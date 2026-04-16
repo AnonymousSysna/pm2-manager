@@ -257,3 +257,47 @@ test("getCaddyStatus tolerates malformed TLS certificate expiry data", async () 
     await fs.promises.rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+test("getCaddyStatus skips HTTPS probes when caddy is unavailable", async () => {
+  const tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "pm2-manager-caddy-unavailable-"));
+  const managedSitesPath = path.join(tempRoot, "caddy-managed-sites.json");
+  const caddyfilePath = path.join(tempRoot, "Caddyfile");
+
+  await fs.promises.writeFile(
+    managedSitesPath,
+    JSON.stringify({ "offline.example.com": "127.0.0.1:3000" }, null, 2),
+    "utf8"
+  );
+
+  const harness = loadControllerWithMockedSpawn(
+    {},
+    {
+      managedSitesPath,
+      caddyfilePath
+    }
+  );
+  const originalTlsConnect = tls.connect;
+  let tlsConnectCalls = 0;
+
+  tls.connect = () => {
+    tlsConnectCalls += 1;
+    throw new Error("tls.connect should not be called when caddy is unavailable");
+  };
+
+  try {
+    harness.calls.length = 0;
+    const result = await harness.controller.getCaddyStatus();
+    assert.equal(result.success, true);
+    assert.equal(result.data.installed, false);
+    assert.equal(result.data.available, false);
+    assert.equal(tlsConnectCalls, 0);
+    const site = result.data.managedSites.find((entry) => entry.domain === "offline.example.com");
+    assert.ok(site);
+    assert.equal(site.https.state, "unknown");
+    assert.match(site.https.message, /probe skipped/i);
+  } finally {
+    tls.connect = originalTlsConnect;
+    harness.restore();
+    await fs.promises.rm(tempRoot, { recursive: true, force: true });
+  }
+});
