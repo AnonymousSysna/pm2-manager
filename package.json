@@ -10,7 +10,7 @@
     "start": "npm --prefix server run start",
     "onetap": "node ./scripts/onetap.js",
     "typecheck": "npm --prefix client run typecheck && npm --prefix server run typecheck",
-    "pm2:start": "npm --prefix server exec pm2 -- start ../ecosystem.config.js",
+    "pm2:start": "npm --prefix server exec pm2 -- start ./ecosystem.config.js",
     "pm2:stop": "npm --prefix server exec pm2 -- stop pm2-dashboard",
     "pm2:restart": "npm --prefix server exec pm2 -- restart pm2-dashboard",
     "pm2:logs": "npm --prefix server exec pm2 -- logs pm2-dashboard",
