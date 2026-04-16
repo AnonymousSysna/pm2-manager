@@ -1,5 +1,5 @@
 const pm2 = require("pm2");
-const { withPermissionHint } = require("./permissionHints");
+const { withPermissionHint } = require("./permissionHints.js");
 
 function withPM2(action) {
   return new Promise((resolve) => {

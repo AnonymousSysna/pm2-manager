@@ -5,7 +5,7 @@ const path = require("path");
 const { spawn } = require("child_process");
 const pm2 = require("pm2");
 const { withPM2 } = require("../utils/pm2Client");
-const { withPermissionHint } = require("../utils/permissionHints");
+const { withPermissionHint } = require("../utils/permissionHints.js");
 const {
   ENV_KEY_PATTERN,
   sanitizeProcessName,

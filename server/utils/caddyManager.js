@@ -3,7 +3,7 @@ const os = require("os");
 const path = require("path");
 const tls = require("tls");
 const { spawn } = require("child_process");
-const { withPermissionHint } = require("./permissionHints");
+const { withPermissionHint } = require("./permissionHints.js");
 
 const COMMAND_TIMEOUT_MS = Number.isFinite(Number(process.env.COMMAND_TIMEOUT_MS))
   ? Math.max(5000, Math.floor(Number(process.env.COMMAND_TIMEOUT_MS)))
