@@ -126,7 +126,7 @@ export default function Notifications() {
     <div className="space-y-4">
       <PageIntro
         title="Notifications"
-        description="Review live and historical system events with level/category filters in a single timeline."
+        description="Filter the event feed by severity or category, inspect full errors, and clear stored notification history."
       />
 
       <section className="page-panel">

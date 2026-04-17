@@ -124,7 +124,7 @@ export default function Caddy() {
     <div className="space-y-4">
       <PageIntro
         title="Caddy Reverse Proxy"
-        description="Configure domain routing in one place and push updates to Caddy."
+        description="Check Caddy service status, restart it, and map domains to upstream ports."
       />
 
       <section className="page-panel space-y-3">

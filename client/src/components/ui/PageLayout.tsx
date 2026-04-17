@@ -34,7 +34,3 @@ export function PanelHeader({ title, description, actions, className }: HeaderPr
   );
 }
 
-export function SectionHeader({ title, description, actions, className }: HeaderProps) {
-  return <PanelHeader title={title} description={description} actions={actions} className={className} />;
-}
-

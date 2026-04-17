@@ -150,9 +150,7 @@ export default function Dashboard() {
       if (result.success) {
         setSystemResources(result.data || null);
       }
-    } catch (_error) {
-      // Optional panel.
-    }
+    } catch {}
   };
 
   const refreshOnboardingChecklist = async () => {
@@ -312,10 +310,34 @@ export default function Dashboard() {
   );
 
   const checklistItems = useMemo(() => ([
-    { key: "hasProcess", label: "Add the first managed process", done: checklist.hasProcess, to: "/dashboard/create" },
-    { key: "hasAlertChannel", label: "Wire an alert channel", done: checklist.hasAlertChannel, to: "/dashboard/settings" },
-    { key: "hasStartupPersistence", label: "Persist PM2 on startup", done: checklist.hasStartupPersistence, to: "/dashboard/settings" },
-    { key: "hasDomain", label: "Publish a domain through Caddy", done: checklist.hasDomain, to: "/dashboard/caddy" }
+    {
+      key: "hasProcess",
+      label: "Add the first managed process",
+      actionLabel: "Add first process",
+      done: checklist.hasProcess,
+      to: "/dashboard/create"
+    },
+    {
+      key: "hasAlertChannel",
+      label: "Wire an alert channel",
+      actionLabel: "Configure alerts",
+      done: checklist.hasAlertChannel,
+      to: "/dashboard/settings"
+    },
+    {
+      key: "hasStartupPersistence",
+      label: "Persist PM2 on startup",
+      actionLabel: "Persist on reboot",
+      done: checklist.hasStartupPersistence,
+      to: "/dashboard/settings"
+    },
+    {
+      key: "hasDomain",
+      label: "Publish a domain through Caddy",
+      actionLabel: "Add domain",
+      done: checklist.hasDomain,
+      to: "/dashboard/caddy"
+    }
   ]), [checklist]);
 
   const checklistDoneCount = checklistItems.filter((item) => item.done).length;
@@ -343,6 +365,19 @@ export default function Dashboard() {
 
     return edges.sort((a, b) => (`${a.from}:${a.to}`).localeCompare(`${b.from}:${b.to}`));
   }, [processMeta]);
+
+  const processRows = useMemo(
+    () =>
+      filtered.map((proc) => ({
+        proc,
+        summary: monitoringSummary[proc.name] || {},
+        selected: Boolean(selectedNames[proc.name]),
+        hasDotEnv: Boolean(dotEnvByProcess[proc.name])
+      })),
+    [filtered, monitoringSummary, selectedNames, dotEnvByProcess]
+  );
+
+  const allSelected = processRows.length > 0 && processRows.every((item) => item.selected);
 
   const openDetails = async (proc) => {
     try {
@@ -900,7 +935,7 @@ export default function Dashboard() {
     <div className="space-y-4">
       <PageIntro
         title="Operations Console"
-        description="Run the PM2 fleet from live health, recent exceptions, and the actions an operator needs most often."
+        description="See which processes need attention, jump into logs or deploy history, and restart or inspect a service without leaving the dashboard."
         actions={(
           <>
             <Button type="button" variant="secondary" onClick={() => openDeploymentHistory()}>
@@ -928,27 +963,25 @@ export default function Dashboard() {
       <div className="ops-section-grid">
         <div className="space-y-4 xl:col-span-2">
           <ProcessListPanel
-            filtered={filtered}
-            monitoringSummary={monitoringSummary}
-            selectedNames={selectedNames}
-            toggleSelected={toggleSelected}
-            toggleSelectAllFiltered={toggleSelectAllFiltered}
-            selectedCount={selectedCount}
-            runBulkAction={runBulkAction}
-            query={query}
-            setQuery={setQuery}
-            openDetails={openDetails}
-            openMetaModal={openMetaModal}
-            openDotEnvModal={openDotEnvModal}
-            openDeployModal={openDeployModal}
-            openDeploymentHistoryForProcess={openDeploymentHistory}
-            dotEnvByProcess={dotEnvByProcess}
-            loadingAction={loadingAction}
-            callAction={callAction}
-            onOpenLogs={openLogsForProcess}
-            onOpenApp={openAppForPort}
-            bytesToMB={bytesToMB}
-            durationLabel={durationLabel}
+            items={processRows}
+            selection={{ allSelected, selectedCount }}
+            controls={{
+              query,
+              setQuery,
+              toggleSelected,
+              toggleSelectAllFiltered,
+              runBulkAction,
+              openDetails,
+              openMetaModal,
+              openDotEnvModal,
+              openDeployModal,
+              openDeploymentHistoryForProcess: openDeploymentHistory,
+              loadingAction,
+              callAction,
+              onOpenLogs: openLogsForProcess,
+              onOpenApp: openAppForPort
+            }}
+            formatters={{ bytesToMB, durationLabel }}
           />
         </div>
 

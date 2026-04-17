@@ -6,7 +6,7 @@ export default function DependencyGraphPanel({ dependencyEdges = [] }) {
     <section className="page-panel space-y-3">
       <PanelHeader
         title="Dependencies"
-        description="Declared startup relationships that matter when you duplicate, deploy, or debug cascading failures."
+        description="Saved startup dependencies from process metadata."
       />
       {dependencyEdges.length === 0 ? (
         <p className="text-sm text-text-3">No declared process dependencies.</p>

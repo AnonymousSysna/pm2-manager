@@ -6,8 +6,8 @@ export default function SetupChecklistPanel({ checklistItems, checklistDoneCount
   return (
     <section className="page-panel space-y-3">
       <PanelHeader
-        title={`Operator Setup ${checklistDoneCount}/${checklistItems.length}`}
-        description="Keep the instance usable before you scale process count or add more automation."
+        title="Initial setup"
+        description={`${checklistDoneCount} of ${checklistItems.length} tasks complete. Add a process, alerts, startup recovery, and a domain before you depend on this host.`}
         actions={(
           <Button type="button" size="sm" variant="secondary" onClick={onDismiss}>
             Hide checklist
@@ -27,7 +27,7 @@ export default function SetupChecklistPanel({ checklistItems, checklistDoneCount
               </div>
               {!item.done && (
                 <Button type="button" size="sm" variant="outlineInfo" onClick={() => onNavigate(item.to)}>
-                  Go there
+                  {item.actionLabel || item.label}
                 </Button>
               )}
             </div>

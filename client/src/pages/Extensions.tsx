@@ -162,7 +162,7 @@ export default function Extensions() {
     <div className="space-y-4">
       <PageIntro
         title="Extensions"
-        description="Install and manage optional components from this dashboard."
+        description="Check what this host can install, add Caddy, and rescan the interpreters PM2 can run."
       />
 
       <section className="page-panel">

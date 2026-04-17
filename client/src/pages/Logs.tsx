@@ -381,9 +381,7 @@ export default function Logs() {
       );
       setEntries([]);
       setFlushConfirmOpen(false);
-    } catch (_error) {
-      // Toast is handled by toast.promise.
-    }
+    } catch {}
   };
 
   const downloadTxt = () => {
@@ -402,7 +400,7 @@ export default function Logs() {
     <div className="space-y-4">
       <PageIntro
         title="Logs"
-        description="Stream, filter, and export process logs with consistent controls across single-process and combined views."
+        description="Tail one process or up to 12 together, search entries, export the current view, or flush a single process log."
       />
 
       {showCreateHint && (

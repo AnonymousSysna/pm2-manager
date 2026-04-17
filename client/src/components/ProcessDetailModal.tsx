@@ -190,7 +190,7 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
   return (
     <Modal
       title={process.name}
-      description="Inspect runtime details, live resource history, and secondary maintenance actions."
+      description="Status, PM2 environment, health probes, and manual actions for this process."
       onClose={onClose}
       position="right"
       closeLabel="Close process details"
@@ -363,18 +363,34 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
 
       {tab === "Actions" && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-2">
-            <QuickAction label="Start" icon={Play} variant="success" disabled={isOnline || loadingAction.start} onClick={() => runAction("start", process.name)} />
-            <QuickAction label="Stop" icon={Square} variant="danger" disabled={isStopped || loadingAction.stop} onClick={() => runAction("stop", process.name)} />
-            <QuickAction label="Restart" icon={RefreshCw} variant="info" disabled={loadingAction.restart} onClick={() => runAction("restart", process.name)} />
-            <QuickAction label="Reload" icon={RotateCcw} variant="warning" disabled={!isCluster || !isOnline || loadingAction.reload} onClick={() => runAction("reload", process.name)} />
-            <QuickAction label="Schedule restart" icon={AlarmClock} variant="secondary" disabled={loadingAction.schedule} onClick={() => runAction("schedule", process.name)} />
-            <QuickAction label="Duplicate" icon={Copy} variant="secondary" disabled={loadingAction.duplicate} onClick={() => runAction("duplicate", process.name)} />
-            <QuickAction label="Rollback" icon={Undo2} variant="warning" disabled={loadingAction.rollback} onClick={() => runAction("rollback", process.name)} />
-            <QuickAction label="Git pull" icon={GitBranch} variant="secondary" disabled={loadingAction.gitPull} onClick={() => runAction("gitPull", process.name)} />
-            <QuickAction label="NPM install" icon={Download} variant="secondary" disabled={loadingAction.npmInstall} onClick={() => runAction("npmInstall", process.name)} />
-            <QuickAction label="NPM build" icon={Hammer} variant="secondary" disabled={loadingAction.npmBuild} onClick={() => runAction("npmBuild", process.name)} />
-          </div>
+          <ActionSection
+            title="Runtime"
+            description="Common PM2 controls for this process."
+            actions={[
+              { label: "Start", icon: Play, variant: "success", disabled: isOnline || loadingAction.start, onClick: () => runAction("start", process.name) },
+              { label: "Stop", icon: Square, variant: "danger", disabled: isStopped || loadingAction.stop, onClick: () => runAction("stop", process.name) },
+              { label: "Restart", icon: RefreshCw, variant: "info", disabled: loadingAction.restart, onClick: () => runAction("restart", process.name) },
+              { label: "Reload", icon: RotateCcw, variant: "warning", disabled: !isCluster || !isOnline || loadingAction.reload, onClick: () => runAction("reload", process.name) }
+            ]}
+          />
+          <ActionSection
+            title="Code and packages"
+            description="Pull code or run package tasks in the process working directory."
+            actions={[
+              { label: "Git pull", icon: GitBranch, variant: "secondary", disabled: loadingAction.gitPull, onClick: () => runAction("gitPull", process.name) },
+              { label: "NPM install", icon: Download, variant: "secondary", disabled: loadingAction.npmInstall, onClick: () => runAction("npmInstall", process.name) },
+              { label: "NPM build", icon: Hammer, variant: "secondary", disabled: loadingAction.npmBuild, onClick: () => runAction("npmBuild", process.name) }
+            ]}
+          />
+          <ActionSection
+            title="Advanced"
+            description="Schedule, duplicate, or roll back when you are changing process behavior."
+            actions={[
+              { label: "Schedule restart", icon: AlarmClock, variant: "secondary", disabled: loadingAction.schedule, onClick: () => runAction("schedule", process.name) },
+              { label: "Duplicate", icon: Copy, variant: "secondary", disabled: loadingAction.duplicate, onClick: () => runAction("duplicate", process.name) },
+              { label: "Rollback", icon: Undo2, variant: "warning", disabled: loadingAction.rollback, onClick: () => runAction("rollback", process.name) }
+            ]}
+          />
           <Button type="button" className="w-full" variant="danger" disabled={loadingAction.delete} onClick={() => runAction("delete", process.name)}>
             <Trash2 size={16} />
             Delete process
@@ -408,5 +424,28 @@ function QuickAction({ label, icon: Icon, variant, onClick, disabled }) {
       <Icon size={16} />
       {label}
     </Button>
+  );
+}
+
+function ActionSection({ title, description, actions }) {
+  return (
+    <InsetCard>
+      <div className="mb-3">
+        <SubsectionTitle className="text-sm">{title}</SubsectionTitle>
+        <SupportingCopy size="xs" className="mt-1">{description}</SupportingCopy>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {actions.map((action) => (
+          <QuickAction
+            key={action.label}
+            label={action.label}
+            icon={action.icon}
+            variant={action.variant}
+            disabled={action.disabled}
+            onClick={action.onClick}
+          />
+        ))}
+      </div>
+    </InsetCard>
   );
 }

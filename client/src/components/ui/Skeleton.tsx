@@ -15,7 +15,6 @@ export function SkeletonText({ lines = 3, className, lineClassName }) {
     <div className={cn("space-y-2", className)} aria-hidden="true">
       {Array.from({ length: lines }).map((_, index) => (
         <Skeleton
-          // Keep the final line shorter so text blocks look less mechanical.
           key={index}
           className={cn("h-3", index === lines - 1 ? "w-2/3" : "w-full", lineClassName)}
         />

@@ -575,7 +575,7 @@ export default function CreateProcess() {
     <section className="mx-auto max-w-3xl space-y-4">
       <PageIntro
         title="Create Process"
-        description="Define runtime mode, startup behavior, and environment settings with one consistent workflow."
+        description="Point PM2 at a script, folder, or git repo, then set runtime, environment, and restart behavior before launch."
       />
 
       <div className="page-panel">

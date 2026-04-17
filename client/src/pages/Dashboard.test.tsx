@@ -1,5 +1,4 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import { within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import Dashboard from "./Dashboard";
 
@@ -126,8 +125,8 @@ describe("Dashboard", () => {
 
     await screen.findByText("Operations Overview");
 
-    expect(screen.getByText("1 process needs attention")).toBeInTheDocument();
-    const healthyNote = screen.getByText("Online processes without active alert noise");
-    expect(within(healthyNote.parentElement as HTMLElement).getByText("1")).toBeInTheDocument();
+    expect(screen.getAllByText("1 process needs attention").length).toBeGreaterThan(0);
+    expect(screen.getByText("2 recent alerts")).toBeInTheDocument();
+    expect(screen.getAllByText("api").length).toBeGreaterThan(0);
   });
 });

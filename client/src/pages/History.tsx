@@ -6,7 +6,7 @@ import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
 import InsetPanel from "../components/ui/InsetPanel";
 import Select from "../components/ui/Select";
-import { PageIntro, SectionHeader } from "../components/ui/PageLayout";
+import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 import { Skeleton } from "../components/ui/Skeleton";
 
 export default function History() {
@@ -77,9 +77,7 @@ export default function History() {
         setDeploymentPagination(result.data.pagination);
         setDeploymentPage(result.data.pagination.page);
       }
-    } catch (_error) {
-      // Optional panel.
-    } finally {
+    } catch {} finally {
       if (!silent) {
         setDeploymentHistoryLoading(false);
       }
@@ -97,9 +95,7 @@ export default function History() {
         setRestartPagination(result.data.pagination);
         setRestartPage(result.data.pagination.page);
       }
-    } catch (_error) {
-      // Optional panel.
-    } finally {
+    } catch {} finally {
       if (!silent) {
         setRestartHistoryLoading(false);
       }
@@ -124,9 +120,7 @@ export default function History() {
         setAuditPagination(result.data.pagination);
         setAuditPage(result.data.pagination.page);
       }
-    } catch (_error) {
-      // Optional panel.
-    } finally {
+    } catch {} finally {
       if (!silent) {
         setAuditHistoryLoading(false);
       }
@@ -151,11 +145,11 @@ export default function History() {
     <div className="space-y-4">
       <PageIntro
         title="History"
-        description="Review deployment, restart, and audit timelines."
+        description="Review deployments, restarts, and audit records, then filter down to one process or action."
       />
 
       <section className="page-panel">
-        <SectionHeader
+        <PanelHeader
           title="Deployment History"
           className="mb-3"
           actions={
@@ -238,7 +232,7 @@ export default function History() {
       </section>
 
       <section className="page-panel">
-        <SectionHeader
+        <PanelHeader
           title="Restart History"
           className="mb-3"
           actions={
@@ -301,7 +295,7 @@ export default function History() {
       </section>
 
       <section className="page-panel">
-        <SectionHeader
+        <PanelHeader
           title="Audit Trail"
           className="mb-3"
           actions={

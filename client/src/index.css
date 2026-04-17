@@ -64,9 +64,6 @@
     margin: 0;
     min-height: 100vh;
     background-color: theme("colors.bg");
-    background-image:
-      radial-gradient(circle at top right, rgb(var(--color-brand-500) / 0.1), transparent 28rem),
-      linear-gradient(180deg, rgb(var(--color-surface-2) / 0.12), transparent 24rem);
     color: theme("colors.text-1");
     font-family: "IBM Plex Sans", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   }
@@ -106,7 +103,7 @@
   }
 
   .page-intro {
-    @apply border-brand-500/30 bg-gradient-to-br from-surface via-surface to-surface-2;
+    @apply border-border/90 bg-surface;
   }
 
   .panel-title-row {

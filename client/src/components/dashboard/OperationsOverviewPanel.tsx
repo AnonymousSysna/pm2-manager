@@ -3,7 +3,7 @@ import Badge from "../ui/Badge";
 import Banner from "../ui/Banner";
 import Button from "../ui/Button";
 import { PanelHeader } from "../ui/PageLayout";
-import { InsetCard, StatCard } from "../ui/Surface";
+import { InsetCard } from "../ui/Surface";
 import { SubsectionTitle, SupportingCopy } from "../ui/Typography";
 
 function buildAttentionItems({ alerts = [], processes = [], monitoringSummary = [] }) {
@@ -112,15 +112,22 @@ export default function OperationsOverviewPanel({
   const attentionItems = buildAttentionItems({ alerts, processes, monitoringSummary });
   const attentionProcessNames = buildAttentionProcessNames({ alerts, processes, monitoringSummary });
   const attentionCount = attentionProcessNames.size;
-  const healthyCount = processes.filter(
-    (process) => process.status === "online" && !attentionProcessNames.has(process.name)
-  ).length;
+  const failingHealthNames = processes
+    .filter((process) => (monitoringSummary[process.name]?.health?.enabled && monitoringSummary[process.name]?.health?.currentState === "unhealthy"))
+    .map((process) => process.name);
+  const stoppedOrErroredNames = processes
+    .filter((process) => process.status === "stopped" || process.status === "errored")
+    .map((process) => process.name);
+  const alertProcessNames = Array.from(
+    new Set(alerts.map((alert) => String(alert.processName || "").trim()).filter(Boolean))
+  );
+  const firstAttentionProcess = attentionItems[0]?.processName || "";
 
   return (
     <section className="page-panel space-y-4">
       <PanelHeader
         title="Operations Overview"
-        description="Start from live state, current exceptions, and the fastest path back to a healthy fleet."
+        description="Open the incidents that matter first: failing health checks, stopped services, and recent alert noise."
         actions={(
           <>
             <Button type="button" size="sm" variant="secondary" onClick={onOpenHistory}>
@@ -134,22 +141,34 @@ export default function OperationsOverviewPanel({
         )}
       />
 
-      <div className="grid gap-3 md:grid-cols-4">
-        <StatCard label="Fleet" value={`${stats?.online ?? 0} / ${stats?.total ?? 0}`} note="Processes online right now" tone="elevated" />
-        <StatCard
-          label="Attention"
-          value={attentionCount}
-          valueClassName="text-warning-300"
-          note="Errored, stopped, unhealthy, or anomalous processes"
-          tone="elevated"
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <ActionBlock
+          title={attentionCount > 0 ? `${attentionCount} process${attentionCount === 1 ? " needs" : "es need"} attention` : "No active incidents"}
+          tone={attentionCount > 0 ? "warning" : "success"}
+          detail={attentionCount > 0 ? summarizeNames(Array.from(attentionProcessNames)) : `${stats?.online ?? 0} of ${stats?.total ?? 0} processes are online.`}
+          actionLabel={firstAttentionProcess ? "Open first incident logs" : null}
+          onAction={firstAttentionProcess ? () => onOpenLogs(firstAttentionProcess) : null}
         />
-        <StatCard label="Recent Alerts" value={alerts.length} note="Threshold hits in the current socket session" tone="elevated" />
-        <StatCard
-          label="Healthy"
-          value={healthyCount}
-          valueClassName="text-success-300"
-          note="Online processes without active alert noise"
-          tone="elevated"
+        <ActionBlock
+          title={failingHealthNames.length > 0 ? `${failingHealthNames.length} failing health check${failingHealthNames.length === 1 ? "" : "s"}` : "Health checks clear"}
+          tone={failingHealthNames.length > 0 ? "danger" : "success"}
+          detail={failingHealthNames.length > 0 ? summarizeNames(failingHealthNames) : "No unhealthy probes are blocking traffic right now."}
+          actionLabel={failingHealthNames[0] ? "Tail failing process" : null}
+          onAction={failingHealthNames[0] ? () => onOpenLogs(failingHealthNames[0]) : null}
+        />
+        <ActionBlock
+          title={stoppedOrErroredNames.length > 0 ? `${stoppedOrErroredNames.length} stopped or errored` : "No stopped services"}
+          tone={stoppedOrErroredNames.length > 0 ? "warning" : "success"}
+          detail={stoppedOrErroredNames.length > 0 ? summarizeNames(stoppedOrErroredNames) : "Every tracked service is running or intentionally idle."}
+          actionLabel={stoppedOrErroredNames[0] ? "Inspect deployment history" : "Review history"}
+          onAction={() => onOpenHistory()}
+        />
+        <ActionBlock
+          title={`${alerts.length} recent alert${alerts.length === 1 ? "" : "s"}`}
+          tone={alerts.length > 0 ? "info" : "neutral"}
+          detail={alerts.length > 0 ? summarizeNames(alertProcessNames) : "No threshold alerts have fired in the current socket session."}
+          actionLabel="Open history"
+          onAction={() => onOpenHistory()}
         />
       </div>
 
@@ -206,5 +225,35 @@ export default function OperationsOverviewPanel({
         )}
       </InsetCard>
     </section>
+  );
+}
+
+function summarizeNames(names = []) {
+  if (names.length === 0) {
+    return "No processes in this bucket.";
+  }
+  if (names.length <= 3) {
+    return names.join(", ");
+  }
+  return `${names.slice(0, 3).join(", ")}, +${names.length - 3} more`;
+}
+
+function ActionBlock({ title, detail, tone, actionLabel, onAction }) {
+  return (
+    <InsetCard className="rounded-xl bg-surface-2/60">
+      <div className="flex h-full flex-col gap-3">
+        <div>
+          <Badge tone={tone}>{title}</Badge>
+          <SupportingCopy size="xs" className="mt-2">{detail}</SupportingCopy>
+        </div>
+        {actionLabel && onAction ? (
+          <div className="mt-auto">
+            <Button type="button" size="sm" variant="secondary" onClick={onAction}>
+              {actionLabel}
+            </Button>
+          </div>
+        ) : null}
+      </div>
+    </InsetCard>
   );
 }

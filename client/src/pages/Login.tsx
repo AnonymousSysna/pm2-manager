@@ -34,9 +34,7 @@ export default function Login() {
 
       await loginPromise;
       navigate("/dashboard", { replace: true });
-    } catch (_error) {
-      // Toast is handled by toast.promise.
-    } finally {
+    } catch {} finally {
       setLoading(false);
     }
   };

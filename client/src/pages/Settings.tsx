@@ -12,7 +12,7 @@ import InsetPanel from "../components/ui/InsetPanel";
 import { ConfirmDialog } from "../components/ui/Modal";
 import RangeInput from "../components/ui/RangeInput";
 import Select from "../components/ui/Select";
-import { PageIntro, SectionHeader } from "../components/ui/PageLayout";
+import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 
 export default function Settings() {
   const [info, setInfo] = useState({ pm2Version: "-", nodeVersion: "-", pm2Home: "-" });
@@ -70,9 +70,7 @@ export default function Settings() {
           error: (error) => getErrorMessage(error, `${label} failed`)
         }
       );
-    } catch (_error) {
-      // Toast is handled by toast.promise.
-    }
+    } catch {}
   };
 
   const runAction = (label, fn, confirmText) => {
@@ -118,9 +116,7 @@ export default function Settings() {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-    } catch (_error) {
-      // Toast is handled by toast.promise.
-    }
+    } catch {}
   };
 
   const exportConfig = async () => {
@@ -258,11 +254,11 @@ export default function Settings() {
     <div className="space-y-4">
       <PageIntro
         title="Settings"
-        description="Manage PM2 daemon controls, dashboard preferences, alert channels, and account security."
+        description="Persist PM2 state, tune dashboard polling, manage alert webhooks, and change the dashboard password."
       />
 
       <section className="page-panel">
-        <SectionHeader title="PM2 Daemon Controls" className="mb-3" />
+        <PanelHeader title="PM2 Daemon Controls" className="mb-3" />
         <div className="flex flex-wrap gap-2">
           <Button
             variant="outlineInfo"
@@ -293,7 +289,7 @@ export default function Settings() {
 
 
       <section className="page-panel">
-        <SectionHeader title="Dashboard Settings" className="mb-3" />
+        <PanelHeader title="Dashboard Settings" className="mb-3" />
         <div className="space-y-3 text-base text-text-2">
           <Field label={`Poll interval: ${pollSeconds}s`}>
             <RangeInput
@@ -314,7 +310,7 @@ export default function Settings() {
       </section>
 
       <section className="page-panel">
-        <SectionHeader title="Process Config Export / Import" className="mb-3" />
+        <PanelHeader title="Process Config Export / Import" className="mb-3" />
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" onClick={exportConfig}>
             Export Config JSON
@@ -324,7 +320,7 @@ export default function Settings() {
       </section>
 
       <section className="page-panel">
-        <SectionHeader title="External Alert Channels" className="mb-3" />
+        <PanelHeader title="External Alert Channels" className="mb-3" />
         {channelsWithFailures.length > 0 && (
           <Banner tone="warning" icon={<AlertTriangle size={14} />} className="mb-3">
             {channelsWithFailures.length} channel(s) have failed deliveries.
@@ -382,7 +378,7 @@ export default function Settings() {
       </section>
 
       <section className="page-panel">
-        <SectionHeader title="Change Password" className="mb-3" />
+        <PanelHeader title="Change Password" className="mb-3" />
         <div className="grid gap-2 md:max-w-md">
           <Input
             type="password"

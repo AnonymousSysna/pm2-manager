@@ -11,35 +11,20 @@ import TextButton from "../ui/TextButton";
 import { Eyebrow, SupportingCopy } from "../ui/Typography";
 
 export default function ProcessListPanel({
-  filtered,
-  monitoringSummary,
-  selectedNames,
-  toggleSelected,
-  toggleSelectAllFiltered,
-  selectedCount,
-  runBulkAction,
-  query,
-  setQuery,
-  openDetails,
-  openMetaModal,
-  openDotEnvModal,
-  openDeployModal,
-  openDeploymentHistoryForProcess,
-  dotEnvByProcess,
-  loadingAction,
-  callAction,
-  onOpenLogs,
-  onOpenApp,
-  bytesToMB,
-  durationLabel
+  items,
+  selection,
+  controls,
+  formatters
 }) {
-  const allSelected = filtered.length > 0 && filtered.every((proc) => Boolean(selectedNames[proc.name]));
+  const { allSelected, selectedCount } = selection;
+  const { query, setQuery, toggleSelectAllFiltered, runBulkAction } = controls;
+  const { bytesToMB, durationLabel } = formatters;
 
   return (
     <section className="page-panel space-y-4 process-control-panel">
       <PanelHeader
         title="Process Control"
-        description="The fastest route to inspect state, restart safely, jump into logs, and deploy with fewer clicks."
+        description="Filter the PM2 list, select a batch, and open inspect, logs, deploy, or rules for one process."
         actions={(
           <Input
             value={query}
@@ -79,31 +64,16 @@ export default function ProcessListPanel({
       </InsetCard>
 
       <div className="space-y-3 xl:hidden">
-        {filtered.map((proc) => {
-          const summary = monitoringSummary[proc.name] || {};
-          return (
-            <ProcessCard
-              key={proc.name}
-              proc={proc}
-              summary={summary}
-              selected={Boolean(selectedNames[proc.name])}
-              toggleSelected={toggleSelected}
-              openDetails={openDetails}
-              openMetaModal={openMetaModal}
-              openDotEnvModal={openDotEnvModal}
-              openDeployModal={openDeployModal}
-              openDeploymentHistoryForProcess={openDeploymentHistoryForProcess}
-              dotEnvByProcess={dotEnvByProcess}
-              loadingAction={loadingAction}
-              callAction={callAction}
-              onOpenLogs={onOpenLogs}
-              onOpenApp={onOpenApp}
-              bytesToMB={bytesToMB}
-              durationLabel={durationLabel}
-            />
-          );
-        })}
-        {filtered.length === 0 && <EmptyState />}
+        {items.map((item) => (
+          <ProcessCard
+            key={item.proc.name}
+            item={item}
+            controls={controls}
+            bytesToMB={bytesToMB}
+            durationLabel={durationLabel}
+          />
+        ))}
+        {items.length === 0 && <EmptyState />}
       </div>
 
       <div className="process-control-table hidden overflow-x-auto xl:block">
@@ -121,36 +91,20 @@ export default function ProcessListPanel({
             </tr>
           </thead>
           <tbody>
-            {filtered.map((proc) => {
-              const summary = monitoringSummary[proc.name] || {};
-              const anomaly = summary.anomaly || { isAnomaly: false, score: 0 };
+            {items.map((item) => {
+              const { proc, summary, selected } = item;
               const health = summary.health || {};
 
               return (
                 <tr key={proc.name} className="border-b border-border/70 align-top last:border-b-0">
                   <td className="px-3 py-4">
                     <Checkbox
-                      checked={Boolean(selectedNames[proc.name])}
-                      onChange={(event) => toggleSelected(proc.name, event.target.checked)}
+                      checked={selected}
+                      onChange={(event) => controls.toggleSelected(proc.name, event.target.checked)}
                     />
                   </td>
                   <td className="px-3 py-4">
-                    <div className="min-w-[200px]">
-                      <TextButton type="button" className="text-left text-base font-semibold" onClick={() => openDetails(proc)}>
-                        {proc.name}
-                      </TextButton>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <Badge tone={proc.mode === "cluster" ? "info" : "neutral"}>{proc.mode || "fork"}</Badge>
-                        {proc.id !== undefined && <Badge tone="neutral">ID {proc.id}</Badge>}
-                        {proc.cronRestart && <Badge tone="warning">Restart {proc.cronRestart}</Badge>}
-                        {anomaly.isAnomaly && <Badge tone="warning">Anomaly {anomaly.score}</Badge>}
-                        {health.enabled && (
-                          <Badge tone={health.currentState === "healthy" ? "success" : health.currentState === "unhealthy" ? "danger" : "warning"}>
-                            Health {health.currentState || "pending"}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
+                    <ProcessIdentity item={item} controls={controls} />
                   </td>
                   <td className="px-3 py-4">
                     <div className="space-y-2">
@@ -172,24 +126,15 @@ export default function ProcessListPanel({
                   </td>
                   <td className="px-3 py-4 min-w-[23rem]">
                     <RowActions
-                      proc={proc}
+                      item={item}
                       layout="table"
-                      openDetails={openDetails}
-                      openMetaModal={openMetaModal}
-                      openDotEnvModal={openDotEnvModal}
-                      openDeployModal={openDeployModal}
-                      openDeploymentHistoryForProcess={openDeploymentHistoryForProcess}
-                      dotEnvByProcess={dotEnvByProcess}
-                      loadingAction={loadingAction}
-                      callAction={callAction}
-                      onOpenLogs={onOpenLogs}
-                      onOpenApp={onOpenApp}
+                      controls={controls}
                     />
                   </td>
                 </tr>
               );
             })}
-            {filtered.length === 0 && (
+            {items.length === 0 && (
               <tr>
                 <td className="px-2 py-10" colSpan={6}>
                   <EmptyState />
@@ -204,55 +149,16 @@ export default function ProcessListPanel({
 }
 
 function ProcessCard({
-  proc,
-  summary,
-  selected,
-  toggleSelected,
-  openDetails,
-  openMetaModal,
-  openDotEnvModal,
-  openDeployModal,
-  openDeploymentHistoryForProcess,
-  dotEnvByProcess,
-  loadingAction,
-  callAction,
-  onOpenLogs,
-  onOpenApp,
+  item,
+  controls,
   bytesToMB,
   durationLabel
 }) {
-  const anomaly = summary.anomaly || { isAnomaly: false, score: 0 };
-  const health = summary.health || {};
+  const { proc, summary } = item;
 
   return (
     <InsetCard as="article" className="rounded-xl bg-surface-2/60">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <Checkbox checked={selected} onChange={(event) => toggleSelected(proc.name, event.target.checked)} />
-            <TextButton type="button" className="text-left text-base font-semibold" onClick={() => openDetails(proc)}>
-              {proc.name}
-            </TextButton>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <StatusBadge status={proc.status} />
-            <Badge tone={proc.mode === "cluster" ? "info" : "neutral"}>{proc.mode || "fork"}</Badge>
-            {proc.cronRestart && <Badge tone="warning">Restart {proc.cronRestart}</Badge>}
-            {anomaly.isAnomaly && <Badge tone="warning">Anomaly {anomaly.score}</Badge>}
-            {health.enabled && (
-              <Badge tone={health.currentState === "healthy" ? "success" : health.currentState === "unhealthy" ? "danger" : "warning"}>
-                Health {health.currentState || "pending"}
-              </Badge>
-            )}
-          </div>
-        </div>
-        {Number(proc.port) > 0 && (
-          <Button type="button" size="sm" variant="secondary" onClick={() => onOpenApp(proc.port)}>
-            <ExternalLink size={14} />
-            Port
-          </Button>
-        )}
-      </div>
+      <ProcessIdentity item={item} controls={controls} showSelector showPortButton />
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <LoadSummary proc={proc} bytesToMB={bytesToMB} />
@@ -261,21 +167,51 @@ function ProcessCard({
 
       <div className="mt-4">
         <RowActions
-          proc={proc}
+          item={item}
           compact
-          openDetails={openDetails}
-          openMetaModal={openMetaModal}
-          openDotEnvModal={openDotEnvModal}
-          openDeployModal={openDeployModal}
-          openDeploymentHistoryForProcess={openDeploymentHistoryForProcess}
-          dotEnvByProcess={dotEnvByProcess}
-          loadingAction={loadingAction}
-          callAction={callAction}
-          onOpenLogs={onOpenLogs}
-          onOpenApp={onOpenApp}
+          controls={controls}
         />
       </div>
     </InsetCard>
+  );
+}
+
+function ProcessIdentity({ item, controls, showSelector = false, showPortButton = false }) {
+  const { proc, summary, selected } = item;
+  const anomaly = summary.anomaly || { isAnomaly: false, score: 0 };
+  const health = summary.health || {};
+
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          {showSelector ? (
+            <Checkbox checked={selected} onChange={(event) => controls.toggleSelected(proc.name, event.target.checked)} />
+          ) : null}
+          <TextButton type="button" className="text-left text-base font-semibold" onClick={() => controls.openDetails(proc)}>
+            {proc.name}
+          </TextButton>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <StatusBadge status={proc.status} />
+          <Badge tone={proc.mode === "cluster" ? "info" : "neutral"}>{proc.mode || "fork"}</Badge>
+          {proc.id !== undefined && <Badge tone="neutral">ID {proc.id}</Badge>}
+          {proc.cronRestart && <Badge tone="warning">Restart {proc.cronRestart}</Badge>}
+          {anomaly.isAnomaly && <Badge tone="warning">Anomaly {anomaly.score}</Badge>}
+          {health.enabled && (
+            <Badge tone={health.currentState === "healthy" ? "success" : health.currentState === "unhealthy" ? "danger" : "warning"}>
+              Health {health.currentState || "pending"}
+            </Badge>
+          )}
+        </div>
+      </div>
+      {showPortButton && Number(proc.port) > 0 ? (
+        <Button type="button" size="sm" variant="secondary" onClick={() => controls.onOpenApp(proc.port)}>
+          <ExternalLink size={14} />
+          Port
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
@@ -327,20 +263,23 @@ function RuntimeSummary({ proc, summary, durationLabel }) {
 }
 
 function RowActions({
-  proc,
+  item,
   compact = false,
   layout = "default",
-  openDetails,
-  openMetaModal,
-  openDotEnvModal,
-  openDeployModal,
-  openDeploymentHistoryForProcess,
-  dotEnvByProcess,
-  loadingAction,
-  callAction,
-  onOpenLogs,
-  onOpenApp
+  controls
 }) {
+  const { proc, hasDotEnv } = item;
+  const {
+    openDetails,
+    openMetaModal,
+    openDotEnvModal,
+    openDeployModal,
+    openDeploymentHistoryForProcess,
+    loadingAction,
+    callAction,
+    onOpenLogs,
+    onOpenApp
+  } = controls;
   const isOnline = proc.status === "online";
   const canOpenApp = Number(proc.port) > 0;
   const isTableLayout = layout === "table";
@@ -370,7 +309,7 @@ function RowActions({
           <Rocket size={14} />
           Deploy
         </Button>
-        {dotEnvByProcess[proc.name] && (
+        {hasDotEnv && (
           <Button type="button" size="sm" variant="secondary" onClick={() => openDotEnvModal(proc)}>
             <FileCog size={14} />
             Env
