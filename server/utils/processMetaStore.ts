@@ -36,13 +36,64 @@ function normalizeThresholds(input) {
   };
 }
 
+function normalizeHealthPath(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return "/";
+  }
+  const base = raw.startsWith("/") ? raw : `/${raw}`;
+  return base.slice(0, 256);
+}
+
+function normalizePort(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const numeric = Number(value);
+  if (!Number.isInteger(numeric) || numeric < 1 || numeric > 65535) {
+    throw new Error("health check port must be an integer between 1 and 65535");
+  }
+
+  return numeric;
+}
+
+function normalizeHealthCheck(input) {
+  const source = input && typeof input === "object" ? input : {};
+  const intervalSec = Number(source.intervalSec);
+  const timeoutMs = Number(source.timeoutMs);
+  const failureThreshold = Number(source.failureThreshold);
+  const successThreshold = Number(source.successThreshold);
+  const gracePeriodSec = Number(source.gracePeriodSec);
+  const protocol = String(source.protocol || "http").trim().toLowerCase();
+
+  return {
+    enabled: Boolean(source.enabled),
+    protocol: protocol === "tcp" ? "tcp" : "http",
+    port: normalizePort(source.port),
+    path: normalizeHealthPath(source.path),
+    intervalSec: Number.isFinite(intervalSec) ? Math.max(5, Math.min(3600, Math.floor(intervalSec))) : 30,
+    timeoutMs: Number.isFinite(timeoutMs) ? Math.max(500, Math.min(30_000, Math.floor(timeoutMs))) : 5000,
+    failureThreshold: Number.isFinite(failureThreshold)
+      ? Math.max(1, Math.min(10, Math.floor(failureThreshold)))
+      : 3,
+    successThreshold: Number.isFinite(successThreshold)
+      ? Math.max(1, Math.min(5, Math.floor(successThreshold)))
+      : 1,
+    gracePeriodSec: Number.isFinite(gracePeriodSec)
+      ? Math.max(0, Math.min(600, Math.floor(gracePeriodSec)))
+      : 15
+  };
+}
+
 function normalizeProcessMeta(name, meta = {}) {
   const processName = sanitizeProcessName(name, "process name");
   const group = String(meta.group || "").trim().slice(0, 64);
   return {
     group,
     dependencies: normalizeDependencies(meta.dependencies).filter((item) => item !== processName),
-    alertThresholds: normalizeThresholds(meta.alertThresholds)
+    alertThresholds: normalizeThresholds(meta.alertThresholds),
+    healthCheck: normalizeHealthCheck(meta.healthCheck)
   };
 }
 

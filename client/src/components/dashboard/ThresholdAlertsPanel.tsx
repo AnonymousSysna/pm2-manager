@@ -9,9 +9,9 @@ export default function ThresholdAlertsPanel({ alerts = [], onOpenLogs }) {
     <section className="page-panel space-y-3">
       <PanelHeader
         title="Alert Feed"
-        description="Recent threshold hits worth investigating before they turn into noisy restarts."
+        description="Recent threshold and health incidents worth investigating before they turn into noisy restarts."
       />
-      {alerts.length === 0 && <p className="text-sm text-text-3">No active threshold alerts in the current session.</p>}
+      {alerts.length === 0 && <p className="text-sm text-text-3">No active alerts in the current session.</p>}
       <div className="max-h-64 space-y-2 overflow-y-auto text-sm">
         {alerts
           .slice()
@@ -24,7 +24,9 @@ export default function ThresholdAlertsPanel({ alerts = [], onOpenLogs }) {
                 <div className="min-w-0 flex-1">
                   <SubsectionTitle className="text-sm">{item.processName}</SubsectionTitle>
                   <SupportingCopy tone="default" className="mt-1">
-                    {item.metric} at {item.value} against threshold {item.threshold}
+                    {item.message || (item.threshold !== undefined
+                      ? `${item.metric} at ${item.value} against threshold ${item.threshold}`
+                      : `${item.metric || "health"} alert`)}
                   </SupportingCopy>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <span className="text-xs text-text-3">{new Date(item.ts).toLocaleTimeString()}</span>

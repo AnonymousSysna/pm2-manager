@@ -128,8 +128,8 @@ export function ProcessMetaModal({
 
   return (
     <Modal
-      title={`Thresholds and dependencies: ${process.name}`}
-      description="Store restart dependencies and alert thresholds with the process."
+      title={`Monitoring rules: ${process.name}`}
+      description="Store restart dependencies, threshold alerts, and persistent health checks with the process."
       onClose={onClose}
       size="lg"
     >
@@ -155,6 +155,85 @@ export function ProcessMetaModal({
             placeholder="512"
           />
         </Field>
+      </div>
+
+      <div className="mt-4 space-y-3 rounded-2xl border border-border/70 bg-surface-2/40 p-4">
+        <label className="flex items-center gap-2 text-sm text-text-2">
+          <Checkbox
+            checked={Boolean(metaForm.healthEnabled)}
+            onChange={(event) => setMetaForm((prev) => ({ ...prev, healthEnabled: event.target.checked }))}
+          />
+          Enable persistent health checks
+        </label>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <Field label="Protocol">
+            <Select
+              value={metaForm.healthProtocol}
+              onChange={(event) => setMetaForm((prev) => ({ ...prev, healthProtocol: event.target.value }))}
+              disabled={!metaForm.healthEnabled}
+            >
+              <option value="http">HTTP</option>
+              <option value="tcp">TCP</option>
+            </Select>
+          </Field>
+          <Field label="Port override">
+            <Input
+              value={metaForm.healthPort}
+              onChange={(event) => setMetaForm((prev) => ({ ...prev, healthPort: event.target.value }))}
+              placeholder="Blank uses detected process port"
+              disabled={!metaForm.healthEnabled}
+            />
+          </Field>
+          {metaForm.healthProtocol === "http" && (
+            <Field label="HTTP path">
+              <Input
+                value={metaForm.healthPath}
+                onChange={(event) => setMetaForm((prev) => ({ ...prev, healthPath: event.target.value }))}
+                placeholder="/health"
+                disabled={!metaForm.healthEnabled}
+              />
+            </Field>
+          )}
+          <Field label="Interval (sec)">
+            <Input
+              value={metaForm.healthIntervalSec}
+              onChange={(event) => setMetaForm((prev) => ({ ...prev, healthIntervalSec: event.target.value }))}
+              disabled={!metaForm.healthEnabled}
+            />
+          </Field>
+          <Field label="Timeout (ms)">
+            <Input
+              value={metaForm.healthTimeoutMs}
+              onChange={(event) => setMetaForm((prev) => ({ ...prev, healthTimeoutMs: event.target.value }))}
+              disabled={!metaForm.healthEnabled}
+            />
+          </Field>
+          <Field label="Failure threshold">
+            <Input
+              value={metaForm.healthFailureThreshold}
+              onChange={(event) => setMetaForm((prev) => ({ ...prev, healthFailureThreshold: event.target.value }))}
+              disabled={!metaForm.healthEnabled}
+            />
+          </Field>
+          <Field label="Recovery threshold">
+            <Input
+              value={metaForm.healthSuccessThreshold}
+              onChange={(event) => setMetaForm((prev) => ({ ...prev, healthSuccessThreshold: event.target.value }))}
+              disabled={!metaForm.healthEnabled}
+            />
+          </Field>
+          <Field label="Startup grace (sec)">
+            <Input
+              value={metaForm.healthGracePeriodSec}
+              onChange={(event) => setMetaForm((prev) => ({ ...prev, healthGracePeriodSec: event.target.value }))}
+              disabled={!metaForm.healthEnabled}
+            />
+          </Field>
+        </div>
+        <p className="text-xs text-text-3">
+          Checks run against `127.0.0.1` on the process port unless you override the port here.
+        </p>
       </div>
 
       <div className="mt-4 flex justify-between gap-2">

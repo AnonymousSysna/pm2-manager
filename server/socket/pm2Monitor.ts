@@ -1,4 +1,6 @@
+const http = require("http");
 const pm2 = require("pm2");
+const net = require("net");
 const { listProcesses } = require("../controllers/processController");
 const { isIpAllowed, getSocketIp } = require("../utils/ipAccess");
 const { parseCookieHeader } = require("../utils/cookies");
@@ -13,7 +15,7 @@ const {
 } = require("../middleware/metrics");
 const { appendHistoryEntry } = require("../utils/restartHistory");
 const { listProcessMeta } = require("../utils/processMetaStore");
-const { appendMetricsSample } = require("../utils/metricsHistoryStore");
+const { appendMetricsSample, appendHealthCheckSample } = require("../utils/metricsHistoryStore");
 const { sendAlertNotifications } = require("../utils/alertNotifier");
 const { appendNotification } = require("../utils/notificationStore");
 const { listAlertChannels } = require("../utils/alertChannelsStore");
@@ -25,7 +27,11 @@ let lastMetricsSampleAt = 0;
 let busReconnectTimer = null;
 const CRASH_LOOP_WINDOW_MS = 5 * 60 * 1000;
 const CRASH_LOOP_THRESHOLD = 3;
+const HEALTH_SWEEP_INTERVAL_MS = Number.isFinite(Number(process.env.HEALTH_SWEEP_INTERVAL_MS))
+  ? Math.max(2000, Math.floor(Number(process.env.HEALTH_SWEEP_INTERVAL_MS)))
+  : 5000;
 const restartWindowState = new Map();
+const healthRunState = new Map();
 
 function processSignature(proc) {
   return [
@@ -136,7 +142,113 @@ function extractLifecycleDetails(packet, event) {
   };
 }
 
+function resolveHealthPort(processInfo, check) {
+  const configured = Number(check?.port);
+  if (Number.isInteger(configured) && configured >= 1 && configured <= 65535) {
+    return configured;
+  }
+
+  const detected = Number(processInfo?.port);
+  if (Number.isInteger(detected) && detected >= 1 && detected <= 65535) {
+    return detected;
+  }
+
+  return null;
+}
+
+function normalizeHealthPath(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return "/";
+  }
+  return raw.startsWith("/") ? raw : `/${raw}`;
+}
+
+function probeHttp(port, pathName, timeoutMs) {
+  return new Promise((resolve) => {
+    const startedAt = Date.now();
+    let settled = false;
+    const finish = (payload) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(payload);
+    };
+    const request = http.request(
+      {
+        method: "GET",
+        host: "127.0.0.1",
+        port,
+        path: pathName,
+        timeout: timeoutMs
+      },
+      (response) => {
+        response.resume();
+        response.on("end", () => {
+          const latencyMs = Date.now() - startedAt;
+          const statusCode = Number(response.statusCode || 0);
+          finish({
+            healthy: statusCode >= 200 && statusCode < 400,
+            latencyMs,
+            statusCode,
+            reason: statusCode >= 200 && statusCode < 400 ? null : `HTTP ${statusCode}`
+          });
+        });
+      }
+    );
+
+    request.on("timeout", () => {
+      request.destroy(new Error("timeout"));
+    });
+
+    request.on("error", (error) => {
+      finish({
+        healthy: false,
+        latencyMs: Date.now() - startedAt,
+        statusCode: null,
+        reason: error?.message || "HTTP probe failed"
+      });
+    });
+
+    request.end();
+  });
+}
+
+function probeTcp(port, timeoutMs) {
+  return new Promise((resolve) => {
+    const startedAt = Date.now();
+    let settled = false;
+    const socket = net.createConnection({
+      host: "127.0.0.1",
+      port,
+      timeout: timeoutMs
+    });
+
+    const finish = (healthy, reason = null) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      socket.destroy();
+      resolve({
+        healthy,
+        latencyMs: Date.now() - startedAt,
+        statusCode: null,
+        reason
+      });
+    };
+
+    socket.once("connect", () => finish(true, null));
+    socket.once("timeout", () => finish(false, "TCP probe timeout"));
+    socket.once("error", (error) => finish(false, error?.message || "TCP probe failed"));
+  });
+}
+
 function registerPM2Monitor(io) {
+  let healthSweepTimer = null;
+  let healthSweepInProgress = false;
+
   const scheduleBusReconnect = (delayMs = 1500) => {
     if (busReconnectTimer) {
       return;
@@ -147,6 +259,199 @@ function registerPM2Monitor(io) {
     }, Math.max(250, Number(delayMs) || 1500));
     if (typeof busReconnectTimer.unref === "function") {
       busReconnectTimer.unref();
+    }
+  };
+
+  const publishAlerts = async (alerts, socket = null) => {
+    if (!Array.isArray(alerts) || alerts.length === 0) {
+      return;
+    }
+
+    const notificationPayload = await Promise.all(
+      alerts.map((alert) =>
+        appendNotification({
+          level:
+            alert.severity === "danger"
+              ? "danger"
+              : alert.severity === "info"
+                ? "info"
+                : "warning",
+          category: alert.category || "alert",
+          title: alert.title || `${alert.processName} alert`,
+          message:
+            alert.message ||
+            (alert.threshold !== undefined
+              ? `${alert.metric}=${alert.value} threshold=${alert.threshold}`
+              : `${alert.metric || "health"} alert`),
+          processName: alert.processName || null,
+          details: alert
+        }).catch(() => null)
+      )
+    );
+
+    const deliveries = await sendAlertNotifications(alerts);
+    const failedDeliveries = deliveries.filter((item) => !item.success);
+    if (failedDeliveries.length > 0) {
+      const channels = await listAlertChannels().catch(() => []);
+      const channelMap = new Map(channels.map((channel) => [channel.id, channel]));
+      const deliveryNotifications = await Promise.all(
+        failedDeliveries.map((failed) => {
+          const channel = channelMap.get(failed.channelId);
+          const channelName = channel?.name || failed.channelId || "unknown channel";
+          return appendNotification({
+            level: "warning",
+            category: "alert",
+            title: "Alert delivery failed",
+            message: `${channelName}: ${failed.error || "delivery error"}`,
+            processName: null,
+            details: {
+              channelId: failed.channelId || null,
+              channelName: channel?.name || null,
+              error: failed.error || "delivery error"
+            }
+          }).catch(() => null);
+        })
+      );
+      const created = deliveryNotifications.filter(Boolean);
+      if (created.length > 0) {
+        if (socket) {
+          socket.emit("notifications:new", created);
+        } else {
+          io.emit("notifications:new", created);
+        }
+      }
+    }
+
+    if (socket) {
+      socket.emit("monitor:alerts", alerts);
+      socket.emit("notifications:new", notificationPayload.filter(Boolean));
+    } else {
+      io.emit("monitor:alerts", alerts);
+      io.emit("notifications:new", notificationPayload.filter(Boolean));
+    }
+  };
+
+  const runHealthProbe = async (processName, processInfo, check) => {
+    const now = Date.now();
+    const intervalMs = Math.max(5000, Number(check?.intervalSec || 30) * 1000);
+    const lastRunAt = Number(healthRunState.get(processName) || 0);
+    if (now - lastRunAt < intervalMs) {
+      return [];
+    }
+    healthRunState.set(processName, now);
+
+    const processStatus = String(processInfo?.status || "missing");
+    const port = resolveHealthPort(processInfo, check);
+    const gracePeriodMs = Math.max(0, Number(check?.gracePeriodSec || 0) * 1000);
+
+    if (processInfo && gracePeriodMs > 0 && Number(processInfo.uptime || 0) < gracePeriodMs) {
+      await appendHealthCheckSample(
+        processName,
+        {
+          ts: now,
+          skipped: true,
+          reason: `Startup grace period active (${check.gracePeriodSec}s)`
+        },
+        check
+      );
+      return [];
+    }
+
+    if (!processInfo) {
+      const result = await appendHealthCheckSample(
+        processName,
+        {
+          ts: now,
+          healthy: false,
+          reason: "Process not found in PM2",
+          processStatus
+        },
+        check
+      );
+      return result.alerts;
+    }
+
+    if (processStatus !== "online") {
+      const result = await appendHealthCheckSample(
+        processName,
+        {
+          ts: now,
+          healthy: false,
+          reason: `Process status ${processStatus}`,
+          processStatus
+        },
+        check
+      );
+      return result.alerts;
+    }
+
+    if (!port) {
+      const result = await appendHealthCheckSample(
+        processName,
+        {
+          ts: now,
+          healthy: false,
+          reason: "No health check port configured or detected",
+          processStatus
+        },
+        check
+      );
+      return result.alerts;
+    }
+
+    const timeoutMs = Math.max(500, Number(check?.timeoutMs || 5000));
+    const protocol = String(check?.protocol || "http").trim().toLowerCase();
+    const probeResult = protocol === "tcp"
+      ? await probeTcp(port, timeoutMs)
+      : await probeHttp(port, normalizeHealthPath(check?.path), timeoutMs);
+
+    const result = await appendHealthCheckSample(
+      processName,
+      {
+        ts: now,
+        protocol,
+        port,
+        path: protocol === "http" ? normalizeHealthPath(check?.path) : null,
+        processStatus,
+        ...probeResult
+      },
+      check
+    );
+
+    return result.alerts;
+  };
+
+  const runHealthSweep = async () => {
+    if (healthSweepInProgress) {
+      return;
+    }
+
+    healthSweepInProgress = true;
+    try {
+      const [processResult, meta] = await Promise.all([listProcesses(), listProcessMeta()]);
+      if (!processResult.success) {
+        trackPm2Operation("socket.healthSweep", false);
+        return;
+      }
+      trackPm2Operation("socket.healthSweep", true);
+
+      const processMap = indexProcesses(processResult.data);
+      const enabledChecks = Object.entries(meta || {}).filter(([, item]) => item?.healthCheck?.enabled);
+      if (enabledChecks.length === 0) {
+        return;
+      }
+
+      const alertGroups = await Promise.all(
+        enabledChecks.map(([processName, item]) =>
+          runHealthProbe(processName, processMap.get(processName) || null, item.healthCheck)
+        )
+      );
+      const alerts = alertGroups.flat().filter(Boolean);
+      await publishAlerts(alerts);
+    } catch (_error) {
+      // Best-effort background health checks.
+    } finally {
+      healthSweepInProgress = false;
     }
   };
 
@@ -327,60 +632,7 @@ function registerPM2Monitor(io) {
     try {
       const meta = await listProcessMeta();
       const alerts = await appendMetricsSample(processes, meta);
-      if (alerts.length > 0) {
-        const notificationPayload = await Promise.all(
-          alerts.map((alert) =>
-            appendNotification({
-              level: alert.severity === "danger" ? "danger" : "warning",
-              category: "alert",
-              title: `${alert.processName} threshold alert`,
-              message: `${alert.metric}=${alert.value} threshold=${alert.threshold}`,
-              processName: alert.processName,
-              details: alert
-            }).catch(() => null)
-          )
-        );
-
-        const deliveries = await sendAlertNotifications(alerts);
-        const failedDeliveries = deliveries.filter((item) => !item.success);
-        if (failedDeliveries.length > 0) {
-          const channels = await listAlertChannels().catch(() => []);
-          const channelMap = new Map(channels.map((channel) => [channel.id, channel]));
-          const deliveryNotifications = await Promise.all(
-            failedDeliveries.map((failed) => {
-              const channel = channelMap.get(failed.channelId);
-              const channelName = channel?.name || failed.channelId || "unknown channel";
-              return appendNotification({
-                level: "warning",
-                category: "alert",
-                title: "Alert delivery failed",
-                message: `${channelName}: ${failed.error || "delivery error"}`,
-                processName: null,
-                details: {
-                  channelId: failed.channelId || null,
-                  channelName: channel?.name || null,
-                  error: failed.error || "delivery error"
-                }
-              }).catch(() => null);
-            })
-          );
-          const created = deliveryNotifications.filter(Boolean);
-          if (created.length > 0) {
-            if (socket) {
-              socket.emit("notifications:new", created);
-            } else {
-              io.emit("notifications:new", created);
-            }
-          }
-        }
-        if (socket) {
-          socket.emit("monitor:alerts", alerts);
-          socket.emit("notifications:new", notificationPayload.filter(Boolean));
-        } else {
-          io.emit("monitor:alerts", alerts);
-          io.emit("notifications:new", notificationPayload.filter(Boolean));
-        }
-      }
+      await publishAlerts(alerts, socket);
     } catch (_error) {
       // Best-effort metrics sampling.
     }
@@ -478,6 +730,13 @@ function registerPM2Monitor(io) {
   });
 
   attachBus();
+  runHealthSweep().catch(() => {
+    // Best-effort initial health sweep.
+  });
+  healthSweepTimer = setInterval(runHealthSweep, HEALTH_SWEEP_INTERVAL_MS);
+  if (typeof healthSweepTimer.unref === "function") {
+    healthSweepTimer.unref();
+  }
 }
 
 module.exports = { registerPM2Monitor };

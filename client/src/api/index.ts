@@ -134,6 +134,8 @@ export const processes = {
   clearMeta: (name: string) => api.delete<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/meta`).then(unwrap),
   metrics: (name: string, limit = 120) =>
     api.get<ApiResult<any[]>>(`/api/v1/processes/${encodeURIComponent(name)}/metrics?limit=${limit}`).then(unwrap),
+  health: (name: string, limit = 120) =>
+    api.get<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/health?limit=${limit}`).then(unwrap),
   exportConfig: () => api.get<ApiResult<any>>("/api/v1/processes/config/export").then(unwrap),
   importConfig: (payload: Record<string, unknown>) => api.post<ApiResult<any>>("/api/v1/processes/config/import", payload).then(unwrap),
   deploymentHistory: (limit: number | string = 100, processName = "", forceFresh = false) =>

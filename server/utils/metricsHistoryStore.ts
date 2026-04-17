@@ -58,6 +58,7 @@ async function ensureDir() {
 function createEmptyStore() {
   return {
     history: {},
+    healthHistory: {},
     config: {
       retentionPoints: MAX_POINTS_PER_PROCESS,
       maxAgeMs: MAX_SAMPLE_AGE_MS
@@ -88,7 +89,8 @@ async function loadStore() {
       data: {
         ...createEmptyStore(),
         ...(parsed && typeof parsed === "object" ? parsed : {}),
-        history: parsed?.history && typeof parsed.history === "object" ? parsed.history : {}
+        history: parsed?.history && typeof parsed.history === "object" ? parsed.history : {},
+        healthHistory: parsed?.healthHistory && typeof parsed.healthHistory === "object" ? parsed.healthHistory : {}
       }
     };
     return cache;
@@ -260,6 +262,204 @@ function evaluateThresholdAlerts(processes, processMeta) {
   return events;
 }
 
+function summarizeHealthHistory(points = []) {
+  const relevant = points.filter((point) => point && point.skipped !== true);
+  const last = relevant[relevant.length - 1] || null;
+  const totalChecks = relevant.length;
+  const healthyChecks = relevant.filter((point) => point.healthy === true).length;
+  const unhealthyChecks = relevant.filter((point) => point.healthy === false).length;
+  const availabilityPct =
+    totalChecks > 0 ? Number(((healthyChecks / totalChecks) * 100).toFixed(1)) : null;
+
+  const incidents = [];
+  let activeIncident = null;
+
+  for (const point of relevant) {
+    if (point.stableState === "unhealthy" && !activeIncident) {
+      activeIncident = {
+        startedAt: Number(point.stableSinceTs || point.ts || 0),
+        endedAt: null,
+        reason: point.reason || null
+      };
+      continue;
+    }
+
+    if (point.stableState === "healthy" && activeIncident) {
+      const endedAt = Number(point.ts || activeIncident.startedAt);
+      incidents.push({
+        ...activeIncident,
+        endedAt,
+        durationMs: Math.max(0, endedAt - activeIncident.startedAt)
+      });
+      activeIncident = null;
+    }
+  }
+
+  if (activeIncident) {
+    incidents.push({
+      ...activeIncident,
+      endedAt: null,
+      durationMs: Math.max(0, Date.now() - activeIncident.startedAt)
+    });
+  }
+
+  const lastFailure = [...relevant].reverse().find((point) => point.healthy === false) || null;
+  const lastSuccess = [...relevant].reverse().find((point) => point.healthy === true) || null;
+  const currentState = String(last?.stableState || "unknown");
+  const currentDowntimeMs =
+    currentState === "unhealthy"
+      ? Math.max(0, Date.now() - Number(last?.stableSinceTs || last?.ts || 0))
+      : 0;
+
+  return {
+    currentState,
+    totalChecks,
+    healthyChecks,
+    unhealthyChecks,
+    availabilityPct,
+    consecutiveFailures: Number(last?.consecutiveFailures || 0),
+    consecutiveSuccesses: Number(last?.consecutiveSuccesses || 0),
+    lastCheckedAt: last?.ts || null,
+    lastFailureAt: lastFailure?.ts || null,
+    lastSuccessAt: lastSuccess?.ts || null,
+    lastLatencyMs: Number.isFinite(Number(last?.latencyMs)) ? Number(last.latencyMs) : null,
+    lastStatusCode: Number.isFinite(Number(last?.statusCode)) ? Number(last.statusCode) : null,
+    lastReason: last?.reason || null,
+    currentDowntimeMs,
+    incidents: incidents.slice(-10)
+  };
+}
+
+function buildHealthAlert(processName, severity, event, title, message, details = {}) {
+  return {
+    ts: Date.now(),
+    category: "health",
+    event,
+    processName,
+    severity,
+    metric: "health",
+    title,
+    message,
+    details
+  };
+}
+
+async function appendHealthCheckSample(processName, sample = {}, config = {}) {
+  const name = sanitizeProcessName(processName, "process name");
+  const store = await loadStore();
+  const now = Number(sample.ts || Date.now());
+  const points = Array.isArray(store.data.healthHistory[name]) ? store.data.healthHistory[name] : [];
+
+  if (sample.skipped) {
+    points.push({
+      ts: now,
+      skipped: true,
+      reason: sample.reason || "skipped",
+      stableState: String(points[points.length - 1]?.stableState || "unknown")
+    });
+    store.data.healthHistory[name] = prunePoints(points, now);
+    scheduleFlush();
+    return {
+      point: points[points.length - 1],
+      summary: summarizeHealthHistory(store.data.healthHistory[name]),
+      alerts: []
+    };
+  }
+
+  const previous = points.filter((point) => point && point.skipped !== true).slice(-1)[0] || null;
+  const healthy = Boolean(sample.healthy);
+  const consecutiveFailures = healthy
+    ? 0
+    : Number(previous?.healthy === false ? previous?.consecutiveFailures || 0 : 0) + 1;
+  const consecutiveSuccesses = healthy
+    ? Number(previous?.healthy === true ? previous?.consecutiveSuccesses || 0 : 0) + 1
+    : 0;
+  const previousStableState = String(previous?.stableState || "unknown");
+  let stableState = previousStableState;
+
+  if (healthy && consecutiveSuccesses >= Math.max(1, Number(config.successThreshold) || 1)) {
+    stableState = "healthy";
+  }
+  if (!healthy && consecutiveFailures >= Math.max(1, Number(config.failureThreshold) || 1)) {
+    stableState = "unhealthy";
+  }
+
+  const stableSinceTs =
+    stableState !== previousStableState
+      ? now
+      : Number(previous?.stableSinceTs || previous?.ts || now);
+
+  const point = {
+    ts: now,
+    healthy,
+    stableState,
+    stableSinceTs,
+    consecutiveFailures,
+    consecutiveSuccesses,
+    latencyMs: Number.isFinite(Number(sample.latencyMs)) ? Number(sample.latencyMs) : null,
+    statusCode: Number.isFinite(Number(sample.statusCode)) ? Number(sample.statusCode) : null,
+    reason: sample.reason || null,
+    protocol: String(sample.protocol || config.protocol || "http"),
+    port: Number.isFinite(Number(sample.port)) ? Number(sample.port) : null,
+    path: sample.path ? String(sample.path) : null,
+    processStatus: sample.processStatus ? String(sample.processStatus) : null
+  };
+
+  points.push(point);
+  store.data.healthHistory[name] = prunePoints(points, now);
+  scheduleFlush();
+
+  const alerts = [];
+  if (previousStableState !== "unhealthy" && stableState === "unhealthy") {
+    alerts.push(
+      buildHealthAlert(
+        name,
+        "danger",
+        "pm2.alert.health.failed",
+        `${name} health check failed`,
+        point.reason
+          ? `${name} failed health checks: ${point.reason}`
+          : `${name} failed ${consecutiveFailures} health checks`,
+        {
+          protocol: point.protocol,
+          port: point.port,
+          path: point.path,
+          consecutiveFailures,
+          failureThreshold: Math.max(1, Number(config.failureThreshold) || 1),
+          statusCode: point.statusCode,
+          latencyMs: point.latencyMs,
+          reason: point.reason
+        }
+      )
+    );
+  } else if (previousStableState === "unhealthy" && stableState === "healthy") {
+    alerts.push(
+      buildHealthAlert(
+        name,
+        "info",
+        "pm2.alert.health.recovered",
+        `${name} health recovered`,
+        `${name} passed health checks again`,
+        {
+          protocol: point.protocol,
+          port: point.port,
+          path: point.path,
+          consecutiveSuccesses,
+          successThreshold: Math.max(1, Number(config.successThreshold) || 1),
+          statusCode: point.statusCode,
+          latencyMs: point.latencyMs
+        }
+      )
+    );
+  }
+
+  return {
+    point,
+    summary: summarizeHealthHistory(store.data.healthHistory[name]),
+    alerts
+  };
+}
+
 async function appendMetricsSample(processes = [], processMeta = {}) {
   const store = await loadStore();
   const now = Date.now();
@@ -312,7 +512,22 @@ async function getMetricsHistory(processName, limit = 120) {
   return points.slice(-Math.max(10, Math.min(2000, Number(limit) || 120)));
 }
 
-async function getMonitoringSummary(processes = []) {
+async function getHealthHistory(processName, limit = 120) {
+  const name = sanitizeProcessName(processName, "process name");
+  const store = await loadStore();
+  const points = Array.isArray(store.data.healthHistory[name]) ? store.data.healthHistory[name] : [];
+  return points.slice(-Math.max(10, Math.min(2000, Number(limit) || 120)));
+}
+
+async function getHealthReport(processName, limit = 120) {
+  const points = await getHealthHistory(processName, limit);
+  return {
+    points,
+    summary: summarizeHealthHistory(points)
+  };
+}
+
+async function getMonitoringSummary(processes = [], processMeta = {}) {
   const store = await loadStore();
   const summary = [];
 
@@ -325,12 +540,15 @@ async function getMonitoringSummary(processes = []) {
     }
 
     const points = Array.isArray(store.data.history[processName]) ? store.data.history[processName] : [];
+    const healthPoints = Array.isArray(store.data.healthHistory[processName]) ? store.data.healthHistory[processName] : [];
     const uptime = summarizeUptime(points);
     const anomaly = computeAnomaly(points.slice(-40));
     const restartInfo = restartState.get(processName) || {
       crashes: Number(process.restarts || 0),
       totalRestarts: Number(process.restarts || 0)
     };
+    const healthSummary = summarizeHealthHistory(healthPoints);
+    const healthConfig = processMeta[processName]?.healthCheck || null;
 
     summary.push({
       name: processName,
@@ -338,7 +556,14 @@ async function getMonitoringSummary(processes = []) {
       downMs: uptime.downMs,
       crashes: Number(restartInfo.crashes || 0),
       totalRestarts: Number(restartInfo.totalRestarts || process.restarts || 0),
-      anomaly
+      anomaly,
+      health: {
+        enabled: Boolean(healthConfig?.enabled),
+        protocol: healthConfig?.protocol || null,
+        port: healthConfig?.port ?? process.port ?? null,
+        path: healthConfig?.protocol === "http" ? healthConfig?.path || "/" : null,
+        ...healthSummary
+      }
     });
   }
 
@@ -347,7 +572,10 @@ async function getMonitoringSummary(processes = []) {
 
 module.exports = {
   appendMetricsSample,
+  appendHealthCheckSample,
   getMetricsHistory,
+  getHealthHistory,
+  getHealthReport,
   getMonitoringSummary
 };
 

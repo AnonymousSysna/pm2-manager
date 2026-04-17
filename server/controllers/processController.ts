@@ -40,6 +40,7 @@ const {
 } = require("../utils/processMetaStore");
 const {
   getMetricsHistory,
+  getHealthReport,
   getMonitoringSummary
 } = require("../utils/metricsHistoryStore");
 const { appendAuditEntry } = require("../utils/auditTrail");
@@ -2789,7 +2790,18 @@ async function getProcessCatalog() {
     const meta = processMeta[proc.name] || {
       group: "",
       dependencies: [],
-      alertThresholds: { cpu: null, memoryMB: null }
+      alertThresholds: { cpu: null, memoryMB: null },
+      healthCheck: {
+        enabled: false,
+        protocol: "http",
+        port: null,
+        path: "/",
+        intervalSec: 30,
+        timeoutMs: 5000,
+        failureThreshold: 3,
+        successThreshold: 1,
+        gracePeriodSec: 15
+      }
     };
     const cwd = String(proc?.cwd || "").trim();
     const allowedRoot = getDotEnvAllowedRoot();
@@ -2917,12 +2929,20 @@ async function installNodeRuntime(payload = {}) {
 }
 
 async function updateProcessMetadata(name, payload) {
-  const nextMeta = await setProcessMeta(name, payload || {});
-  return {
-    success: true,
-    data: nextMeta,
-    error: null
-  };
+  try {
+    const nextMeta = await setProcessMeta(name, payload || {});
+    return {
+      success: true,
+      data: nextMeta,
+      error: null
+    };
+  } catch (error) {
+    return {
+      success: false,
+      data: null,
+      error: error?.message || "Failed to update process metadata"
+    };
+  }
 }
 
 async function removeProcessMetadata(name) {
@@ -2935,12 +2955,36 @@ async function readProcessMetrics(name, limit) {
   return { success: true, data: points, error: null };
 }
 
+async function readProcessHealth(name, limit) {
+  const processName = sanitizeProcessName(name, "process name");
+  const [report, meta] = await Promise.all([
+    getHealthReport(processName, limit),
+    listProcessMeta()
+  ]);
+  const healthCheck = meta[processName]?.healthCheck || {};
+  return {
+    success: true,
+    data: {
+      ...report,
+      summary: {
+        enabled: Boolean(healthCheck.enabled),
+        protocol: healthCheck.protocol || "http",
+        port: healthCheck.port ?? null,
+        path: healthCheck.path || "/",
+        ...report.summary
+      }
+    },
+    error: null
+  };
+}
+
 async function readMonitoringSummary() {
   const live = await listProcesses();
   if (!live.success) {
     return live;
   }
-  const summary = await getMonitoringSummary(live.data);
+  const meta = await listProcessMeta();
+  const summary = await getMonitoringSummary(live.data, meta);
   return { success: true, data: summary, error: null };
 }
 
@@ -2976,6 +3020,7 @@ module.exports = {
   updateProcessMetadata,
   removeProcessMetadata,
   readProcessMetrics,
+  readProcessHealth,
   readMonitoringSummary,
   exportProcessConfig,
   importProcessConfig,

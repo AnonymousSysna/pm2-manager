@@ -33,7 +33,12 @@ function buildAttentionItems({ alerts = [], processes = [], monitoringSummary = 
   processes.forEach((process) => {
     const summary = monitoringSummary[process.name] || {};
     const anomaly = summary.anomaly || {};
-    const isAttention = process.status === "errored" || process.status === "stopped" || anomaly.isAnomaly;
+    const health = summary.health || {};
+    const isAttention =
+      process.status === "errored" ||
+      process.status === "stopped" ||
+      anomaly.isAnomaly ||
+      (health.enabled && health.currentState === "unhealthy");
     if (!isAttention) {
       return;
     }
@@ -46,13 +51,23 @@ function buildAttentionItems({ alerts = [], processes = [], monitoringSummary = 
     items.push({
       key,
       processName: process.name,
-      tone: process.status === "errored" ? "danger" : anomaly.isAnomaly ? "warning" : "info",
+      tone:
+        process.status === "errored" || (health.enabled && health.currentState === "unhealthy")
+          ? "danger"
+          : anomaly.isAnomaly
+            ? "warning"
+            : "info",
       label: process.status === "errored"
         ? "Process errored"
+        : health.enabled && health.currentState === "unhealthy"
+          ? "Health check failing"
         : process.status === "stopped"
           ? "Process stopped"
           : `Anomaly score ${anomaly.score}`,
-      detail: `${process.restarts ?? 0} restart${process.restarts === 1 ? "" : "s"}`
+      detail:
+        health.enabled && health.currentState === "unhealthy"
+          ? health.lastReason || "Probe failures exceeded threshold"
+          : `${process.restarts ?? 0} restart${process.restarts === 1 ? "" : "s"}`
     });
   });
 
@@ -72,7 +87,13 @@ function buildAttentionProcessNames({ alerts = [], processes = [], monitoringSum
   processes.forEach((process) => {
     const summary = monitoringSummary[process.name] || {};
     const anomaly = summary.anomaly || {};
-    if (process.status === "errored" || process.status === "stopped" || anomaly.isAnomaly) {
+    const health = summary.health || {};
+    if (
+      process.status === "errored" ||
+      process.status === "stopped" ||
+      anomaly.isAnomaly ||
+      (health.enabled && health.currentState === "unhealthy")
+    ) {
       names.add(process.name);
     }
   });
@@ -119,7 +140,7 @@ export default function OperationsOverviewPanel({
           label="Attention"
           value={attentionCount}
           valueClassName="text-warning-300"
-          note="Errored, stopped, or anomalous processes"
+          note="Errored, stopped, unhealthy, or anomalous processes"
           tone="elevated"
         />
         <StatCard label="Recent Alerts" value={alerts.length} note="Threshold hits in the current socket session" tone="elevated" />
@@ -153,7 +174,7 @@ export default function OperationsOverviewPanel({
 
         {attentionItems.length === 0 ? (
           <Banner tone="success" icon={<ShieldX size={16} className="rotate-180" />}>
-            No current errors, stops, or anomaly spikes.
+            No current errors, unhealthy checks, stops, or anomaly spikes.
           </Banner>
         ) : (
           <div className="space-y-2">

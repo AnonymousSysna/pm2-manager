@@ -65,7 +65,16 @@ export default function Dashboard() {
   const [metaForm, setMetaForm] = useState({
     dependencies: "",
     cpuThreshold: "",
-    memoryThreshold: ""
+    memoryThreshold: "",
+    healthEnabled: false,
+    healthProtocol: "http",
+    healthPort: "",
+    healthPath: "/health",
+    healthIntervalSec: "30",
+    healthTimeoutMs: "5000",
+    healthFailureThreshold: "3",
+    healthSuccessThreshold: "1",
+    healthGracePeriodSec: "15"
   });
   const [metaSaving, setMetaSaving] = useState(false);
   const [metaResetConfirmOpen, setMetaResetConfirmOpen] = useState(false);
@@ -711,6 +720,7 @@ export default function Dashboard() {
 
   const openMetaModal = (proc) => {
     const current = processMeta[proc.name] || {};
+    const healthCheck = current.healthCheck || {};
     setEditingMetaProcess(proc);
     setMetaForm({
       dependencies: Array.isArray(current.dependencies) ? current.dependencies.join(", ") : "",
@@ -721,7 +731,16 @@ export default function Dashboard() {
       memoryThreshold:
         current.alertThresholds?.memoryMB === null || current.alertThresholds?.memoryMB === undefined
           ? ""
-          : String(current.alertThresholds.memoryMB)
+          : String(current.alertThresholds.memoryMB),
+      healthEnabled: Boolean(healthCheck.enabled),
+      healthProtocol: healthCheck.protocol === "tcp" ? "tcp" : "http",
+      healthPort: healthCheck.port === null || healthCheck.port === undefined ? "" : String(healthCheck.port),
+      healthPath: healthCheck.path || "/health",
+      healthIntervalSec: String(healthCheck.intervalSec ?? 30),
+      healthTimeoutMs: String(healthCheck.timeoutMs ?? 5000),
+      healthFailureThreshold: String(healthCheck.failureThreshold ?? 3),
+      healthSuccessThreshold: String(healthCheck.successThreshold ?? 1),
+      healthGracePeriodSec: String(healthCheck.gracePeriodSec ?? 15)
     });
   };
 
@@ -732,6 +751,12 @@ export default function Dashboard() {
 
     const cpuThresholdValue = metaForm.cpuThreshold.trim();
     const memoryThresholdValue = metaForm.memoryThreshold.trim();
+    const healthPortValue = metaForm.healthPort.trim();
+    const healthIntervalValue = metaForm.healthIntervalSec.trim();
+    const healthTimeoutValue = metaForm.healthTimeoutMs.trim();
+    const healthFailureValue = metaForm.healthFailureThreshold.trim();
+    const healthSuccessValue = metaForm.healthSuccessThreshold.trim();
+    const healthGraceValue = metaForm.healthGracePeriodSec.trim();
 
     if (cpuThresholdValue !== "" && Number.isNaN(Number(cpuThresholdValue))) {
       toast.error("CPU threshold must be a number");
@@ -743,6 +768,24 @@ export default function Dashboard() {
       return;
     }
 
+    if (healthPortValue !== "" && Number.isNaN(Number(healthPortValue))) {
+      toast.error("Health check port must be a number");
+      return;
+    }
+
+    for (const [label, value] of [
+      ["Health interval", healthIntervalValue],
+      ["Health timeout", healthTimeoutValue],
+      ["Failure threshold", healthFailureValue],
+      ["Success threshold", healthSuccessValue],
+      ["Grace period", healthGraceValue]
+    ]) {
+      if (value !== "" && Number.isNaN(Number(value))) {
+        toast.error(`${label} must be a number`);
+        return;
+      }
+    }
+
     const payload = {
       dependencies: metaForm.dependencies
         .split(",")
@@ -751,6 +794,17 @@ export default function Dashboard() {
       alertThresholds: {
         cpu: cpuThresholdValue === "" ? null : Number(cpuThresholdValue),
         memoryMB: memoryThresholdValue === "" ? null : Number(memoryThresholdValue)
+      },
+      healthCheck: {
+        enabled: Boolean(metaForm.healthEnabled),
+        protocol: metaForm.healthProtocol === "tcp" ? "tcp" : "http",
+        port: healthPortValue === "" ? null : Number(healthPortValue),
+        path: metaForm.healthPath.trim() || "/health",
+        intervalSec: healthIntervalValue === "" ? 30 : Number(healthIntervalValue),
+        timeoutMs: healthTimeoutValue === "" ? 5000 : Number(healthTimeoutValue),
+        failureThreshold: healthFailureValue === "" ? 3 : Number(healthFailureValue),
+        successThreshold: healthSuccessValue === "" ? 1 : Number(healthSuccessValue),
+        gracePeriodSec: healthGraceValue === "" ? 15 : Number(healthGraceValue)
       }
     };
 

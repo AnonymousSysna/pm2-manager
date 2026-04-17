@@ -81,10 +81,21 @@ function formatDuration(ms) {
   return `${seconds}s`;
 }
 
+function healthTone(state) {
+  if (state === "healthy") {
+    return "success";
+  }
+  if (state === "unhealthy") {
+    return "danger";
+  }
+  return "warning";
+}
+
 export default function ProcessDetailModal({ process, onClose, onAction, onViewDeployHistory, onOpenLogs }) {
   const [tab, setTab] = useState("Summary");
   const [loadingAction, setLoadingAction] = useState({});
   const [metricsPoints, setMetricsPoints] = useState([]);
+  const [healthReport, setHealthReport] = useState({ points: [], summary: null });
   const [metricsLoading, setMetricsLoading] = useState(false);
   const [revealSensitiveEnv, setRevealSensitiveEnv] = useState(false);
 
@@ -94,16 +105,26 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
     }
 
     let active = true;
-    const loadMetrics = async () => {
+    const loadTelemetry = async () => {
       try {
         setMetricsLoading(true);
-        const result = await processApi.metrics(process.name, 120);
-        if (active && result.success && Array.isArray(result.data)) {
-          setMetricsPoints(result.data);
+        const [metricsResult, healthResult] = await Promise.all([
+          processApi.metrics(process.name, 120),
+          processApi.health(process.name, 60)
+        ]);
+        if (active && metricsResult.success && Array.isArray(metricsResult.data)) {
+          setMetricsPoints(metricsResult.data);
+        }
+        if (active && healthResult.success && healthResult.data) {
+          setHealthReport({
+            points: Array.isArray(healthResult.data.points) ? healthResult.data.points : [],
+            summary: healthResult.data.summary || null
+          });
         }
       } catch (_error) {
         if (active) {
           setMetricsPoints([]);
+          setHealthReport({ points: [], summary: null });
         }
       } finally {
         if (active) {
@@ -112,8 +133,8 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
       }
     };
 
-    loadMetrics();
-    const timer = setInterval(loadMetrics, 10000);
+    loadTelemetry();
+    const timer = setInterval(loadTelemetry, 10000);
     return () => {
       active = false;
       clearInterval(timer);
@@ -123,6 +144,7 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
   useEffect(() => {
     setRevealSensitiveEnv(false);
     setTab("Summary");
+    setHealthReport({ points: [], summary: null });
   }, [process?.name]);
 
   if (!process) {
@@ -137,6 +159,9 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
   const isOnline = process.status === "online";
   const isStopped = process.status === "stopped";
   const isCluster = process.mode === "cluster";
+  const healthSummary = healthReport.summary || {};
+  const healthPoints = Array.isArray(healthReport.points) ? healthReport.points : [];
+  const healthEnabled = Boolean(healthSummary.enabled);
 
   const summaryItems = [
     { label: "Status", value: process.status || "unknown", tone: isOnline ? "success" : process.status === "errored" ? "danger" : "warning" },
@@ -184,6 +209,59 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
               />
             ))}
           </div>
+
+          {healthEnabled && (
+            <InsetCard>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div>
+                  <SubsectionTitle className="text-sm">Persistent health checks</SubsectionTitle>
+                  <SupportingCopy size="xs">
+                    {healthSummary.protocol === "tcp"
+                      ? `TCP localhost:${healthSummary.port ?? process.port ?? "-"}`
+                      : `HTTP localhost:${healthSummary.port ?? process.port ?? "-"}${healthSummary.path || "/"}`}
+                  </SupportingCopy>
+                </div>
+                <Badge tone={healthTone(healthSummary.currentState)}>
+                  {healthSummary.currentState || "pending"}
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <StatCard label="Availability" value={healthSummary.availabilityPct === null || healthSummary.availabilityPct === undefined ? "-" : `${healthSummary.availabilityPct}%`} />
+                <StatCard label="Current downtime" value={formatDuration(healthSummary.currentDowntimeMs || 0)} />
+                <StatCard label="Last latency" value={healthSummary.lastLatencyMs ? `${healthSummary.lastLatencyMs} ms` : "-"} />
+                <StatCard label="Last code" value={healthSummary.lastStatusCode ?? "-"} />
+              </div>
+
+              <div className="mt-3 space-y-2">
+                {healthSummary.lastReason && (
+                  <SupportingCopy size="xs">Last failure reason: {healthSummary.lastReason}</SupportingCopy>
+                )}
+                {healthPoints.filter((item) => item?.skipped !== true).length === 0 && (
+                  <SupportingCopy>No health probe results have been recorded yet.</SupportingCopy>
+                )}
+                {healthPoints
+                  .filter((item) => item?.skipped !== true)
+                  .slice(-8)
+                  .reverse()
+                  .map((item, index) => (
+                    <div key={`${item.ts}-${index}`} className="flex items-center justify-between gap-3 border-b border-border/60 py-2 text-xs last:border-b-0">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <Badge tone={item.healthy ? "success" : "danger"}>{item.healthy ? "Pass" : "Fail"}</Badge>
+                          <span className="text-text-2">{item.ts ? new Date(item.ts).toLocaleTimeString() : "Recent"}</span>
+                        </div>
+                        {item.reason && <p className="mt-1 truncate text-text-3">{item.reason}</p>}
+                      </div>
+                      <div className="text-right text-text-2">
+                        <p>{item.latencyMs ? `${item.latencyMs} ms` : "-"}</p>
+                        <p>{item.statusCode ?? item.processStatus ?? "-"}</p>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </InsetCard>
+          )}
 
           <InsetCard>
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

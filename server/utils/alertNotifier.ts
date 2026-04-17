@@ -177,6 +177,15 @@ async function requestJson(urlString, body) {
 }
 
 function toSlackText(alert) {
+  const title = String(alert.title || "").trim();
+  const message = String(alert.message || "").trim();
+
+  if (title || message) {
+    return [title || `PM2 alert: ${alert.processName || "unknown process"}`, message || null]
+      .filter(Boolean)
+      .join(" | ");
+  }
+
   return `PM2 alert: ${alert.processName} ${alert.metric}=${alert.value} threshold=${alert.threshold} severity=${alert.severity}`;
 }
 
@@ -203,7 +212,7 @@ async function sendAlertNotifications(alerts = []) {
         body = { text: toSlackText(alert) };
       } else {
         body = {
-          event: "pm2.alert.threshold",
+          event: alert.event || "pm2.alert.threshold",
           alert,
           sentAt: new Date().toISOString()
         };

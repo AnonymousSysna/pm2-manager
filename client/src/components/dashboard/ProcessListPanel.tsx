@@ -124,6 +124,7 @@ export default function ProcessListPanel({
             {filtered.map((proc) => {
               const summary = monitoringSummary[proc.name] || {};
               const anomaly = summary.anomaly || { isAnomaly: false, score: 0 };
+              const health = summary.health || {};
 
               return (
                 <tr key={proc.name} className="border-b border-border/70 align-top last:border-b-0">
@@ -143,6 +144,11 @@ export default function ProcessListPanel({
                         {proc.id !== undefined && <Badge tone="neutral">ID {proc.id}</Badge>}
                         {proc.cronRestart && <Badge tone="warning">Restart {proc.cronRestart}</Badge>}
                         {anomaly.isAnomaly && <Badge tone="warning">Anomaly {anomaly.score}</Badge>}
+                        {health.enabled && (
+                          <Badge tone={health.currentState === "healthy" ? "success" : health.currentState === "unhealthy" ? "danger" : "warning"}>
+                            Health {health.currentState || "pending"}
+                          </Badge>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -150,7 +156,11 @@ export default function ProcessListPanel({
                     <div className="space-y-2">
                       <StatusBadge status={proc.status} />
                       <p className="text-xs text-text-3">
-                        {summary.downMs ? `Down ${durationLabel(summary.downMs)}` : "No recent downtime"}
+                        {health.enabled && health.currentState === "unhealthy"
+                          ? `Health failing for ${durationLabel(health.currentDowntimeMs || 0)}`
+                          : summary.downMs
+                            ? `Down ${durationLabel(summary.downMs)}`
+                            : "No recent downtime"}
                       </p>
                     </div>
                   </td>
@@ -212,6 +222,7 @@ function ProcessCard({
   durationLabel
 }) {
   const anomaly = summary.anomaly || { isAnomaly: false, score: 0 };
+  const health = summary.health || {};
 
   return (
     <InsetCard as="article" className="rounded-xl bg-surface-2/60">
@@ -228,6 +239,11 @@ function ProcessCard({
             <Badge tone={proc.mode === "cluster" ? "info" : "neutral"}>{proc.mode || "fork"}</Badge>
             {proc.cronRestart && <Badge tone="warning">Restart {proc.cronRestart}</Badge>}
             {anomaly.isAnomaly && <Badge tone="warning">Anomaly {anomaly.score}</Badge>}
+            {health.enabled && (
+              <Badge tone={health.currentState === "healthy" ? "success" : health.currentState === "unhealthy" ? "danger" : "warning"}>
+                Health {health.currentState || "pending"}
+              </Badge>
+            )}
           </div>
         </div>
         {Number(proc.port) > 0 && (

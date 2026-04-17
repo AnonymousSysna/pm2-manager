@@ -22,6 +22,7 @@ const {
   updateProcessMetadata,
   removeProcessMetadata,
   readProcessMetrics,
+  readProcessHealth,
   readMonitoringSummary,
   exportProcessConfig,
   importProcessConfig,
@@ -183,9 +184,23 @@ router.get("/:name/metrics", readLimiter, validateProcessParam, asyncHandler(asy
   res.status(result.success ? 200 : 500).json(result);
 }));
 
+router.get("/:name/health", readLimiter, validateProcessParam, asyncHandler(async (req, res) => {
+  const requested = Number(req.query.limit || 120);
+  const limit = Number.isFinite(requested)
+    ? Math.min(2000, Math.max(10, Math.floor(requested)))
+    : 120;
+  const result = await readProcessHealth(req.params.name, limit);
+  res.status(result.success ? 200 : 500).json(result);
+}));
+
 router.patch("/:name/meta", writeLimiter, validateProcessParam, asyncHandler(async (req, res) => {
   const result = await updateProcessMetadata(req.params.name, req.body || {});
-  res.status(result.success ? 200 : 500).json(result);
+  const status = result.success
+    ? 200
+    : /health check port|must be|invalid|required|threshold/i.test(result.error || "")
+      ? 400
+      : 500;
+  res.status(status).json(result);
 }));
 
 router.delete("/:name/meta", writeLimiter, validateProcessParam, asyncHandler(async (req, res) => {
