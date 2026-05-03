@@ -115,7 +115,7 @@ export default function Layout() {
         <aside className="sticky top-header hidden h-[calc(100vh-theme(spacing.header)-theme(spacing.6))] w-64 shrink-0 rounded-xl border border-border bg-surface p-4 md:flex md:flex-col">
           <div className="mb-4 flex items-center gap-2 border-b border-border pb-3 text-sm text-text-3">
             <span className="h-2 w-2 rounded-full bg-brand-500" />
-            Operator navigation
+            Navigation
           </div>
           <NavLinks pathname={location.pathname} links={staticLinks} />
           <Button type="button" variant="secondary" onClick={logout} className="mt-auto w-full justify-start">

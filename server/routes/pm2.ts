@@ -2,11 +2,9 @@ const os = require("os");
 const fs = require("fs");
 const path = require("path");
 const express = require("express");
-const pm2 = require("pm2");
 const pm2Package = require("pm2/package.json");
 const { spawn } = require("child_process");
 const { verifyToken } = require("../middleware/auth");
-const { withPM2 } = require("../utils/pm2Client");
 const permissionHints = require("../utils/permissionHints.js");
 const withPermissionHint =
   typeof permissionHints?.withPermissionHint === "function"
@@ -24,11 +22,38 @@ router.use(readLimiter);
 const COMMAND_TIMEOUT_MS = Number.isFinite(Number(process.env.COMMAND_TIMEOUT_MS))
   ? Math.max(5000, Math.floor(Number(process.env.COMMAND_TIMEOUT_MS)))
   : 5 * 60 * 1000;
+const REPO_ROOT = path.resolve(__dirname, "..", "..");
+const ACTION_OUTPUT_LIMIT = 4000;
+const STARTUP_OUTPUT_LIMIT = 8000;
 
-function runCommand(command, args, timeoutMs = COMMAND_TIMEOUT_MS) {
+function normalizeRunCommandOptions(timeoutOrOptions = COMMAND_TIMEOUT_MS) {
+  if (typeof timeoutOrOptions === "number") {
+    return {
+      cwd: process.cwd(),
+      timeoutMs: Number.isFinite(timeoutOrOptions)
+        ? Math.max(1, Math.floor(timeoutOrOptions))
+        : COMMAND_TIMEOUT_MS
+    };
+  }
+
+  const options = timeoutOrOptions && typeof timeoutOrOptions === "object"
+    ? timeoutOrOptions
+    : {};
+
+  return {
+    cwd: options.cwd || process.cwd(),
+    timeoutMs: Number.isFinite(Number(options.timeoutMs))
+      ? Math.max(1, Math.floor(Number(options.timeoutMs)))
+      : COMMAND_TIMEOUT_MS
+  };
+}
+
+function runCommand(command, args, timeoutOrOptions = COMMAND_TIMEOUT_MS) {
+  const { cwd, timeoutMs } = normalizeRunCommandOptions(timeoutOrOptions);
+
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
-      cwd: process.cwd(),
+      cwd,
       stdio: ["ignore", "pipe", "pipe"]
     });
     let stdout = "";
@@ -54,12 +79,94 @@ function runCommand(command, args, timeoutMs = COMMAND_TIMEOUT_MS) {
     child.on("close", (code) => {
       clearTimeout(timeout);
       resolve({
-        code: Number(code || 0),
+        code: typeof code === "number" ? code : -1,
         timedOut,
         stdout,
         stderr
       });
     });
+  });
+}
+
+function combineOutput(stdout = "", stderr = "") {
+  return `${stdout || ""}\n${stderr || ""}`.trim();
+}
+
+function truncateOutput(output = "", limit = ACTION_OUTPUT_LIMIT) {
+  return String(output || "").slice(-limit);
+}
+
+function formatCommand(command, args = []) {
+  return [String(command || "").trim(), ...args.map((item) => String(item || "").trim())]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function createPm2CliInvocation(pm2Args = [], platform = process.platform) {
+  return {
+    executable: platform === "win32" ? "npm.cmd" : "npm",
+    displayCommand: "npm",
+    args: ["--prefix", "server", "exec", "pm2", "--", ...pm2Args.map((item) => String(item || "").trim())],
+    cwd: REPO_ROOT
+  };
+}
+
+async function runPm2Cli(pm2Args = [], options = {}) {
+  const outputLimit = Number.isFinite(Number(options.outputLimit))
+    ? Math.max(1, Math.floor(Number(options.outputLimit)))
+    : ACTION_OUTPUT_LIMIT;
+  const invocation = createPm2CliInvocation(pm2Args, options.platform);
+  const commandLine = formatCommand(invocation.displayCommand, invocation.args);
+
+  try {
+    const result = await runCommand(invocation.executable, invocation.args, {
+      cwd: invocation.cwd,
+      timeoutMs: options.timeoutMs
+    });
+    const combinedOutput = combineOutput(result.stdout, result.stderr);
+    return {
+      ...invocation,
+      commandLine,
+      code: result.code,
+      timedOut: result.timedOut,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      combinedOutput,
+      output: truncateOutput(combinedOutput, outputLimit)
+    };
+  } catch (error) {
+    const combinedOutput = String(error?.message || "Command failed").trim();
+    return {
+      ...invocation,
+      commandLine,
+      code: -1,
+      timedOut: false,
+      stdout: "",
+      stderr: combinedOutput,
+      combinedOutput,
+      output: truncateOutput(combinedOutput, outputLimit)
+    };
+  }
+}
+
+function isCommandSuccessful(result) {
+  return result?.code === 0 && result?.timedOut !== true;
+}
+
+function toActionData(result, flags = {}) {
+  return {
+    ...flags,
+    command: result.commandLine,
+    code: result.code,
+    timedOut: result.timedOut,
+    output: result.output
+  };
+}
+
+function withPm2CliFailure(message, result) {
+  return withPermissionHint(message || result?.output || "PM2 command failed", {
+    command: "npm",
+    args: Array.isArray(result?.args) ? result.args : []
   });
 }
 
@@ -116,7 +223,7 @@ async function detectStartupEnabled() {
 
   for (const service of candidates) {
     const result = await runCommand("systemctl", ["is-enabled", service]);
-    const output = `${result.stdout || ""}\n${result.stderr || ""}`.trim().toLowerCase();
+    const output = combineOutput(result.stdout, result.stderr).toLowerCase();
     if (result.code === 0 && output.includes("enabled")) {
       return { supported: true, enabled: true, manager: "systemd", service, output };
     }
@@ -126,61 +233,42 @@ async function detectStartupEnabled() {
 }
 
 router.post("/save", criticalWriteLimiter, asyncHandler(async (_req, res) => {
-  const result = await withPM2(
-    () =>
-      new Promise((resolve, reject) => {
-        pm2.dump((error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          resolve({ saved: true });
-        });
-      })
-  );
+  const action = await runPm2Cli(["save"]);
+  const success = isCommandSuccessful(action);
 
-  trackPm2Operation("save", result.success);
-  res.status(result.success ? 200 : 500).json(result);
+  trackPm2Operation("save", success);
+  res.status(success ? 200 : 500).json({
+    success,
+    data: toActionData(action, { saved: success }),
+    error: success ? null : withPm2CliFailure(action.output || "pm2 save failed", action)
+  });
 }));
 
 router.post("/resurrect", criticalWriteLimiter, asyncHandler(async (_req, res) => {
-  const result = await withPM2(
-    () =>
-      new Promise((resolve, reject) => {
-        pm2.resurrect((error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          resolve({ resurrected: true });
-        });
-      })
-  );
+  const action = await runPm2Cli(["resurrect"]);
+  const success = isCommandSuccessful(action);
 
-  trackPm2Operation("resurrect", result.success);
-  res.status(result.success ? 200 : 500).json(result);
+  trackPm2Operation("resurrect", success);
+  res.status(success ? 200 : 500).json({
+    success,
+    data: toActionData(action, { resurrected: success }),
+    error: success ? null : withPm2CliFailure(action.output || "pm2 resurrect failed", action)
+  });
 }));
 
 router.post("/kill", criticalWriteLimiter, asyncHandler(async (_req, res) => {
-  const result = await withPM2(
-    () =>
-      new Promise((resolve, reject) => {
-        pm2.killDaemon((error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          resolve({ killed: true });
-        });
-      })
-  );
+  const action = await runPm2Cli(["kill"]);
+  const success = isCommandSuccessful(action);
 
-  trackPm2Operation("kill", result.success);
-  res.status(result.success ? 200 : 500).json(result);
+  trackPm2Operation("kill", success);
+  res.status(success ? 200 : 500).json({
+    success,
+    data: toActionData(action, { killed: success }),
+    error: success ? null : withPm2CliFailure(action.output || "pm2 kill failed", action)
+  });
 }));
 
 router.post("/startup", criticalWriteLimiter, asyncHandler(async (_req, res) => {
-  const pm2Command = process.platform === "win32" ? "pm2.cmd" : "pm2";
   const pm2Home = getPm2HomeDir();
   const dumpPath = path.join(pm2Home, "dump.pm2");
 
@@ -197,6 +285,10 @@ router.post("/startup", criticalWriteLimiter, asyncHandler(async (_req, res) => 
         activated: false,
         startupEnabled: true,
         dumpSaved: true,
+        command: null,
+        code: null,
+        timedOut: false,
+        output: "",
         startup: null,
         save: null,
         instructionCommand: null,
@@ -207,16 +299,15 @@ router.post("/startup", criticalWriteLimiter, asyncHandler(async (_req, res) => 
     return;
   }
 
-  const startupAttempt = await runCommand(pm2Command, ["startup"]);
-  const startupOutput = `${startupAttempt.stdout || ""}\n${startupAttempt.stderr || ""}`.trim();
-  const instructionCommand = detectStartupInstruction(startupOutput);
-  const startupSuccess = startupAttempt.code === 0 && !startupAttempt.timedOut;
+  const startupAttempt = await runPm2Cli(["startup"], { outputLimit: STARTUP_OUTPUT_LIMIT });
+  const instructionCommand = detectStartupInstruction(startupAttempt.combinedOutput);
+  const startupSuccess = isCommandSuccessful(startupAttempt);
 
   let saveAttempt = null;
   let saveSuccess = false;
   if (startupSuccess) {
-    saveAttempt = await runCommand(pm2Command, ["save"]);
-    saveSuccess = saveAttempt.code === 0 && !saveAttempt.timedOut;
+    saveAttempt = await runPm2Cli(["save"]);
+    saveSuccess = isCommandSuccessful(saveAttempt);
   }
 
   const postStartup = await detectStartupEnabled();
@@ -226,11 +317,14 @@ router.post("/startup", criticalWriteLimiter, asyncHandler(async (_req, res) => 
   const operationSuccess = startupSuccess && saveSuccess && persistedNow;
   trackPm2Operation("startup", operationSuccess);
 
-  const failureError = startupSuccess
-    ? "pm2 save failed or persistence check did not pass"
-    : instructionCommand
+  const failedAction = !startupSuccess ? startupAttempt : saveAttempt;
+  const failureError = !startupSuccess
+    ? instructionCommand
       ? `Startup requires elevated command: ${instructionCommand}`
-      : "pm2 startup failed";
+      : startupAttempt.output || "pm2 startup failed"
+    : !saveSuccess
+      ? saveAttempt.output || "pm2 save failed"
+      : "pm2 save failed or persistence check did not pass";
 
   res.status(operationSuccess ? 200 : 500).json({
     success: operationSuccess,
@@ -239,18 +333,22 @@ router.post("/startup", criticalWriteLimiter, asyncHandler(async (_req, res) => 
       activated: operationSuccess,
       startupEnabled: postStartup.enabled,
       dumpSaved: postDumpExists,
+      command: startupAttempt.commandLine,
+      code: startupAttempt.code,
+      timedOut: startupAttempt.timedOut,
+      output: startupAttempt.output,
       startup: {
         code: startupAttempt.code,
         timedOut: startupAttempt.timedOut,
-        command: `${pm2Command} startup`,
-        output: startupOutput.slice(-8000)
+        command: startupAttempt.commandLine,
+        output: startupAttempt.output
       },
       save: saveAttempt
         ? {
             code: saveAttempt.code,
             timedOut: saveAttempt.timedOut,
-            command: `${pm2Command} save`,
-            output: `${saveAttempt.stdout || ""}\n${saveAttempt.stderr || ""}`.trim().slice(-4000)
+            command: saveAttempt.commandLine,
+            output: saveAttempt.output
           }
         : null,
       instructionCommand: instructionCommand || null,
@@ -258,38 +356,32 @@ router.post("/startup", criticalWriteLimiter, asyncHandler(async (_req, res) => 
         ? "PM2 startup persistence has been enabled."
         : "PM2 startup persistence activation failed."
     },
-    error: operationSuccess
-      ? null
-      : withPermissionHint(failureError, {
-          command: startupSuccess ? pm2Command : instructionCommand || `${pm2Command} startup`,
-          args: startupSuccess ? ["save"] : []
-        })
+    error: operationSuccess ? null : withPm2CliFailure(failureError, failedAction)
   });
 }));
 
 router.get("/info", asyncHandler(async (_req, res) => {
-  const result = await withPM2(
-    () =>
-      new Promise((resolve, reject) => {
-        pm2.list((error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
+  const action = await runPm2Cli(["jlist"]);
+  const success = isCommandSuccessful(action);
 
-          resolve({
-            pm2Version: pm2Package.version || "unknown",
-            nodeVersion: process.version,
-            pm2Home: process.env.PM2_HOME || os.homedir()
-          });
-        });
-      })
-  );
-
-  trackPm2Operation("info", result.success);
-  res.status(result.success ? 200 : 500).json(result);
+  trackPm2Operation("info", success);
+  res.status(success ? 200 : 500).json({
+    success,
+    data: success
+      ? {
+          pm2Version: pm2Package.version || "unknown",
+          nodeVersion: process.version,
+          pm2Home: getPm2HomeDir()
+        }
+      : null,
+    error: success ? null : withPm2CliFailure(action.output || "pm2 info failed", action)
+  });
 }));
 
 module.exports = router;
+module.exports.runCommand = runCommand;
+module.exports.createPm2CliInvocation = createPm2CliInvocation;
+module.exports.runPm2Cli = runPm2Cli;
+module.exports.getPm2HomeDir = getPm2HomeDir;
+module.exports.detectStartupInstruction = detectStartupInstruction;
 module.exports.isStartupPersistenceVerified = isStartupPersistenceVerified;
-
