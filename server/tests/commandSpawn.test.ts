@@ -1,5 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+const { spawn } = require("child_process");
 const {
   windowsShellRequired,
   toSpawnTarget,
@@ -7,6 +11,35 @@ const {
   commandLineFor,
   terminationPlan
 } = require("../utils/commandSpawn");
+
+interface Attempt {
+  threw: boolean;
+  code: number | null;
+  output: string;
+}
+
+/** Spawn something and report whether the launch itself threw. */
+function attempt(command: string, args: string[]): Promise<Attempt> {
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(command, args, { windowsHide: true });
+    } catch (_error) {
+      resolve({ threw: true, code: null, output: "" });
+      return;
+    }
+
+    let output = "";
+    child.stdout?.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    child.stderr?.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    child.on("error", () => resolve({ threw: false, code: null, output }));
+    child.on("close", (code) => resolve({ threw: false, code, output }));
+  });
+}
 
 test("windowsShellRequired only flags Windows shims", () => {
   assert.equal(windowsShellRequired("npm.cmd", "win32"), true);
@@ -73,3 +106,25 @@ test("terminationPlan kills the tree on Windows and signals elsewhere", () => {
   assert.equal(terminationPlan({}, "win32").method, "signal", "no pid means nothing to taskkill");
   assert.equal(terminationPlan({ pid: 0 }, "win32").pid, null);
 });
+
+test(
+  "a Windows shim runs for real once toSpawnTarget has wrapped it",
+  { skip: process.platform !== "win32" ? "Windows-only: .cmd shims do not exist elsewhere" : false },
+  async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "command-spawn-"));
+    const shim = path.join(dir, "echo-args.cmd");
+    fs.writeFileSync(shim, "@echo off\r\necho shim-ran %1\r\n");
+
+    try {
+      const direct = await attempt(shim, ["hello"]);
+      assert.equal(direct.threw, true, "spawning a .cmd directly throws instead of emitting an error event");
+
+      const target = toSpawnTarget(shim, ["hello"]);
+      const wrapped = await attempt(target.command, target.args);
+      assert.equal(wrapped.code, 0, wrapped.output);
+      assert.match(wrapped.output, /shim-ran hello/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+);

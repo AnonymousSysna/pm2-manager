@@ -4,6 +4,7 @@ const path = require("path");
 const net = require("net");
 const http = require("http");
 const { spawn } = require("child_process");
+const { toSpawnTarget, terminateChildTree } = require("./commandSpawn");
 const permissionHints = require("./permissionHints.js");
 const withPermissionHint = typeof permissionHints?.withPermissionHint === "function"
   ? permissionHints.withPermissionHint
@@ -400,7 +401,10 @@ function runCommand(command, args, options = {}) {
   } = options;
 
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    // An installed `jcode.cmd` or a package manager shim cannot be spawn'd
+    // directly on Windows; toSpawnTarget decides when the shell is required.
+    const target = toSpawnTarget(command, args);
+    const child = spawn(target.command, target.args, {
       cwd,
       env,
       windowsHide: true,
@@ -412,18 +416,8 @@ function runCommand(command, args, options = {}) {
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
-      try {
-        child.kill("SIGTERM");
-      } catch (_error) {
-        // Process may have already exited.
-      }
-      setTimeout(() => {
-        try {
-          child.kill("SIGKILL");
-        } catch (_error) {
-          // Windows does not support SIGKILL; best effort only.
-        }
-      }, 2000).unref?.();
+      terminateChildTree(child);
+      setTimeout(() => terminateChildTree(child), 2000).unref?.();
     }, timeoutMs);
 
     child.stdout?.on("data", (chunk) => {
@@ -857,7 +851,8 @@ async function startJcodeGateway(payload = {}) {
 
   const args = ["serve", "--server-name", serverName];
   let stdout = "";
-  const child = spawn(binaryPath, args, {
+  const launch = toSpawnTarget(binaryPath, args);
+  const child = spawn(launch.command, launch.args, {
     cwd: process.env.JCODE_WORKING_DIR || process.cwd(),
     env: withJcodePathEnv({
       ...process.env,
@@ -1133,7 +1128,8 @@ async function startJcodeServerProcess(binaryPath, cwd, env) {
   let stderr = "";
   let exitState = { exited: false, code: null, signal: null };
 
-  const child = spawn(binaryPath, ["serve", "--server-name", serverName], {
+  const launch = toSpawnTarget(binaryPath, ["serve", "--server-name", serverName]);
+  const child = spawn(launch.command, launch.args, {
     cwd,
     env,
     detached: true,
@@ -1629,7 +1625,8 @@ async function createJcodeTerminalProcess(payload = {}) {
   }
 
   try {
-    const child = spawn(command, spawnArgs, {
+    const launch = toSpawnTarget(command, spawnArgs);
+    const child = spawn(launch.command, launch.args, {
       cwd,
       env,
       windowsHide: true,

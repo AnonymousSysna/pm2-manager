@@ -258,9 +258,13 @@ because everything in those files ships to the browser.
 - Two rules make that hold: the probe is wrapped in a guard so a throwing probe
   becomes a 503 `not_ready`/`degraded` answer rather than a hanging request, and
   `server/utils/commandSpawn.ts` is the single place that knows how to launch a
-  command on this platform. On Windows a `.cmd`/`.bat` launches through
+  command. On Windows a `.cmd`/`.bat` launches through
   `cmd.exe /d /s /c "<command line>"` with no `shell: true` (so no DEP0190 warning
-  and no shell-interpolated user input).
+  and no shell-interpolated user input). Every child process in the server goes
+  through that rule: the pm2 routes, the process controller, the interpreter and
+  Node runtime installers, the caddy manager, the JCode manager, and the health
+  probe. The one exception is the JCode terminal's `node-pty` path, which launches
+  a shim itself.
 - A shell launch is a process tree, so timeouts end the tree with
   `taskkill /pid <pid> /t /f`; `child.kill()` alone left a wedged `pm2 jlist`
   behind.

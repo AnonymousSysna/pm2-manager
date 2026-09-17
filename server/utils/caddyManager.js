@@ -3,6 +3,7 @@ const os = require("os");
 const path = require("path");
 const tls = require("tls");
 const { spawn } = require("child_process");
+const { toSpawnTarget, terminateChildTree } = require("./commandSpawn");
 const permissionHints = require("./permissionHints.js");
 const withPermissionHint = typeof permissionHints?.withPermissionHint === "function"
   ? permissionHints.withPermissionHint
@@ -46,7 +47,10 @@ function getCaddyfilePath() {
 function runCommand(command, args, options = {}) {
   const { cwd = process.cwd(), timeoutMs = COMMAND_TIMEOUT_MS, allowNonZero = false } = options;
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    // A Windows package manager is a .cmd shim; toSpawnTarget decides when the
+    // shell is required.
+    const target = toSpawnTarget(command, args);
+    const child = spawn(target.command, target.args, {
       cwd,
       stdio: ["ignore", "pipe", "pipe"]
     });
@@ -55,8 +59,8 @@ function runCommand(command, args, options = {}) {
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGTERM");
-      setTimeout(() => child.kill("SIGKILL"), 2000).unref();
+      terminateChildTree(child);
+      setTimeout(() => terminateChildTree(child), 2000).unref();
     }, timeoutMs);
 
     child.stdout.on("data", (chunk) => {

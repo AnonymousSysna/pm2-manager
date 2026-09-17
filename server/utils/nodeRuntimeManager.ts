@@ -2,6 +2,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
+const { toSpawnTarget, terminateChildTree } = require("./commandSpawn");
 
 const COMMAND_TIMEOUT_MS = Number.isFinite(Number(process.env.COMMAND_TIMEOUT_MS))
   ? Math.max(5000, Math.floor(Number(process.env.COMMAND_TIMEOUT_MS)))
@@ -99,7 +100,10 @@ function runCommand(command: string, args: string[], options: RunCommandOptions 
     env
   } = options;
   return new Promise<RunCommandResult>((resolve, reject) => {
-    const child = spawn(command, args, {
+    // nvm-windows and fnm hand back npm.cmd paths, which spawn cannot launch
+    // directly; toSpawnTarget decides when the shell is required.
+    const target = toSpawnTarget(command, args);
+    const child = spawn(target.command, target.args, {
       cwd,
       env: env ? { ...process.env, ...env } : process.env,
       stdio: ["ignore", "pipe", "pipe"]
@@ -109,8 +113,8 @@ function runCommand(command: string, args: string[], options: RunCommandOptions 
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGTERM");
-      setTimeout(() => child.kill("SIGKILL"), 2000).unref();
+      terminateChildTree(child);
+      setTimeout(() => terminateChildTree(child), 2000).unref();
     }, timeoutMs);
 
     child.stdout.on("data", (chunk) => {

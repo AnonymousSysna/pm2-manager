@@ -878,7 +878,10 @@ async function readDiskUsage(): Promise<DiskEntry[]> {
 
 function runDetectCommand(command: string, args: string[]): Promise<DetectCommandResult> {
   return new Promise<DetectCommandResult>((resolve, reject) => {
-    const child = spawn(command, args, {
+    // Interpreter probes are .cmd shims for some installs; toSpawnTarget decides
+    // when the shell is required.
+    const target = toSpawnTarget(command, args);
+    const child = spawn(target.command, target.args, {
       cwd: process.cwd(),
       stdio: ["ignore", "pipe", "pipe"]
     });
@@ -888,8 +891,8 @@ function runDetectCommand(command: string, args: string[]): Promise<DetectComman
     let timedOut = false;
     const timeout = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGTERM");
-      setTimeout(() => child.kill("SIGKILL"), 1000).unref();
+      terminateChildTree(child);
+      setTimeout(() => terminateChildTree(child), 1000).unref();
     }, INTERPRETER_DETECT_TIMEOUT_MS);
 
     child.stdout.on("data", (data) => {
