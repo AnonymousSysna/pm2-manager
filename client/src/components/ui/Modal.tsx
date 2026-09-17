@@ -31,7 +31,7 @@ export default function Modal({
   closeLabel = "Close dialog",
   size = "md",
   position = "center",
-  className,
+  className = "",
   bodyClassName,
   showCloseButton = true,
   disableClose = false,

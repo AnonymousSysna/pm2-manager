@@ -1,6 +1,6 @@
 import { cn } from "../../lib/cn";
 
-export default function RangeInput({ className, ...props }) {
+export default function RangeInput({ className = "", ...props }) {
   return (
     <input
       type="range"

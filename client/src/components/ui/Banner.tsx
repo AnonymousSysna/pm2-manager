@@ -1,7 +1,7 @@
 import { cn } from "../../lib/cn";
 import { getSemanticToneClasses } from "./semanticTones";
 
-export default function Banner({ tone = "neutral", icon, className, children }) {
+export default function Banner({ tone = "neutral", icon, className = "", children }) {
   return (
     <div className={cn("rounded-xl border px-3 py-2 text-sm", getSemanticToneClasses(tone).banner, className)}>
       <div className="flex items-start gap-2">

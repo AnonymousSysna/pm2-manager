@@ -1,6 +1,6 @@
 import { cn } from "../../lib/cn";
 
-export default function Select({ className, ...props }) {
+export default function Select({ className = "", ...props }) {
   return (
     <select
       className={cn(

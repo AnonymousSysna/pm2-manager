@@ -19,11 +19,11 @@ const insetToneMap = {
   elevated: "bg-surface-2/80"
 };
 
-export function Panel({ as: Comp = "section", padding = "md", className, ...props }) {
+export function Panel({ as: Comp = "section", padding = "md", className = "", ...props }) {
   return <Comp className={cn("page-panel", panelPaddingMap[padding] || panelPaddingMap.md, className)} {...props} />;
 }
 
-export function InsetCard({ as: Comp = "div", padding = "md", tone = "muted", className, ...props }) {
+export function InsetCard({ as: Comp = "div", padding = "md", tone = "muted", className = "", ...props }) {
   return (
     <Comp
       className={cn("inset-card", insetPaddingMap[padding] || insetPaddingMap.md, insetToneMap[tone] || insetToneMap.muted, className)}
@@ -32,7 +32,7 @@ export function InsetCard({ as: Comp = "div", padding = "md", tone = "muted", cl
   );
 }
 
-export function StatCard({ label, value, note, valueClassName, className, tone = "muted" }) {
+export function StatCard({ label, value, note, valueClassName, className = "", tone = "muted" }) {
   return (
     <InsetCard tone={tone} className={className}>
       <Eyebrow>{label}</Eyebrow>

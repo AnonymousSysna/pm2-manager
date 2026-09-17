@@ -8,7 +8,7 @@ type HeaderProps = {
   className?: string;
 };
 
-export function PageIntro({ title, description: _description, actions, className }: HeaderProps) {
+export function PageIntro({ title, description: _description, actions, className = "" }: HeaderProps) {
   return (
     <section className={cn("page-panel page-intro", className)}>
       <div className="panel-title-row">
@@ -21,7 +21,7 @@ export function PageIntro({ title, description: _description, actions, className
   );
 }
 
-export function PanelHeader({ title, description: _description, actions, className }: HeaderProps) {
+export function PanelHeader({ title, description: _description, actions, className = "" }: HeaderProps) {
   return (
     <div className={cn("panel-title-row", className)}>
       <div className="min-w-0">

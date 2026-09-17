@@ -1,6 +1,6 @@
 import { cn } from "../../lib/cn";
 
-export default function Checkbox({ className, ...props }) {
+export default function Checkbox({ className = "", ...props }) {
   return (
     <input
       type="checkbox"

@@ -8,7 +8,7 @@ const tones = {
   neutral: "bg-text-3"
 };
 
-export default function ProgressBar({ value = 0, tone = "success", className }) {
+export default function ProgressBar({ value = 0, tone = "success", className = "" }) {
   const width = Math.max(0, Math.min(100, Number(value) || 0));
 
   return (

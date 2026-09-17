@@ -1,6 +1,6 @@
 import { cn } from "../../lib/cn";
 
-export default function NavItem({ as: Comp = "button", active = false, className, type = "button", ...props }) {
+export default function NavItem({ as: Comp = "button", active = false, className = "", type = "button", ...props }) {
   return (
     <Comp
       type={Comp === "button" ? type : undefined}

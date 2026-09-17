@@ -5,7 +5,7 @@ export default function Field({
   htmlFor,
   required = false,
   description: _description,
-  className,
+  className = "",
   children
 }) {
   return (

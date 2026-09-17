@@ -95,7 +95,13 @@ function verifyCsrf(req, res, next) {
   }
 
   const path = String(req.path || req.originalUrl || "");
-  if (path.endsWith("/auth/login") || path.endsWith("/auth/refresh")) {
+  // Client crash reports change no server state, are IP rate limited, and must work
+  // before a session (or CSRF cookie) exists. See routes/clientErrors.ts.
+  if (
+    path.endsWith("/auth/login") ||
+    path.endsWith("/auth/refresh") ||
+    path.endsWith("/client-errors")
+  ) {
     next();
     return;
   }

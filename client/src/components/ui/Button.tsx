@@ -32,7 +32,7 @@ export default function Button({
   type = "button",
   variant = "primary",
   size = "md",
-  className,
+  className = "",
   ...props
 }) {
   return (

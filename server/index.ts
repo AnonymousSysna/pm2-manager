@@ -31,6 +31,7 @@ const alertRoutes = require("./routes/alerts");
 const caddyRoutes = require("./routes/caddy");
 const jcodeRoutes = require("./routes/jcode");
 const systemRoutes = require("./routes/system");
+const clientErrorRoutes = require("./routes/clientErrors");
 const { registerPM2Monitor } = require("./socket/pm2Monitor");
 const { registerJcodeTerminal } = require("./socket/jcodeTerminal");
 const { isIpAllowed, getRequestIp } = require("./utils/ipAccess");
@@ -260,6 +261,7 @@ v1.use("/alerts", alertRoutes);
 v1.use("/caddy", caddyRoutes);
 v1.use("/jcode", jcodeRoutes);
 v1.use("/system", systemRoutes);
+v1.use("/client-errors", clientErrorRoutes);
 
 app.use("/api/v1", v1);
 app.use("/api", v1);
@@ -459,4 +461,3 @@ process.on("uncaughtException", (error) => {
 server.listen(PORT, "0.0.0.0", () => {
   logger.info("server_started", { host: "0.0.0.0", port: PORT, production: process.env.NODE_ENV === "production" });
 });
-

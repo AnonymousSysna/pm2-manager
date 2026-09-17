@@ -1,6 +1,6 @@
 import { cn } from "../../lib/cn";
 
-export function Skeleton({ className, ...props }) {
+export function Skeleton({ className = "", ...props }) {
   return (
     <div
       aria-hidden="true"
@@ -10,7 +10,7 @@ export function Skeleton({ className, ...props }) {
   );
 }
 
-export function SkeletonText({ lines = 3, className, lineClassName }) {
+export function SkeletonText({ lines = 3, className = "", lineClassName }) {
   return (
     <div className={cn("space-y-2", className)} aria-hidden="true">
       {Array.from({ length: lines }).map((_, index) => (

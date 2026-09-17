@@ -1,6 +1,6 @@
 import { cn } from "../../lib/cn";
 
-export default function TabButton({ active = false, className, type = "button", ...props }) {
+export default function TabButton({ active = false, className = "", type = "button", ...props }) {
   return (
     <button
       type={type}

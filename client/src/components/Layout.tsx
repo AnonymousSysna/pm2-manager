@@ -3,6 +3,7 @@ import { Activity, Bell, Code2, Globe, History, Menu, Plus, Puzzle, ScrollText, 
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useSocket } from "../hooks/useSocket";
 import { auth } from "../api";
+import ErrorBoundary from "./ErrorBoundary";
 import Badge from "./ui/Badge";
 import Button from "./ui/Button";
 import NavItem from "./ui/NavItem";
@@ -147,7 +148,10 @@ export default function Layout() {
         </aside>
 
         <main className="min-w-0 flex-1">
-          <Outlet />
+          {/* Page-scoped boundary: a broken screen must not cost the user the whole shell. */}
+          <ErrorBoundary resetKey={location.pathname} title="This screen failed to render">
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
 

@@ -1,6 +1,6 @@
 import { cn } from "../../lib/cn";
 
-export default function Textarea({ className, ...props }) {
+export default function Textarea({ className = "", ...props }) {
   return (
     <textarea
       className={cn(
