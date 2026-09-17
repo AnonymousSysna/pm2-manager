@@ -177,7 +177,11 @@ export const processes = {
   gitStatus: (name: string) =>
     api.get<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/git/status`).then(unwrap),
   gitPull: (name: string, payload: Record<string, unknown> = {}) =>
-    api.post<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/git/pull`, payload).then(unwrap),
+    api
+      .post<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/git/pull`, payload, {
+        validateStatus: (status) => (status >= 200 && status < 300) || status === 409
+      })
+      .then(unwrap),
   get: (name: string) => api.get<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}`).then(unwrap),
   create: (config: Record<string, unknown>) => api.post<ApiResult<any>>("/api/v1/processes/create", config).then(unwrap),
   bulkAction: (action: string, names: string[] = []) => api.post<ApiResult<any>>("/api/v1/processes/bulk-action", { action, names }).then(unwrap),

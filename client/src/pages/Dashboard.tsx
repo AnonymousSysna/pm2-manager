@@ -391,6 +391,22 @@ export default function Dashboard() {
     }
   };
 
+  const openGitPullConfirmation = (name, data = {}) => {
+    const dirtyFiles = Array.isArray(data.changedFiles) ? data.changedFiles : [];
+    setActionDialog({
+      mode: "confirm",
+      action: "gitPull",
+      name,
+      title: `Local changes in ${name}`,
+      description: "Accept saves local changes to a Git stash first, then pulls latest code.",
+      confirmLabel: "Accept and pull",
+      confirmVariant: "warning",
+      dirtyFiles,
+      totalChanged: Number(data.totalChanged || dirtyFiles.length || 0),
+      cwd: data.cwd || ""
+    });
+  };
+
   const executeAction = async (action, name, actionPayload) => {
     setLoadingAction((prev) => ({ ...prev, [`${name}:${action}`]: true }));
     try {
@@ -422,6 +438,27 @@ export default function Dashboard() {
         rollback: "Rollback",
         delete: "Delete"
       }[action] || action;
+
+      if (action === "gitPull") {
+        const result = await handlers[action](name);
+        if (!result.success) {
+          toast.error(result.error || "Failed to git pull");
+          return false;
+        }
+
+        if (result?.data?.requiresConfirmation) {
+          openGitPullConfirmation(name, result.data);
+          return false;
+        }
+
+        toast.success(`Git pull completed for ${name}`);
+        refreshCatalog();
+        if (selectedProcess?.name === name) {
+          const latest = processes.find((item) => item.name === name) || selectedProcess;
+          openDetails(latest);
+        }
+        return true;
+      }
 
       await toast.promise(
         handlers[action](name).then((result) => {
@@ -459,18 +496,7 @@ export default function Dashboard() {
         setLoadingAction((prev) => ({ ...prev, [`${name}:gitPullCheck`]: true }));
         const statusResult = await processApi.gitStatus(name);
         if (statusResult?.success && statusResult.data?.dirty) {
-          setActionDialog({
-            mode: "confirm",
-            action,
-            name,
-            title: `Local changes in ${name}`,
-            description: "Accept will save local changes to a Git stash first, then pull latest code.",
-            confirmLabel: "Accept and pull",
-            confirmVariant: "warning",
-            dirtyFiles: statusResult.data.changedFiles || [],
-            totalChanged: statusResult.data.totalChanged || 0,
-            cwd: statusResult.data.cwd || ""
-          });
+          openGitPullConfirmation(name, statusResult.data);
           return false;
         }
       } catch (error) {

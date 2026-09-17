@@ -2614,6 +2614,13 @@ function parseGitStatusLines(output = "") {
     .filter((item) => item.path);
 }
 
+function looksLikeGitLocalChangeConflict(error) {
+  const text = String(error?.message || error || "");
+  return /Your local changes to the following files would be overwritten by merge/i.test(text)
+    || /Please commit your changes or stash them before you merge/i.test(text)
+    || /Aborting/i.test(text) && /git pull/i.test(text) && /local changes/i.test(text);
+}
+
 async function readGitStatus(cwd) {
   await runCommand("git", ["rev-parse", "--is-inside-work-tree"], cwd);
 
@@ -2680,7 +2687,27 @@ async function gitPullProcess(name, options = {}) {
     }
 
     const beforeHead = await runCommand("git", ["rev-parse", "--short", "HEAD"], cwd);
-    const pull = await runCommand("git", ["pull", "--ff-only"], cwd);
+    let pull;
+    try {
+      pull = await runCommand("git", ["pull", "--ff-only"], cwd);
+    } catch (error) {
+      if (looksLikeGitLocalChangeConflict(error)) {
+        const latestStatus = await readGitStatus(cwd).catch(() => beforeStatus);
+        return {
+          processName,
+          cwd,
+          requiresConfirmation: true,
+          confirmationType: "local_changes",
+          message: "Local changes detected before pull.",
+          changedFiles: latestStatus.changedFiles || beforeStatus.changedFiles || [],
+          totalChanged: latestStatus.totalChanged || beforeStatus.totalChanged || 0,
+          branch: latestStatus.branch || beforeStatus.branch || null,
+          currentCommit: latestStatus.currentCommit || beforeStatus.currentCommit || null,
+          output: compactOutput(error?.message || "Git pull would overwrite local changes.")
+        };
+      }
+      throw error;
+    }
     const afterHead = await runCommand("git", ["rev-parse", "--short", "HEAD"], cwd);
     const afterStatus = await readGitStatus(cwd);
     return {
