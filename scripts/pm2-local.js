@@ -3,6 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const { ensureRuntimeEnv } = require("./env-bootstrap");
 
 const APP_NAME = "pm2-dashboard";
 const appDir = path.resolve(__dirname, "..");
@@ -23,11 +24,20 @@ function ensureReady() {
   }
 }
 
+function loadRuntimeEnv() {
+  return ensureRuntimeEnv({ print: command !== "logs" && command !== "status" && command !== "describe" });
+}
+
+function buildPm2Env() {
+  loadRuntimeEnv();
+  return { ...process.env };
+}
+
 function run(args, options = {}) {
   ensureReady();
   const result = spawnSync(pm2Bin, args, {
     cwd: appDir,
-    env: process.env,
+    env: options.skipEnvBootstrap ? process.env : buildPm2Env(),
     stdio: options.quiet ? ["ignore", "pipe", "pipe"] : "inherit",
     encoding: "utf8"
   });
@@ -51,7 +61,7 @@ switch (command) {
     break;
   case "restart":
     if (isRunning()) {
-      run(["restart", APP_NAME, ...rest]);
+      run(["restart", APP_NAME, "--update-env", ...rest]);
     } else {
       run(["start", ecosystemFile, ...rest]);
     }

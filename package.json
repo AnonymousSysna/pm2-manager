@@ -1,6 +1,6 @@
 {
   "name": "pm2-dashboard",
-  "version": "1.0.21",
+  "version": "1.0.22",
   "private": true,
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
@@ -21,7 +21,8 @@
     "test:installer": "node scripts/onetap.test.js",
     "preflight": "npm --prefix server run preflight",
     "verify": "npm run typecheck && npm --prefix server test && npm --prefix client test",
-    "pm2:status": "node ./scripts/pm2-local.js status"
+    "pm2:status": "node ./scripts/pm2-local.js status",
+    "env:bootstrap": "node ./scripts/env-bootstrap.js"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
