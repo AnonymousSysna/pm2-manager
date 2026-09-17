@@ -189,7 +189,7 @@ export default function History() {
           <Input
             value={deploymentProcessFilter}
             onChange={(event) => setDeploymentProcessFilter(event.target.value)}
-            placeholder="Filter by process name"
+            placeholder="Filter by process name" aria-label="Filter deployments by process"
           />
           {initialDeploymentProcess && (
             <span className="text-xs text-text-3">
@@ -342,7 +342,7 @@ export default function History() {
           }
         />
         <div className="mb-2 grid gap-2 md:grid-cols-[220px_1fr] md:items-center">
-          <Select value={auditActionPreset} onChange={(event) => setAuditActionPreset(event.target.value)}>
+          <Select value={auditActionPreset} onChange={(event) => setAuditActionPreset(event.target.value)} aria-label="Audit action filter">
             <option value="">All actions</option>
             <option value="process.deploy">process.deploy</option>
             <option value="process.rollback">process.rollback</option>
@@ -355,7 +355,7 @@ export default function History() {
           <Input
             value={auditActionCustom}
             onChange={(event) => setAuditActionCustom(event.target.value)}
-            placeholder="Custom action filter (e.g. auth.login)"
+            placeholder="Custom action filter (e.g. auth.login)" aria-label="Custom audit action filter"
             disabled={auditActionPreset !== "__custom__"}
           />
         </div>

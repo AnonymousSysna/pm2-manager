@@ -383,9 +383,9 @@ export default function Extensions() {
             <Input
               value={nodeInstallVersion}
               onChange={(event) => setNodeInstallVersion(event.target.value)}
-              placeholder="Install Node version (e.g. 20, 20.12.2)"
+              placeholder="Install Node version (e.g. 20, 20.12.2)" aria-label="Node version to install"
             />
-            <Select value={nodeInstallManager} onChange={(event) => setNodeInstallManager(event.target.value)}>
+            <Select value={nodeInstallManager} onChange={(event) => setNodeInstallManager(event.target.value)} aria-label="Node version manager">
               <option value="">Auto manager</option>
               {Array.isArray(nodeRuntimeState.data?.managers) && nodeRuntimeState.data.managers.map((manager) => (
                 <option key={manager.manager} value={manager.manager}>

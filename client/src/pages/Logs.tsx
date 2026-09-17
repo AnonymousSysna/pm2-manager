@@ -460,7 +460,7 @@ export default function Logs() {
 
       <section className="page-panel logs-toolbar-card">
         <div className="logs-toolbar-main">
-          <select value={selected} onChange={(e) => setSelected(e.target.value)} className="logs-control-field logs-process-select" disabled={combinedView}>
+          <select value={selected} onChange={(e) => setSelected(e.target.value)} aria-label="Process" className="logs-control-field logs-process-select" disabled={combinedView}>
             <option value="">Select process</option>
             {processOptions.map((proc) => (
               <option key={proc.name} value={proc.name}>
@@ -469,7 +469,7 @@ export default function Logs() {
             ))}
           </select>
 
-          <select value={lineCount} onChange={(e) => setLineCount(Number(e.target.value))} className="logs-control-field logs-count-select">
+          <select value={lineCount} onChange={(e) => setLineCount(Number(e.target.value))} aria-label="Lines to show" className="logs-control-field logs-count-select">
             {[50, 100, 200, 500].map((value) => (
               <option key={value} value={value}>
                 {value} lines
@@ -477,7 +477,7 @@ export default function Logs() {
             ))}
           </select>
 
-          <input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="Search logs" className="logs-control-field logs-search-input" />
+          <input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="Search logs" aria-label="Search logs" className="logs-control-field logs-search-input" />
 
           <div className="logs-filter-group" role="group" aria-label="Log stream filter">
             {[

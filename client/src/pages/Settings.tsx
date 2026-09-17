@@ -339,15 +339,15 @@ export default function Settings() {
               type="password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
-              placeholder="Current password"
+              placeholder="Current password" aria-label="Current password"
             />
             <div className="settings-two-fields">
-              <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="New password" />
+              <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="New password" aria-label="New password" />
               <Input
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Confirm password"
+                placeholder="Confirm password" aria-label="Confirm new password"
               />
             </div>
             <Button variant="success" onClick={changePassword} className="w-full">
@@ -362,7 +362,7 @@ export default function Settings() {
             <Button variant="secondary" onClick={exportConfig} className="w-full">
               Export JSON
             </Button>
-            <FileInput ref={fileRef} accept="application/json" onChange={onImportFile} />
+            <FileInput aria-label="Import process config JSON" ref={fileRef} accept="application/json" onChange={onImportFile} />
           </div>
         </section>
 
@@ -375,13 +375,13 @@ export default function Settings() {
             </Banner>
           )}
           <div className="settings-channel-form">
-            <Input value={channelName} onChange={(e) => setChannelName(e.target.value)} placeholder="Channel name" />
-            <Input value={channelUrl} onChange={(e) => setChannelUrl(e.target.value)} placeholder="https://..." />
-            <Select value={channelType} onChange={(e) => setChannelType(e.target.value)}>
+            <Input value={channelName} onChange={(e) => setChannelName(e.target.value)} placeholder="Channel name" aria-label="Channel name" />
+            <Input value={channelUrl} onChange={(e) => setChannelUrl(e.target.value)} placeholder="https://..." aria-label="Channel URL" />
+            <Select value={channelType} onChange={(e) => setChannelType(e.target.value)} aria-label="Channel type">
               <option value="webhook">Webhook</option>
               <option value="slack">Slack Webhook</option>
             </Select>
-            <Select value={channelSeverity} onChange={(e) => setChannelSeverity(e.target.value)}>
+            <Select value={channelSeverity} onChange={(e) => setChannelSeverity(e.target.value)} aria-label="Channel minimum severity">
               <option value="info">info</option>
               <option value="warning">warning</option>
               <option value="danger">danger</option>

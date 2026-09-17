@@ -579,7 +579,7 @@ export default function CreateProcess() {
         <PanelHeader title="Launch flow" className="mb-3" />
 
         <InsetCard className="flow-strip mb-4 grid gap-2 md:grid-cols-[1fr_auto_auto]">
-          <Select value={selectedTemplate} onChange={(e) => {
+          <Select aria-label="Saved template" value={selectedTemplate} onChange={(e) => {
             const value = e.target.value;
             setSelectedTemplate(value);
             if (value) {

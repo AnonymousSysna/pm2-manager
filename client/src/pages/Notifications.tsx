@@ -131,13 +131,13 @@ export default function Notifications() {
       <section className="page-panel">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={level} onChange={(event) => setLevel(event.target.value)} className="w-32">
+            <Select value={level} onChange={(event) => setLevel(event.target.value)} aria-label="Filter by level" className="w-32">
               <option value="all">All levels</option>
               <option value="danger">Danger</option>
               <option value="warning">Warning</option>
               <option value="info">Info</option>
             </Select>
-            <Select value={category} onChange={(event) => setCategory(event.target.value)} className="w-40">
+            <Select value={category} onChange={(event) => setCategory(event.target.value)} aria-label="Filter by category" className="w-40">
               <option value="all">All categories</option>
               {categoryOptions.map((item) => (
                 <option key={item} value={item}>{item}</option>
@@ -146,7 +146,7 @@ export default function Notifications() {
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search notifications"
+              placeholder="Search notifications" aria-label="Search notifications"
               className="w-full sm:w-64"
             />
           </div>

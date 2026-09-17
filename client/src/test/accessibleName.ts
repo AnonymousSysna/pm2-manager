@@ -39,7 +39,13 @@ export function accessibleName(element: Element): string {
     return wrappingText;
   }
 
-  return (element.textContent || "").trim();
+  // Only elements whose content is their label. A <select>'s options are not its
+  // name, and an <input> has no content to read.
+  if (element.tagName === "BUTTON" || element.tagName === "A") {
+    return (element.textContent || "").trim();
+  }
+
+  return "";
 }
 
 /** Interactive controls a screen reader can reach and operate. */
