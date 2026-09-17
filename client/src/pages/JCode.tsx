@@ -1,0 +1,389 @@
+import { useEffect, useMemo, useState } from "react";
+import { Clipboard, Code2, ExternalLink, Play, Power, RefreshCw, ShieldCheck, Smartphone, StopCircle, TerminalSquare } from "lucide-react";
+import { jcode as jcodeApi } from "../api";
+import toast, { getErrorMessage } from "../lib/toast";
+import Badge from "../components/ui/Badge";
+import Button from "../components/ui/Button";
+import Input from "../components/ui/Input";
+import InsetPanel from "../components/ui/InsetPanel";
+import Select from "../components/ui/Select";
+import StatusText from "../components/ui/StatusText";
+import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
+import { Skeleton } from "../components/ui/Skeleton";
+import { Eyebrow, SubsectionTitle, SupportingCopy } from "../components/ui/Typography";
+
+const providerCommandByType = {
+  openai: "jcode login --provider openai",
+  claude: "jcode login --provider claude",
+  gemini: "jcode login --provider gemini",
+  copilot: "jcode login --provider copilot",
+  "openai-compatible": "jcode login --provider openai-compatible",
+  ollama: "jcode login --provider ollama",
+  lmstudio: "jcode login --provider lmstudio"
+};
+
+function defaultGatewayUrl() {
+  if (typeof window === "undefined") {
+    return "http://localhost:7643";
+  }
+  return `${window.location.protocol}//${window.location.hostname}:7643`;
+}
+
+async function copyToClipboard(value, label = "Command") {
+  try {
+    await navigator.clipboard.writeText(value);
+    toast.success(`${label} copied`);
+  } catch (_error) {
+    toast.error("Copy failed");
+  }
+}
+
+export default function JCode() {
+  const [loading, setLoading] = useState(true);
+  const [installing, setInstalling] = useState(false);
+  const [gatewayBusy, setGatewayBusy] = useState(false);
+  const [actionBusy, setActionBusy] = useState("");
+  const [status, setStatus] = useState(null);
+  const [gatewayUrl, setGatewayUrl] = useState(defaultGatewayUrl);
+  const [gatewayPort, setGatewayPort] = useState("7643");
+  const [jcodeProvider, setJcodeProvider] = useState("openai-compatible");
+  const [jcodeProviderUrl, setJcodeProviderUrl] = useState("");
+  const [jcodeModel, setJcodeModel] = useState("");
+  const [jcodeEnvName, setJcodeEnvName] = useState("JCODE_API_KEY");
+  const [lastOutput, setLastOutput] = useState("");
+
+  const installed = Boolean(status?.installed);
+  const gatewayRunning = Boolean(status?.gateway?.running);
+
+  const jcodeProfileCommand = useMemo(() => {
+    if (jcodeProvider !== "openai-compatible") {
+      const baseCommand = providerCommandByType[jcodeProvider] || "jcode login";
+      return jcodeModel.trim() ? `${baseCommand} && jcode --model ${jcodeModel.trim()} run "say hello"` : baseCommand;
+    }
+
+    const baseUrl = jcodeProviderUrl.trim() || "https://your-provider.example/v1";
+    const model = jcodeModel.trim() || "your-model-id";
+    const envName = jcodeEnvName.trim() || "JCODE_API_KEY";
+    const continued = "\\";
+
+    return [
+      `export ${envName}="paste-key-here"`,
+      `jcode provider add pm2-web ${continued}`,
+      `  --base-url ${baseUrl} ${continued}`,
+      `  --model ${model} ${continued}`,
+      `  --api-key-env ${envName} ${continued}`,
+      "  --set-default",
+      "jcode --provider-profile pm2-web auth-test"
+    ].join("\n");
+  }, [jcodeEnvName, jcodeModel, jcodeProvider, jcodeProviderUrl]);
+
+  const loadStatus = async () => {
+    try {
+      setLoading(true);
+      const result = await jcodeApi.status();
+      if (!result.success) {
+        throw new Error(result.error || "Unable to load JCode status");
+      }
+      const nextStatus = result.data || null;
+      setStatus(nextStatus);
+      setLastOutput(nextStatus?.lastOutput || "");
+      if (nextStatus?.gateway?.url) {
+        setGatewayUrl(nextStatus.gateway.url);
+      }
+      if (nextStatus?.gateway?.port) {
+        setGatewayPort(String(nextStatus.gateway.port));
+      }
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Unable to load JCode status"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadStatus();
+  }, []);
+
+  const installJcode = async () => {
+    if (!window.confirm("Install JCode on this server now?")) {
+      return;
+    }
+    try {
+      setInstalling(true);
+      const result = await jcodeApi.install();
+      if (!result.success) {
+        throw new Error(result.error || "JCode install failed");
+      }
+      const nextStatus = result.data?.status || null;
+      setStatus(nextStatus);
+      setLastOutput(result.data?.output || nextStatus?.lastOutput || "");
+      toast.success(result.data?.alreadyInstalled ? "JCode is already installed" : "JCode installed");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "JCode install failed"));
+    } finally {
+      setInstalling(false);
+      await loadStatus();
+    }
+  };
+
+  const startGateway = async () => {
+    try {
+      setGatewayBusy(true);
+      const result = await jcodeApi.startGateway({ port: Number(gatewayPort) || 7643 });
+      if (!result.success) {
+        throw new Error(result.error || "Unable to start JCode gateway");
+      }
+      const nextStatus = result.data?.status || null;
+      setStatus(nextStatus);
+      setLastOutput(nextStatus?.lastOutput || "");
+      toast.success(result.data?.alreadyRunning ? "JCode gateway is already running" : "JCode gateway started");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Unable to start JCode gateway"));
+    } finally {
+      setGatewayBusy(false);
+      await loadStatus();
+    }
+  };
+
+  const stopGateway = async () => {
+    try {
+      setGatewayBusy(true);
+      const result = await jcodeApi.stopGateway();
+      if (!result.success) {
+        throw new Error(result.error || "Unable to stop JCode gateway");
+      }
+      const nextStatus = result.data?.status || null;
+      setStatus(nextStatus);
+      setLastOutput(nextStatus?.lastOutput || "");
+      toast.success(result.data?.stopped ? "JCode gateway stopped" : "JCode gateway was not running");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Unable to stop JCode gateway"));
+    } finally {
+      setGatewayBusy(false);
+      await loadStatus();
+    }
+  };
+
+  const runAction = async (action, label) => {
+    try {
+      setActionBusy(action);
+      const result = await jcodeApi.runAction(action);
+      if (!result.success) {
+        throw new Error(result.error || `${label} failed`);
+      }
+      const output = result.data?.output || "";
+      setLastOutput(output);
+      setStatus(result.data?.status || status);
+      toast.success(`${label} finished`);
+    } catch (error) {
+      toast.error(getErrorMessage(error, `${label} failed`));
+    } finally {
+      setActionBusy("");
+      await loadStatus();
+    }
+  };
+
+  return (
+    <div className="compact-page-stack">
+      <PageIntro
+        title="JCode"
+        actions={(
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="secondary" size="sm" disabled={loading} onClick={loadStatus}>
+              <RefreshCw size={14} />
+              Refresh
+            </Button>
+            <Button as="a" href="https://jcode.sh/docs" target="_blank" rel="noreferrer" variant="outlineInfo" size="sm">
+              Docs
+              <ExternalLink size={14} />
+            </Button>
+          </div>
+        )}
+      />
+
+      <section className="page-panel p-3">
+        <PanelHeader
+          title="JCode control"
+          className="mb-3"
+          actions={loading ? <Skeleton className="h-7 w-24" /> : <Badge tone={installed ? "success" : "warning"}>{installed ? "Installed" : "Not installed"}</Badge>}
+        />
+
+        <div className="jcode-status-grid">
+          <InsetPanel padding="sm" className="jcode-extension-summary">
+            <div className="jcode-icon-badge">
+              <Code2 size={22} />
+            </div>
+            <div className="min-w-0">
+              <SubsectionTitle>Use JCode as the coding-agent layer</SubsectionTitle>
+              <SupportingCopy>
+                PM2 Manager only controls the extension. JCode owns the coding sessions, provider login, API keys, pairing, and gateway.
+              </SupportingCopy>
+              <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
+                <Badge tone={installed ? "success" : "warning"}>{installed ? status?.version || "Installed" : "Needs install"}</Badge>
+                <Badge tone={gatewayRunning ? "success" : "neutral"}>{gatewayRunning ? "Gateway running" : "Gateway stopped"}</Badge>
+              </div>
+            </div>
+          </InsetPanel>
+
+          <InsetPanel padding="sm" className="space-y-2">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="text-success-400" size={18} />
+              <SubsectionTitle className="text-sm">Install first, control after</SubsectionTitle>
+            </div>
+            <p className="text-xs leading-5 text-text-3">
+              The install action runs only when you press Install and confirm it. After that, use this tab for gateway, pairing, and provider commands.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant={installed ? "secondary" : "primary"} size="sm" disabled={loading || installing || installed} onClick={installJcode}>
+                <Power size={14} />
+                {installed ? "Installed" : installing ? "Installing..." : "Install JCode"}
+              </Button>
+              <Button type="button" variant="secondary" size="sm" disabled={!installed || gatewayBusy || gatewayRunning} onClick={startGateway}>
+                <Play size={14} />
+                {gatewayBusy && !gatewayRunning ? "Starting..." : "Start gateway"}
+              </Button>
+              <Button type="button" variant="secondary" size="sm" disabled={!installed || gatewayBusy || !gatewayRunning} onClick={stopGateway}>
+                <StopCircle size={14} />
+                {gatewayBusy && gatewayRunning ? "Stopping..." : "Stop gateway"}
+              </Button>
+            </div>
+          </InsetPanel>
+        </div>
+      </section>
+
+      <section className="jcode-control-grid">
+        <InsetPanel padding="sm" className="space-y-3">
+          <div>
+            <SubsectionTitle>Gateway</SubsectionTitle>
+            <SupportingCopy size="xs">Start JCode serve, open the gateway, or pair a device.</SupportingCopy>
+          </div>
+
+          <div className="grid gap-2 md:grid-cols-[1fr_140px]">
+            <label className="jcode-compact-field">
+              <span>Gateway URL</span>
+              <Input value={gatewayUrl} onChange={(event) => setGatewayUrl(event.target.value)} placeholder="http://server-ip:7643" />
+            </label>
+            <label className="jcode-compact-field">
+              <span>Port</span>
+              <Input value={gatewayPort} onChange={(event) => setGatewayPort(event.target.value)} inputMode="numeric" placeholder="7643" />
+            </label>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {installed ? (
+              <Button as="a" href={gatewayUrl || defaultGatewayUrl()} target="_blank" rel="noreferrer" variant="primary" size="sm">
+                Open gateway
+                <ExternalLink size={14} />
+              </Button>
+            ) : (
+              <Button type="button" variant="secondary" size="sm" disabled>
+                Open gateway
+                <ExternalLink size={14} />
+              </Button>
+            )}
+            <Button type="button" variant="secondary" size="sm" onClick={() => copyToClipboard(gatewayUrl || defaultGatewayUrl(), "Gateway URL")}>
+              <Clipboard size={14} />
+              Copy URL
+            </Button>
+            <Button type="button" variant="secondary" size="sm" disabled={!installed || actionBusy === "pair-device"} onClick={() => runAction("pair-device", "Pair device")}>
+              <Smartphone size={14} />
+              {actionBusy === "pair-device" ? "Pairing..." : "Pair device"}
+            </Button>
+          </div>
+
+          <p className="text-xs leading-5 text-text-3">
+            Pairing requires JCode gateway to be enabled in JCode config. If the gateway is not reachable, check the JCode config and firewall for this port.
+          </p>
+        </InsetPanel>
+
+        <InsetPanel padding="sm" className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <SubsectionTitle>Provider access</SubsectionTitle>
+              <SupportingCopy size="xs">Build the JCode login/provider command without saving secrets in PM2 Manager.</SupportingCopy>
+            </div>
+            <Button type="button" variant="secondary" size="sm" onClick={() => copyToClipboard(jcodeProfileCommand, "JCode login command")}>
+              <Clipboard size={14} />
+              Copy login
+            </Button>
+          </div>
+
+          <div className="jcode-provider-grid">
+            <label className="jcode-compact-field">
+              <span>Provider</span>
+              <Select value={jcodeProvider} onChange={(event) => setJcodeProvider(event.target.value)}>
+                <option value="openai-compatible">OpenAI compatible</option>
+                <option value="openai">OpenAI / ChatGPT</option>
+                <option value="claude">Anthropic Claude</option>
+                <option value="gemini">Google Gemini</option>
+                <option value="copilot">GitHub Copilot</option>
+                <option value="ollama">Ollama</option>
+                <option value="lmstudio">LM Studio</option>
+              </Select>
+            </label>
+            <label className="jcode-compact-field">
+              <span>Provider URL</span>
+              <Input
+                value={jcodeProviderUrl}
+                onChange={(event) => setJcodeProviderUrl(event.target.value)}
+                placeholder="https://provider.example/v1"
+                disabled={jcodeProvider !== "openai-compatible"}
+              />
+            </label>
+            <label className="jcode-compact-field">
+              <span>Model</span>
+              <Input value={jcodeModel} onChange={(event) => setJcodeModel(event.target.value)} placeholder="model id" />
+            </label>
+            <label className="jcode-compact-field">
+              <span>API key env</span>
+              <Input
+                value={jcodeEnvName}
+                onChange={(event) => setJcodeEnvName(event.target.value)}
+                placeholder="JCODE_API_KEY"
+                disabled={jcodeProvider !== "openai-compatible"}
+              />
+            </label>
+          </div>
+
+          <pre className="jcode-command-preview">{jcodeProfileCommand}</pre>
+        </InsetPanel>
+      </section>
+
+      <section className="page-panel p-3">
+        <PanelHeader
+          title="Checks"
+          className="mb-3"
+          actions={(
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" size="sm" disabled={!installed || actionBusy === "auth-test"} onClick={() => runAction("auth-test", "Auth test")}>
+                <TerminalSquare size={14} />
+                {actionBusy === "auth-test" ? "Checking..." : "Auth test"}
+              </Button>
+              <Button type="button" variant="secondary" size="sm" disabled={!installed || actionBusy === "smoke-test"} onClick={() => runAction("smoke-test", "Smoke test")}>
+                <TerminalSquare size={14} />
+                {actionBusy === "smoke-test" ? "Running..." : "Smoke test"}
+              </Button>
+            </div>
+          )}
+        />
+        <div className="grid gap-2 md:grid-cols-3">
+          <InsetPanel padding="sm">
+            <Eyebrow>Status</Eyebrow>
+            <p className="mt-1 text-sm text-text-2">
+              <StatusText tone={installed ? "success" : "warning"}>{installed ? "Ready" : "Install needed"}</StatusText>
+            </p>
+          </InsetPanel>
+          <InsetPanel padding="sm">
+            <Eyebrow>Binary</Eyebrow>
+            <p className="mt-1 truncate text-sm text-text-2">{status?.binaryPath || "-"}</p>
+          </InsetPanel>
+          <InsetPanel padding="sm">
+            <Eyebrow>Gateway PID</Eyebrow>
+            <p className="mt-1 text-sm text-text-2">{status?.gateway?.pid || "-"}</p>
+          </InsetPanel>
+        </div>
+        {lastOutput ? <pre className="jcode-command-preview mt-3">{lastOutput}</pre> : null}
+      </section>
+    </div>
+  );
+}

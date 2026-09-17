@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Bell, Globe, History, Menu, Plus, Puzzle, ScrollText, Settings, LogOut, Moon, Sun, X, TerminalSquare } from "lucide-react";
+import { Activity, Bell, Code2, Globe, History, Menu, Plus, Puzzle, ScrollText, Settings, LogOut, Moon, Sun, X, TerminalSquare } from "lucide-react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useSocket } from "../hooks/useSocket";
 import { auth } from "../api";
@@ -30,7 +30,8 @@ const navGroups = [
     label: "Advanced",
     links: [
       { to: "/dashboard/pm2-features", label: "PM2 Tools", icon: TerminalSquare },
-      { to: "/dashboard/extensions", label: "Extensions", icon: Puzzle }
+      { to: "/dashboard/extensions", label: "Extensions", icon: Puzzle },
+      { to: "/dashboard/jcode", label: "JCode", icon: Code2 }
     ]
   }
 ];
@@ -44,6 +45,7 @@ const pageTitleMap = {
   "/dashboard/settings": "Settings",
   "/dashboard/pm2-features": "PM2 Tools",
   "/dashboard/extensions": "Extensions",
+  "/dashboard/jcode": "JCode",
   "/dashboard/caddy": "Caddy Proxy"
 };
 

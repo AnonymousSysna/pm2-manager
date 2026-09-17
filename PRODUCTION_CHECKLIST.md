@@ -41,7 +41,7 @@ Use this before exposing PM2 Manager outside localhost.
 
 - Keep provider API keys out of PM2 Manager and configure them in JCode directly.
 - Use `jcode login` or `jcode provider add --api-key-env` instead of browser-stored secrets.
-- Run JCode agent sessions in SSH, tmux, or `jcode serve` so the dashboard remains an operations surface, not a shell.
+- Use the JCode tab for install/status/gateway control, but keep high-risk coding decisions inside JCode sessions.
 
 ## Installer readiness
 

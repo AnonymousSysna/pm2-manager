@@ -230,6 +230,17 @@ export const alerts = {
   clearHistory: () => api.delete<ApiResult<any>>("/api/v1/alerts/history").then(unwrap)
 };
 
+
+export const jcode = {
+  status: () => api.get<ApiResult<any>>("/api/v1/jcode/status").then(unwrap),
+  install: () => api.post<ApiResult<any>>("/api/v1/jcode/install", { confirmation: "INSTALL_JCODE" }).then(unwrap),
+  startGateway: (payload: Record<string, unknown> = {}) =>
+    api.post<ApiResult<any>>("/api/v1/jcode/gateway/start", payload).then(unwrap),
+  stopGateway: () => api.post<ApiResult<any>>("/api/v1/jcode/gateway/stop").then(unwrap),
+  runAction: (action: string, payload: Record<string, unknown> = {}) =>
+    api.post<ApiResult<any>>("/api/v1/jcode/actions", { action, ...payload }).then(unwrap)
+};
+
 export const caddy = {
   status: () => api.get<ApiResult<any>>("/api/v1/caddy/status").then(unwrap),
   install: () => api.post<ApiResult<any>>("/api/v1/caddy/install").then(unwrap),

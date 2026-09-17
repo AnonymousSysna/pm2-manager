@@ -463,6 +463,10 @@
     @apply flex min-w-0 flex-wrap items-center gap-2;
   }
 
+  .extension-card-row {
+    @apply flex min-w-0 flex-wrap items-center gap-3;
+  }
+
   .extension-muted-line {
     @apply truncate text-xs text-text-3;
   }
@@ -470,6 +474,14 @@
 
   .jcode-extension-grid {
     @apply grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)];
+  }
+
+  .jcode-status-grid {
+    @apply grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)];
+  }
+
+  .jcode-control-grid {
+    @apply grid gap-3 xl:grid-cols-2;
   }
 
   .jcode-extension-summary {

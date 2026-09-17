@@ -174,32 +174,9 @@ You do not need Caddy for the base app to run.
 
 ## JCode Extension
 
-Coding-agent workflows now run through **JCode** from the `Extensions` page. The dashboard no longer ships a separate assistant page or internal chat endpoint.
+Coding-agent workflows now run through **JCode**. The dashboard no longer ships a separate assistant page or internal chat endpoint.
 
-The `Extensions` page includes JCode install commands, provider login commands, a web-gateway shortcut, and a command builder for OpenAI-compatible endpoints. PM2 Manager does not store provider API keys; JCode should manage them through OAuth, `jcode login`, `jcode provider add`, or environment variables.
-
-Common JCode commands:
-
-```bash
-curl -fsSL https://jcode.sh/install | bash
-jcode login --provider openai
-jcode login --provider claude
-jcode login --provider openai-compatible
-jcode serve
-# then open http://<server-ip>:7643 from the JCode card
-```
-
-For a custom OpenAI-compatible endpoint, prefer a secret-safe env-variable setup:
-
-```bash
-export JCODE_API_KEY="paste-key-here"
-jcode provider add pm2-web \
-  --base-url https://provider.example/v1 \
-  --model your-model-id \
-  --api-key-env JCODE_API_KEY \
-  --set-default
-jcode --provider-profile pm2-web auth-test
-```
+Use `Extensions` to install JCode. After installation, open the `JCode` tab to control status, gateway start/stop, pairing, provider command building, and basic checks. PM2 Manager does not store provider API keys; JCode manages provider access through its own login, provider profiles, or environment variables.
 
 ## Updating an Existing Install
 

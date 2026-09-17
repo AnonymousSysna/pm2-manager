@@ -12,6 +12,7 @@ const Settings = lazy(() => import("./pages/Settings"));
 const History = lazy(() => import("./pages/History"));
 const Notifications = lazy(() => import("./pages/Notifications"));
 const Extensions = lazy(() => import("./pages/Extensions"));
+const JCode = lazy(() => import("./pages/JCode"));
 const Caddy = lazy(() => import("./pages/Caddy"));
 const PM2Features = lazy(() => import("./pages/PM2Features"));
 
@@ -171,6 +172,14 @@ export default function App() {
             element={(
               <LazyRoute fallback={<PageSkeleton titleWidth="w-32" blocks={4} />}>
                 <Extensions />
+              </LazyRoute>
+            )}
+          />
+          <Route
+            path="jcode"
+            element={(
+              <LazyRoute fallback={<PageSkeleton titleWidth="w-28" blocks={4} />}>
+                <JCode />
               </LazyRoute>
             )}
           />
