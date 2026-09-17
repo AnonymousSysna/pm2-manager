@@ -130,12 +130,14 @@ export function ConfirmDialog({
   confirmDisabled = false,
   closeLabel
 }) {
+  const confirmDescriptionId = useId();
+
   return (
     <Modal
       title={title}
-      description={description}
       onClose={onClose}
       closeLabel={closeLabel}
+      bodyClassName="confirm-dialog-body"
       actions={(
         <>
           <Button type="button" variant="secondary" onClick={onClose} disabled={confirmDisabled}>
@@ -146,6 +148,12 @@ export function ConfirmDialog({
           </Button>
         </>
       )}
-    />
+    >
+      {description ? (
+        <div id={confirmDescriptionId} className="confirm-dialog-message panel-muted">
+          {description}
+        </div>
+      ) : null}
+    </Modal>
   );
 }
