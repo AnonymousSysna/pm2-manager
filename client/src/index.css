@@ -310,3 +310,102 @@
     @apply page-panel xl:sticky xl:top-header xl:self-start;
   }
 }
+
+@layer components {
+  .process-main-card {
+    @apply overflow-visible rounded-2xl border border-border/80 bg-surface/95 shadow-[0_24px_80px_-64px_rgba(0,0,0,0.95)];
+  }
+
+  .process-main-card-topbar {
+    @apply flex flex-col gap-3 border-b border-border/70 px-4 py-3 lg:flex-row lg:items-center lg:justify-between;
+  }
+
+  .process-main-card-actions {
+    @apply flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-end lg:w-auto;
+  }
+
+  .process-bulk-actions {
+    @apply flex flex-wrap items-center gap-1.5;
+  }
+
+  .process-search-input {
+    @apply w-full sm:w-72 lg:w-80;
+  }
+
+  .process-table-scroll {
+    @apply overflow-x-auto;
+  }
+
+  .process-list-header {
+    display: grid;
+    grid-template-columns: 42px minmax(280px, 1.9fr) 104px 82px 116px 126px 204px;
+    min-width: 980px;
+    @apply items-center gap-3 border-b border-border/70 bg-surface-2/40 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-text-3;
+  }
+
+  .process-one-line-list {
+    min-width: 980px;
+    @apply divide-y divide-border/50;
+  }
+
+  .process-one-line-row {
+    display: grid;
+    grid-template-columns: 42px minmax(280px, 1.9fr) 104px 82px 116px 126px 204px;
+    min-width: 980px;
+    @apply items-center gap-3 px-4 py-2.5 text-sm transition duration-150 ease-out hover:bg-surface-2/40;
+  }
+
+  .process-select-cell {
+    @apply flex items-center;
+  }
+
+  .process-name-cell {
+    @apply flex min-w-0 items-center gap-2;
+  }
+
+  .process-name-button {
+    @apply min-w-0 max-w-[18rem] truncate text-left text-sm font-semibold leading-none text-text-1 hover:text-brand-400 hover:no-underline;
+  }
+
+  .process-inline-badges {
+    @apply flex min-w-0 items-center gap-1 overflow-hidden;
+  }
+
+  .process-inline-badges > span {
+    @apply shrink-0 whitespace-nowrap px-1.5 py-0 text-[10px] leading-5;
+  }
+
+  .process-state-cell {
+    @apply flex min-w-0 items-center;
+  }
+
+  .process-metric-cell,
+  .process-runtime-cell {
+    @apply flex min-h-8 min-w-0 items-center justify-between gap-2 rounded-lg border border-border/50 bg-surface-2/40 px-2 text-xs font-medium text-text-2;
+  }
+
+  .process-metric-cell--warning {
+    @apply border-warning-500/30 bg-warning-500/10 text-warning-300;
+  }
+
+  .process-actions-cell {
+    @apply relative flex min-w-0 items-center justify-end gap-1.5;
+  }
+
+  .process-row-button {
+    @apply min-h-8 rounded-lg px-2 py-1 text-xs;
+  }
+
+  .process-row-more {
+    @apply min-h-8 w-8 rounded-lg px-0 py-0;
+  }
+
+  .process-row-menu {
+    @apply right-0 min-w-64;
+  }
+
+  .process-empty-state {
+    min-width: 980px;
+    @apply m-3;
+  }
+}
