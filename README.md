@@ -627,3 +627,8 @@ Run `npm run setup` from the repository root after cloning. This installs client
 ### JCode extension terminal
 
 The JCode dashboard tab can now start an interactive JCode session inside the browser. Press **Start session** to start or reuse the local JCode server first, then attach with `jcode connect` through the existing authenticated Socket.IO terminal bridge. This avoids the first-run hang where a raw `jcode` client could stop at “Connecting to server...” under PM2/root when the runtime socket directory was missing. The JCode gateway controls remain available for pairing and thin clients, but the main workflow is now terminal-first.
+
+
+### JCode terminal runtime note
+
+The JCode web terminal starts the real JCode client directly by default, with `JCODE_RUNTIME_DIR` and `XDG_RUNTIME_DIR` pointed at PM2 Manager's owned runtime folder. The older server-first attach path is still available internally, but failures now include captured `jcode serve` output and the UI includes **Repair runtime** for stale sockets or locks.

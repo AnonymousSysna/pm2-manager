@@ -181,7 +181,7 @@ export default function JCode() {
       return;
     }
     if (socketRef.current) {
-      socketRef.current.emit("jcode:terminal:start", { rows: 30, cols: 110, mode: "connect" });
+      socketRef.current.emit("jcode:terminal:start", { rows: 30, cols: 110, mode: "start" });
       return;
     }
 
@@ -196,7 +196,7 @@ export default function JCode() {
 
     socket.on("connect", () => {
       setTerminalState("connecting");
-      socket.emit("jcode:terminal:start", { rows: 30, cols: 110, mode: "connect" });
+      socket.emit("jcode:terminal:start", { rows: 30, cols: 110, mode: "start" });
     });
 
     socket.on("connect_error", (error) => {
@@ -377,7 +377,7 @@ export default function JCode() {
               <SubsectionTitle className="text-sm">Install first, then start a session</SubsectionTitle>
             </div>
             <p className="text-xs leading-5 text-text-3">
-              Install runs only after confirmation. Start session starts the JCode server first, then connects the terminal below.
+              Install runs only after confirmation. Start session opens the real JCode client in the terminal below. JCode can start its own server if needed.
             </p>
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant={installed ? "secondary" : "primary"} size="sm" disabled={loading || installing || installed} onClick={installJcode}>
@@ -538,6 +538,10 @@ export default function JCode() {
           className="mb-3"
           actions={(
             <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" size="sm" disabled={!installed || actionBusy === "repair-runtime"} onClick={() => runAction("repair-runtime", "Repair runtime")}>
+                <RefreshCw size={14} />
+                {actionBusy === "repair-runtime" ? "Repairing..." : "Repair runtime"}
+              </Button>
               <Button type="button" variant="secondary" size="sm" disabled={!installed || actionBusy === "auth-test"} onClick={() => runAction("auth-test", "Auth test")}>
                 <TerminalSquare size={14} />
                 {actionBusy === "auth-test" ? "Checking..." : "Auth test"}

@@ -59,3 +59,8 @@ Use this before exposing PM2 Manager outside localhost.
 - Use a subdomain instead if you want standard HTTPS on port `443` without showing a port in the URL.
 
 - JCode browser terminal: install JCode first, then verify `/dashboard/jcode` starts/reuses the JCode server, attaches with `jcode connect`, accepts input, and stops cleanly on disconnect. The launcher should use PM2 Manager's writable `/tmp/pm2-manager-jcode-runtime-<uid>` runtime by default, remove stale sockets there, and avoid relying on `/run/user/<uid>` unless `JCODE_USE_XDG_RUNTIME_DIR=1` is explicitly set.
+
+
+### JCode terminal runtime note
+
+The JCode web terminal starts the real JCode client directly by default, with `JCODE_RUNTIME_DIR` and `XDG_RUNTIME_DIR` pointed at PM2 Manager's owned runtime folder. The older server-first attach path is still available internally, but failures now include captured `jcode serve` output and the UI includes **Repair runtime** for stale sockets or locks.

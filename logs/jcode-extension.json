@@ -1,9 +1,4 @@
 {
-  "jcodeServerPid": 8416,
-  "lastAction": {
-    "action": "terminal-server-start",
-    "ok": true,
-    "at": 1789662966552
-  },
-  "lastOutput": "Started JCode server PID 8416 at /tmp/pm2-manager-jcode-runtime-0/jcode.sock"
+  "lastAction": null,
+  "lastOutput": ""
 }

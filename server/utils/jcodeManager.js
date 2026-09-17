@@ -763,6 +763,55 @@ async function runJcodeAction(payload = {}) {
     };
   }
 
+  if (action === "repair-runtime") {
+    try {
+      const binaryPath = await resolveJcodeBinary();
+      const env = withJcodePathEnv();
+      const socketPath = process.platform === "win32" ? null : getJcodeSocketPath(env);
+      const cleanup = socketPath
+        ? await removeStaleJcodeRuntimeArtifacts(socketPath, "manual repair")
+        : { removed: false, paths: [] };
+      const state = await readState();
+      const pid = Number(state.jcodeServerPid || 0);
+      if (pid && isPidRunning(pid)) {
+        try {
+          process.kill(pid, "SIGTERM");
+        } catch (_error) {
+          // Best-effort: the next start will re-probe the socket.
+        }
+      }
+      const output = [
+        socketPath ? `Runtime socket: ${socketPath}` : "Runtime socket unavailable on this platform",
+        cleanup.paths.length ? `Removed: ${cleanup.paths.join(", ")}` : "No stale runtime files found",
+        pid ? `Stopped tracked JCode server PID ${pid}` : "No tracked JCode server PID",
+        binaryPath ? `Binary: ${binaryPath}` : "Binary: not found"
+      ].join("\n");
+      const nextState = {
+        ...state,
+        jcodeServerPid: null,
+        lastAction: { action, ok: true, at: Date.now() },
+        lastOutput: output
+      };
+      await writeState(nextState);
+      return {
+        success: true,
+        data: {
+          action,
+          output,
+          binaryPath,
+          status: (await getJcodeStatus()).data
+        },
+        error: null
+      };
+    } catch (error) {
+      return {
+        success: false,
+        data: null,
+        error: error?.message || "JCode runtime repair failed"
+      };
+    }
+  }
+
   const allowed = {
     "smoke-test": ["run", "say hello"],
     "auth-test": ["auth-test"],
@@ -825,6 +874,68 @@ async function runJcodeAction(payload = {}) {
 }
 
 
+function summarizeProcessOutput(stdout = "", stderr = "") {
+  const output = sanitizeOutput(`${stdout || ""}\n${stderr || ""}`);
+  return output ? `\nJCode output:\n${output}` : "";
+}
+
+async function waitForChildExit(child, timeoutMs = 500) {
+  if (!child) {
+    return { exited: true, code: null, signal: null };
+  }
+
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (result) => {
+      if (done) {
+        return;
+      }
+      done = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
+
+    const timer = setTimeout(() => finish({ exited: false, code: null, signal: null }), Math.max(50, timeoutMs));
+    child.once("close", (code, signal) => finish({ exited: true, code, signal }));
+    child.once("error", (error) => finish({ exited: true, code: null, signal: error?.message || "error" }));
+  });
+}
+
+async function startJcodeServerProcess(binaryPath, cwd, env) {
+  const serverName = String(process.env.JCODE_SERVER_NAME || "pm2-manager").trim() || "pm2-manager";
+  let stdout = "";
+  let stderr = "";
+  let exitState = { exited: false, code: null, signal: null };
+
+  const child = spawn(binaryPath, ["serve", "--server-name", serverName], {
+    cwd,
+    env,
+    detached: true,
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true
+  });
+
+  child.stdout?.on("data", (chunk) => {
+    stdout = sanitizeOutput(`${stdout}${chunk.toString("utf8")}`);
+  });
+  child.stderr?.on("data", (chunk) => {
+    stderr = sanitizeOutput(`${stderr}${chunk.toString("utf8")}`);
+  });
+  child.once("close", (code, signal) => {
+    exitState = { exited: true, code, signal };
+  });
+  child.once("error", (error) => {
+    exitState = { exited: true, code: null, signal: error?.message || "error" };
+  });
+
+  child.unref();
+  return {
+    child,
+    getExit: () => exitState,
+    getOutput: () => ({ stdout, stderr, combined: summarizeProcessOutput(stdout, stderr) })
+  };
+}
+
 async function ensureJcodeServer(binaryPath, cwd, env) {
   if (process.platform === "win32") {
     return { success: true, started: false, socketPath: null, message: "" };
@@ -867,42 +978,47 @@ async function ensureJcodeServer(binaryPath, cwd, env) {
     }
   }
 
-  const serverName = String(process.env.JCODE_SERVER_NAME || "pm2-manager").trim() || "pm2-manager";
-  const child = spawn(binaryPath, ["serve", "--server-name", serverName], {
-    cwd,
-    env,
-    detached: true,
-    stdio: "ignore",
-    windowsHide: true
-  });
-  child.unref();
-
+  const serverStart = await startJcodeServerProcess(binaryPath, cwd, env);
+  const child = serverStart.child;
   const startTimeoutMs = Number.isFinite(Number(process.env.JCODE_SERVER_START_TIMEOUT_MS))
     ? Math.max(2000, Math.floor(Number(process.env.JCODE_SERVER_START_TIMEOUT_MS)))
     : 12_000;
   const ready = await waitForJcodeSocket(socketPath, startTimeoutMs);
+  const earlyExit = serverStart.getExit();
+  const output = serverStart.getOutput();
   const state = await readState();
   const nextState = {
     ...state,
-    jcodeServerPid: child.pid,
+    jcodeServerPid: ready ? child.pid : null,
     lastAction: {
       action: "terminal-server-start",
       ok: ready,
       at: Date.now()
     },
     lastOutput: ready
-      ? `Started JCode server PID ${child.pid} at ${socketPath}`
-      : `JCode server PID ${child.pid} did not accept connections at ${socketPath} before timeout`
+      ? `Started JCode server PID ${child.pid} at ${socketPath}${output.combined}`
+      : `JCode server PID ${child.pid} did not accept connections at ${socketPath} before timeout${
+          earlyExit.exited ? `; process exited code=${earlyExit.code ?? ""} signal=${earlyExit.signal || ""}` : ""
+        }${output.combined}`
   };
   await writeState(nextState);
 
   if (!ready) {
+    if (!earlyExit.exited) {
+      try {
+        child.kill("SIGTERM");
+      } catch (_error) {
+        // Best-effort cleanup; a later repair can remove stale runtime files.
+      }
+    }
+
+    const details = output.combined || "\nNo stderr/stdout was captured from jcode serve.";
     return {
       success: false,
       started: true,
       socketPath,
       message: staleSocketMessage,
-      error: `JCode server did not accept connections. Expected socket: ${socketPath}. PM2 Manager now uses its own runtime directory by default; check that the folder is writable or set JCODE_RUNTIME_DIR to another writable path.`
+      error: `JCode server did not accept connections at ${socketPath}.${details}`
     };
   }
 
@@ -910,7 +1026,7 @@ async function ensureJcodeServer(binaryPath, cwd, env) {
     success: true,
     started: true,
     socketPath,
-    message: [staleSocketMessage, `Started JCode server PID ${child.pid} at ${socketPath}.`]
+    message: [staleSocketMessage, `Started JCode server PID ${child.pid} at ${socketPath}.`, output.combined.trim()]
       .filter(Boolean)
       .join("\n")
   };
@@ -975,34 +1091,54 @@ async function createJcodeTerminalProcess(payload = {}) {
 
   const args = [];
   let prelude = "";
-  if (mode === "start" || mode === "connect") {
+  let socketPath = process.platform === "win32" ? null : getJcodeSocketPath(env);
+
+  if (mode === "start") {
+    // Default web terminal behavior: launch the actual JCode client and let JCode
+    // perform its native server bootstrap. This avoids blocking the UI when a
+    // manual `jcode serve` cannot bind under PM2/root, while still forcing JCode
+    // to use PM2 Manager's safe runtime directory through env.
+    prelude = socketPath
+      ? `Starting JCode directly with runtime socket ${socketPath}. If JCode needs its daemon, it will start it itself.`
+      : "Starting JCode directly.";
+  } else if (mode === "connect") {
     const server = await ensureJcodeServer(binaryPath, cwd, env);
-    if (!server.success) {
-      return {
-        success: false,
-        child: null,
-        error: server.error || "JCode server failed to start"
-      };
+    if (server.success) {
+      prelude = server.message || "";
+      socketPath = server.socketPath || socketPath;
+      if (socketPath) {
+        args.push("--socket", socketPath);
+      }
+      args.push("connect");
+    } else {
+      // Do not kill the whole browser terminal just because the pre-started
+      // server did not become ready. Fall back to the real JCode client so the
+      // user can see JCode's own startup/login/runtime error in the terminal.
+      prelude = [
+        server.message,
+        server.error,
+        socketPath
+          ? `Falling back to direct JCode launch with runtime socket ${socketPath}.`
+          : "Falling back to direct JCode launch."
+      ].filter(Boolean).join("\n");
     }
-    prelude = server.message || "";
-    if (server.socketPath) {
-      args.push("--socket", server.socketPath);
-    }
-    args.push("connect");
   } else if (mode === "resume" && resumeName) {
     const server = await ensureJcodeServer(binaryPath, cwd, env);
-    if (!server.success) {
-      return {
-        success: false,
-        child: null,
-        error: server.error || "JCode server failed to start"
-      };
+    if (server.success) {
+      prelude = server.message || "";
+      socketPath = server.socketPath || socketPath;
+      if (socketPath) {
+        args.push("--socket", socketPath);
+      }
+      args.push("--resume", resumeName.slice(0, 80));
+    } else {
+      prelude = [
+        server.message,
+        server.error,
+        `Falling back to direct JCode resume for ${resumeName.slice(0, 80)}.`
+      ].filter(Boolean).join("\n");
+      args.push("--resume", resumeName.slice(0, 80));
     }
-    prelude = server.message || "";
-    if (server.socketPath) {
-      args.push("--socket", server.socketPath);
-    }
-    args.push("--resume", resumeName.slice(0, 80));
   }
 
   let command = binaryPath;
@@ -1042,7 +1178,7 @@ async function createJcodeTerminalProcess(payload = {}) {
         cols,
         mode,
         prelude,
-        socketPath: process.platform === "win32" ? null : getJcodeSocketPath(env)
+        socketPath
       }
     };
   } catch (error) {
