@@ -23,6 +23,7 @@ import {
   ProcessActionDialog,
   ProcessMetaModal
 } from "../components/dashboard/DashboardModals";
+import { validateCronExpression, validateProcessName } from "../lib/validation";
 
 function bytesToMB(value) {
   return `${(Number(value || 0) / 1024 / 1024).toFixed(1)} MB`;
@@ -1356,15 +1357,22 @@ export default function Dashboard() {
 
     if (action === "duplicate") {
       const targetName = String(actionDialog.value || "").trim();
-      if (!targetName) {
-        toast.error("Duplicate target name is required");
+      const targetNameError = validateProcessName(targetName, "Duplicate target name");
+      if (targetNameError) {
+        toast.error(targetNameError);
         return;
       }
       actionPayload = { targetName };
     }
 
     if (action === "schedule") {
-      actionPayload = { cron_restart: String(actionDialog.value || "").trim() || null };
+      const cronValue = String(actionDialog.value || "").trim();
+      const cronError = validateCronExpression(cronValue, "Schedule");
+      if (cronError) {
+        toast.error(cronError);
+        return;
+      }
+      actionPayload = { cron_restart: cronValue || null };
     }
 
     if (action === "rollback") {

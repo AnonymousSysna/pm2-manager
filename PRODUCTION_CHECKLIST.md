@@ -47,6 +47,20 @@ because everything in those files ships to the browser.
   rather than the old 400. Move the classification into the installer module (for
   example `UnavailableError` when a version manager is missing) if a 4xx is needed.
 
+## Validation
+
+- `server/utils/validation.ts` owns the field rules. The browser mirror in
+  `client/src/lib/validation.ts` is checked against it, so `npm --prefix client
+  test` fails when a pattern, reserved name, protocol list, or length limit drifts.
+- `server/tests/fixtures/validationCases.json` holds accept/reject cases that both
+  suites run, so a rule only one side implements fails a build.
+- Forms validate before submitting: process names, script paths, environment
+  variable names, memory limits, git clone URLs, and cron schedules report the
+  problem inline instead of costing a round trip and a 400 response.
+- Cron values allow up to six fields of `[A-Za-z0-9_*,?/-]` separated by single
+  spaces. Tabs, newlines, and shell metacharacters are rejected before the value
+  reaches PM2's scheduler.
+
 ## Recommended
 
 - Put the dashboard behind HTTPS.

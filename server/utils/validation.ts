@@ -7,6 +7,9 @@ const SAFE_ARG_CHARS = /^[A-Za-z0-9_./:=,@+\-\s]*$/;
 const RESERVED_PROCESS_NAMES = new Set(["catalog", "interpreters"]);
 const GIT_CLONE_SSH_PATTERN = /^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+:[^\s]+$/;
 const GIT_CLONE_PROTOCOLS = new Set(["http:", "https:", "ssh:", "git:", "file:"]);
+const CRON_TOKEN_PATTERN = /^[A-Za-z0-9_*,?\/-]+$/;
+const CRON_MAX_TOKENS = 6;
+const CRON_MAX_LENGTH = 128;
 
 function sanitizeProcessName(name, field = "name") {
   const value = String(name || "").trim();
@@ -126,13 +129,18 @@ function sanitizeCronExpression(value) {
   if (!str) {
     return undefined;
   }
-  if (str.length > 128) {
-    throw new ValidationError("cron_restart exceeds max length 128");
+  if (str.length > CRON_MAX_LENGTH) {
+    throw new ValidationError(`cron_restart exceeds max length ${CRON_MAX_LENGTH}`);
   }
-  if (!/^[A-Za-z0-9_*,\/\-?\s]+$/.test(str)) {
-    throw new ValidationError("cron_restart contains invalid characters");
+  // Split on any whitespace so tabs and newlines are rejected instead of being
+  // passed through to PM2's scheduler as one opaque argument.
+  const tokens = str.split(/\s+/);
+  if (tokens.length > CRON_MAX_TOKENS || tokens.some((token) => !CRON_TOKEN_PATTERN.test(token))) {
+    throw new ValidationError(
+      "cron_restart must be cron fields separated by single spaces, e.g. 0 3 * * *"
+    );
   }
-  return str;
+  return tokens.join(" ");
 }
 
 function sanitizeGitCloneUrl(value, fieldName = "git_clone_url") {
@@ -178,6 +186,9 @@ function sanitizeGitCloneUrl(value, fieldName = "git_clone_url") {
 module.exports = {
   PROCESS_NAME_PATTERN,
   ENV_KEY_PATTERN,
+  CRON_TOKEN_PATTERN,
+  CRON_MAX_TOKENS,
+  CRON_MAX_LENGTH,
   sanitizeProcessName,
   sanitizeScriptPath,
   sanitizeEnvObject,

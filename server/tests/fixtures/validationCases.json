@@ -1,0 +1,241 @@
+{
+  "_comment": "Shared accept/reject cases for the validation rules owned by server/utils/validation.ts and mirrored in client/src/lib/validation.ts. Both suites read this file: server/tests/validation.test.ts checks the server side, client/src/lib/validation.test.ts checks the client mirror, so a rule only one side knows about fails a build.",
+  "processName": [
+    {
+      "value": "api_server-01",
+      "valid": true,
+      "note": "letters, numbers, underscore, dash"
+    },
+    {
+      "value": "web-api_v2:blue",
+      "valid": true,
+      "note": "colon is allowed for PM2 namespacing"
+    },
+    {
+      "value": "  worker  ",
+      "valid": true,
+      "note": "trimmed before validating"
+    },
+    {
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "valid": true,
+      "note": "100 characters, at the limit"
+    },
+    {
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "valid": false,
+      "note": "101 characters, over the limit"
+    },
+    {
+      "value": "",
+      "valid": false,
+      "note": "required"
+    },
+    {
+      "value": "   ",
+      "valid": false,
+      "note": "whitespace only"
+    },
+    {
+      "value": "my app",
+      "valid": false,
+      "note": "space is not in the pattern"
+    },
+    {
+      "value": "app/name",
+      "valid": false,
+      "note": "slash is not in the pattern"
+    },
+    {
+      "value": "catalog",
+      "valid": false,
+      "note": "reserved by the dashboard"
+    },
+    {
+      "value": "Interpreters",
+      "valid": false,
+      "note": "reserved, case-insensitive"
+    }
+  ],
+  "gitCloneUrl": [
+    {
+      "value": "https://github.com/acme/sample-app.git",
+      "valid": true
+    },
+    {
+      "value": "http://git.internal/acme/sample-app",
+      "valid": true
+    },
+    {
+      "value": "git@github.com:acme/sample-app.git",
+      "valid": true,
+      "note": "scp-like form with user@host"
+    },
+    {
+      "value": "ssh://git@github.com/acme/sample-app.git",
+      "valid": true
+    },
+    {
+      "value": "git://github.com/acme/sample-app.git",
+      "valid": true
+    },
+    {
+      "value": "file:///srv/git/sample-app.git",
+      "valid": true
+    },
+    {
+      "value": "",
+      "valid": false,
+      "note": "required"
+    },
+    {
+      "value": "dasdas",
+      "valid": false,
+      "note": "not a URL"
+    },
+    {
+      "value": "github.com:acme/sample-app.git",
+      "valid": false,
+      "note": "scp-like form without user@ parses as the protocol github.com:"
+    },
+    {
+      "value": "git@github.com:sample-app.git",
+      "valid": false,
+      "note": "scp-like form without a path"
+    },
+    {
+      "value": "https://github.com",
+      "valid": false,
+      "note": "no repository path"
+    },
+    {
+      "value": "ftp://github.com/acme/sample-app.git",
+      "valid": false,
+      "note": "unsupported protocol"
+    },
+    {
+      "value": "https://git hub.com/acme/sample-app.git",
+      "valid": false,
+      "note": "whitespace"
+    }
+  ],
+  "envKey": [
+    {
+      "value": "PORT",
+      "valid": true
+    },
+    {
+      "value": "NODE_ENV",
+      "valid": true
+    },
+    {
+      "value": "_private",
+      "valid": true
+    },
+    {
+      "value": "",
+      "valid": false,
+      "note": "required"
+    },
+    {
+      "value": "1PORT",
+      "valid": false,
+      "note": "cannot start with a digit"
+    },
+    {
+      "value": "MY-KEY",
+      "valid": false,
+      "note": "dash is not allowed"
+    },
+    {
+      "value": "MY KEY",
+      "valid": false,
+      "note": "space is not allowed"
+    }
+  ],
+  "maxMemoryRestart": [
+    {
+      "value": "256M",
+      "valid": true
+    },
+    {
+      "value": "1G",
+      "valid": true
+    },
+    {
+      "value": "512k",
+      "valid": true,
+      "note": "unit is case-insensitive"
+    },
+    {
+      "value": "1.5G",
+      "valid": true,
+      "note": "decimals are accepted"
+    },
+    {
+      "value": "",
+      "valid": true,
+      "note": "optional field"
+    },
+    {
+      "value": "256",
+      "valid": false,
+      "note": "unit is required"
+    },
+    {
+      "value": "256 MB",
+      "valid": false,
+      "note": "no space"
+    },
+    {
+      "value": "-256M",
+      "valid": false,
+      "note": "no sign"
+    }
+  ],
+  "cron": [
+    {
+      "value": "0 3 * * *",
+      "valid": true
+    },
+    {
+      "value": "*/5 * * * *",
+      "valid": true
+    },
+    {
+      "value": "0,30 8-18/2 * 1-5",
+      "valid": true,
+      "note": "lists and ranges"
+    },
+    {
+      "value": "0 3 * * * 30",
+      "valid": true,
+      "note": "six fields with seconds"
+    },
+    {
+      "value": "",
+      "valid": true,
+      "note": "optional field"
+    },
+    {
+      "value": "0 3 * * *; rm -rf /",
+      "valid": false,
+      "note": "semicolon is not allowed"
+    },
+    {
+      "value": "0 3 * * *\n0 4 * * *",
+      "valid": false,
+      "note": "newline is not allowed"
+    },
+    {
+      "value": "0 3 * * *\t0 4 * * *",
+      "valid": false,
+      "note": "tab is not allowed"
+    },
+    {
+      "value": "0 3 * * * 0 5",
+      "valid": false,
+      "note": "more than six fields"
+    }
+  ]
+}

@@ -17,12 +17,18 @@ import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 import { Skeleton } from "../components/ui/Skeleton";
 import { InsetCard } from "../components/ui/Surface";
 import { Eyebrow, SubsectionTitle, SupportingCopy } from "../components/ui/Typography";
+import {
+  validateCronExpression,
+  validateEnvKey,
+  validateGitCloneUrl,
+  validateMaxMemoryRestart,
+  validateProcessName,
+  validateScriptPath
+} from "../lib/validation";
 
 const defaultEnvRow = { key: "", value: "" };
 const TEMPLATE_STORAGE_KEY = "pm2_process_templates_v1";
 const SENSITIVE_ENV_KEY_PATTERN = /(pass(word)?|secret|token|api[_-]?key|private|credential|auth|pwd)/i;
-const GIT_CLONE_SSH_PATTERN = /^(?:ssh:\/\/)?(?:[^@\s]+@)?[^:/\s]+:[^:\s]+$/;
-const GIT_CLONE_PROTOCOLS = new Set(["http:", "https:", "ssh:", "git:", "file:"]);
 
 function isSensitiveEnvKey(key) {
   return SENSITIVE_ENV_KEY_PATTERN.test(String(key || ""));
@@ -52,46 +58,6 @@ function inferRepoName(gitUrl) {
   return (parts[parts.length - 1] || "app").replace(/[^A-Za-z0-9._-]/g, "-");
 }
 
-function validateGitCloneUrl(value) {
-  const str = String(value || "").trim();
-  if (!str) {
-    return "Git clone URL is required in Git Clone Mode.";
-  }
-  if (str.length > 2048) {
-    return "Git clone URL exceeds max length 2048.";
-  }
-  if (/\s/.test(str)) {
-    return "Git clone URL cannot contain whitespace.";
-  }
-
-  if (GIT_CLONE_SSH_PATTERN.test(str)) {
-    const remotePath = str.split(":").slice(1).join(":");
-    if (!remotePath || !remotePath.includes("/")) {
-      return "Git clone URL must be a valid git clone URL.";
-    }
-    return "";
-  }
-
-  let parsed;
-  try {
-    parsed = new URL(str);
-  } catch (_error) {
-    return "Git clone URL must be a valid git clone URL.";
-  }
-
-  if (!GIT_CLONE_PROTOCOLS.has(parsed.protocol)) {
-    return "Git clone URL must use http, https, ssh, git, or file protocol.";
-  }
-  if (parsed.protocol !== "file:" && !parsed.hostname) {
-    return "Git clone URL must include a hostname.";
-  }
-  if (!parsed.pathname || parsed.pathname === "/") {
-    return "Git clone URL must include a repository path.";
-  }
-
-  return "";
-}
-
 function makeCreateOperationId() {
   if (window?.crypto?.randomUUID) {
     return window.crypto.randomUUID();
@@ -108,7 +74,6 @@ function formatCreateStepLabel(label) {
     .join(" / ");
 }
 
-const MAX_MEMORY_RESTART_PATTERN = /^\d+(M|G|K|m|g|k)$/;
 const DEFAULT_RUNTIME_HINT = {
   interpreter: "node",
   execMode: "cluster",
@@ -287,16 +252,23 @@ export default function CreateProcess() {
 
   const templateNames = useMemo(() => Object.keys(templates).sort(), [templates]);
   const runtimeHint = useMemo(() => inferRuntimeHint(mode, form), [mode, form]);
-  const maxMemoryRestartError = useMemo(() => {
-    const value = String(form.max_memory_restart || "").trim();
-    if (!value) {
-      return "";
-    }
-    if (!MAX_MEMORY_RESTART_PATTERN.test(value)) {
-      return "Format must match e.g. 256M, 1G, 512K.";
+  const maxMemoryRestartError = useMemo(
+    () => validateMaxMemoryRestart(form.max_memory_restart),
+    [form.max_memory_restart]
+  );
+  const cronRestartError = useMemo(
+    () => (showAdvanced ? validateCronExpression(form.cron_restart) : ""),
+    [showAdvanced, form.cron_restart]
+  );
+  const envRowKeyError = useMemo(() => {
+    for (const row of form.envRows) {
+      const key = String(row?.key || "").trim();
+      if (key) {
+        return validateEnvKey(key);
+      }
     }
     return "";
-  }, [form.max_memory_restart]);
+  }, [form.envRows]);
   const envFileValidationErrors = useMemo(
     () => validateDotEnvContent(form.env_file_content),
     [form.env_file_content]
@@ -402,11 +374,18 @@ export default function CreateProcess() {
   };
 
   const validateStepOne = () => {
-    if (!form.name.trim()) {
-      return "Process Name is required.";
+    const nameError = validateProcessName(form.name);
+    if (nameError) {
+      return nameError;
     }
     if (mode === "script" && !form.script.trim()) {
       return "Script Path is required in Script Mode.";
+    }
+    if (mode === "script") {
+      const scriptPathError = validateScriptPath(form.script);
+      if (scriptPathError) {
+        return scriptPathError;
+      }
     }
     if (mode === "project" && !form.project_path.trim()) {
       return "Project Directory is required in Project Mode.";
@@ -424,12 +403,19 @@ export default function CreateProcess() {
   };
 
   const validateSubmission = () => {
-    if (!form.name.trim()) {
-      return "Process Name is required.";
+    const nameError = validateProcessName(form.name);
+    if (nameError) {
+      return nameError;
     }
 
     if (mode === "script" && !form.script.trim()) {
       return "Script Path is required in Script Mode.";
+    }
+    if (mode === "script") {
+      const scriptPathError = validateScriptPath(form.script);
+      if (scriptPathError) {
+        return scriptPathError;
+      }
     }
 
     if (mode === "project" && !form.project_path.trim()) {
@@ -449,6 +435,12 @@ export default function CreateProcess() {
     if (showAdvanced && maxMemoryRestartError) {
       return maxMemoryRestartError;
     }
+    if (cronRestartError) {
+      return cronRestartError;
+    }
+    if (envRowKeyError) {
+      return envRowKeyError;
+    }
     if (mode === "git" && envFileValidationErrors.length > 0) {
       return `.env content has invalid lines: ${envFileValidationErrors.slice(0, 5).map((item) => item.line).join(", ")}`;
     }
@@ -458,6 +450,12 @@ export default function CreateProcess() {
   const validateStepTwo = () => {
     if (showAdvanced && maxMemoryRestartError) {
       return maxMemoryRestartError;
+    }
+    if (cronRestartError) {
+      return cronRestartError;
+    }
+    if (envRowKeyError) {
+      return envRowKeyError;
     }
     if (mode === "git" && envFileValidationErrors.length > 0) {
       return `.env content has invalid lines: ${envFileValidationErrors.slice(0, 5).map((item) => item.line).join(", ")}`;
