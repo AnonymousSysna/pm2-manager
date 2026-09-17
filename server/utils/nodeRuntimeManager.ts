@@ -104,6 +104,7 @@ function runCommand(command: string, args: string[], options: RunCommandOptions 
     // directly; toSpawnTarget decides when the shell is required.
     const target = toSpawnTarget(command, args);
     const child = spawn(target.command, target.args, {
+      windowsVerbatimArguments: target.windowsVerbatimArguments,
       cwd,
       env: env ? { ...process.env, ...env } : process.env,
       stdio: ["ignore", "pipe", "pipe"]

@@ -3,7 +3,7 @@ const os = require("os");
 const path = require("path");
 const tls = require("tls");
 const { spawn } = require("child_process");
-const { toSpawnTarget, terminateChildTree } = require("./commandSpawn");
+const { toSpawnTarget, terminateChildTree, resolveExecutable } = require("./commandSpawn");
 const permissionHints = require("./permissionHints.js");
 const withPermissionHint = typeof permissionHints?.withPermissionHint === "function"
   ? permissionHints.withPermissionHint
@@ -51,6 +51,7 @@ function runCommand(command, args, options = {}) {
     // shell is required.
     const target = toSpawnTarget(command, args);
     const child = spawn(target.command, target.args, {
+      windowsVerbatimArguments: target.windowsVerbatimArguments,
       cwd,
       stdio: ["ignore", "pipe", "pipe"]
     });
@@ -695,7 +696,9 @@ async function installCaddy() {
     const attempts = [];
     for (const entry of commands) {
       try {
-        const result = await runCommand(entry.command, entry.args);
+        // `where scoop` proves the manager exists, but spawn cannot start a bare
+        // name that is really a `.cmd`; resolve it to the file that was found.
+        const result = await runCommand(resolveExecutable(entry.command) || entry.command, entry.args);
         attempts.push({
           command: `${entry.command} ${entry.args.join(" ")}`,
           success: true,

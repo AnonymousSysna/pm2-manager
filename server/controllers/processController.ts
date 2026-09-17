@@ -735,6 +735,7 @@ function runCommand(command: string, args: string[], cwd: string, options: Comma
     // npm scripts run through npm.cmd on Windows, which needs the shell.
     const target = toSpawnTarget(command, args);
     const child = spawn(target.command, target.args, {
+      windowsVerbatimArguments: target.windowsVerbatimArguments,
       cwd,
       env: childEnv,
       stdio: ["ignore", "pipe", "pipe"]
@@ -882,6 +883,7 @@ function runDetectCommand(command: string, args: string[]): Promise<DetectComman
     // when the shell is required.
     const target = toSpawnTarget(command, args);
     const child = spawn(target.command, target.args, {
+      windowsVerbatimArguments: target.windowsVerbatimArguments,
       cwd: process.cwd(),
       stdio: ["ignore", "pipe", "pipe"]
     });

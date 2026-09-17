@@ -75,6 +75,7 @@ function runCommand(command: string, args: string[], timeoutOrOptions: number | 
     // directly; toSpawnTarget decides when the shell is required.
     const target = toSpawnTarget(command, args);
     const child = spawn(target.command, target.args, {
+      windowsVerbatimArguments: target.windowsVerbatimArguments,
       cwd,
       stdio: ["ignore", "pipe", "pipe"]
     });

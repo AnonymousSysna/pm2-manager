@@ -405,6 +405,7 @@ function runCommand(command, args, options = {}) {
     // directly on Windows; toSpawnTarget decides when the shell is required.
     const target = toSpawnTarget(command, args);
     const child = spawn(target.command, target.args, {
+      windowsVerbatimArguments: target.windowsVerbatimArguments,
       cwd,
       env,
       windowsHide: true,
@@ -853,6 +854,7 @@ async function startJcodeGateway(payload = {}) {
   let stdout = "";
   const launch = toSpawnTarget(binaryPath, args);
   const child = spawn(launch.command, launch.args, {
+      windowsVerbatimArguments: launch.windowsVerbatimArguments,
     cwd: process.env.JCODE_WORKING_DIR || process.cwd(),
     env: withJcodePathEnv({
       ...process.env,
@@ -1130,6 +1132,7 @@ async function startJcodeServerProcess(binaryPath, cwd, env) {
 
   const launch = toSpawnTarget(binaryPath, ["serve", "--server-name", serverName]);
   const child = spawn(launch.command, launch.args, {
+      windowsVerbatimArguments: launch.windowsVerbatimArguments,
     cwd,
     env,
     detached: true,
@@ -1627,6 +1630,7 @@ async function createJcodeTerminalProcess(payload = {}) {
   try {
     const launch = toSpawnTarget(command, spawnArgs);
     const child = spawn(launch.command, launch.args, {
+      windowsVerbatimArguments: launch.windowsVerbatimArguments,
       cwd,
       env,
       windowsHide: true,

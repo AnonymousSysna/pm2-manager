@@ -7,6 +7,7 @@ const { spawn } = require("child_process");
 const {
   windowsShellRequired,
   toSpawnTarget,
+  resolveExecutable,
   quoteForCmd,
   commandLineFor,
   terminationPlan
@@ -19,11 +20,15 @@ interface Attempt {
 }
 
 /** Spawn something and report whether the launch itself threw. */
-function attempt(command: string, args: string[]): Promise<Attempt> {
+function attempt(
+  command: string,
+  args: string[],
+  options: { windowsVerbatimArguments?: boolean } = {}
+): Promise<Attempt> {
   return new Promise((resolve) => {
     let child;
     try {
-      child = spawn(command, args, { windowsHide: true });
+      child = spawn(command, args, { windowsHide: true, ...options });
     } catch (_error) {
       resolve({ threw: true, code: null, output: "" });
       return;
@@ -73,16 +78,35 @@ test("toSpawnTarget routes a Windows shim through cmd.exe and leaves other platf
     "/d",
     "/s",
     "/c",
-    "npm.cmd --prefix server exec pm2 -- jlist"
+    '"npm.cmd --prefix server exec pm2 -- jlist"'
   ]);
   assert.equal(windows.display, "npm.cmd --prefix server exec pm2 -- jlist");
+  assert.equal(
+    windows.windowsVerbatimArguments,
+    true,
+    "the wrapped line must reach cmd.exe unescaped"
+  );
 
   const linux = toSpawnTarget("npm", pm2Probe, "linux");
   assert.equal(linux.command, "npm", "no interpreter is involved off Windows");
   assert.deepEqual(linux.args, pm2Probe);
+  assert.equal(linux.windowsVerbatimArguments, false);
 
   const windowsNode = toSpawnTarget("node.exe", ["-e", "1"], "win32");
   assert.equal(windowsNode.command, "node.exe", "a real executable is not wrapped");
+  assert.equal(windowsNode.windowsVerbatimArguments, false);
+});
+
+test("a wrapped shim with a space in its path keeps the outer quote pair", () => {
+  const target = toSpawnTarget("C:\\Program Files\\nodejs\\npm.cmd", ["--version"], "win32", "cmd.exe");
+
+  assert.deepEqual(target.args, [
+    "/d",
+    "/s",
+    "/c",
+    '""C:\\Program Files\\nodejs\\npm.cmd" --version"'
+  ]);
+  assert.equal(target.display, '"C:\\Program Files\\nodejs\\npm.cmd" --version');
 });
 
 test("commandLineFor quotes each token of the display string", () => {
@@ -120,9 +144,132 @@ test(
       assert.equal(direct.threw, true, "spawning a .cmd directly throws instead of emitting an error event");
 
       const target = toSpawnTarget(shim, ["hello"]);
-      const wrapped = await attempt(target.command, target.args);
+      const wrapped = await attempt(target.command, target.args, {
+        windowsVerbatimArguments: target.windowsVerbatimArguments
+      });
       assert.equal(wrapped.code, 0, wrapped.output);
       assert.match(wrapped.output, /shim-ran hello/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+);
+
+test("resolveExecutable finds a bare name through PATH and PATHEXT", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "resolve-executable-"));
+  const shim = path.join(dir, "fake-manager.cmd");
+  fs.writeFileSync(shim, "@echo off\r\n");
+
+  try {
+    const env = { PATH: `C:\\nope;${dir}`, PATHEXT: ".EXE;.CMD" };
+    assert.equal(
+      resolveExecutable("fake-manager", { platform: "win32", env, exists: fs.existsSync }),
+      shim
+    );
+    assert.equal(
+      resolveExecutable("missing-manager", { platform: "win32", env, exists: fs.existsSync }),
+      null,
+      "a name that is nowhere on PATH reports null so the caller keeps its own error"
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("resolveExecutable honours PATHEXT order and leaves explicit names alone", () => {
+  const asked: string[] = [];
+  const exists = (candidate: string) => {
+    asked.push(path.win32.basename(candidate));
+    return /\.exe$/i.test(candidate);
+  };
+
+  const found = resolveExecutable("manager", {
+    platform: "win32",
+    env: { PATH: "C:\\tools", PATHEXT: ".CMD;.EXE" },
+    exists
+  });
+  assert.equal(path.win32.basename(found), "manager.exe", "the first existing extension wins");
+  assert.ok(found.includes("C:\\tools"), `expected the PATH entry to be used, got ${found}`);
+  assert.deepEqual(asked, ["manager.cmd", "manager.exe"], "extensions are tried in PATHEXT order");
+
+  assert.equal(
+    resolveExecutable("C:\\tools\\manager", { platform: "win32", env: { PATH: "C:\\tools" }, exists }),
+    "C:\\tools\\manager",
+    "a path is already explicit"
+  );
+  assert.equal(
+    resolveExecutable("node.exe", { platform: "win32", env: { PATH: "C:\\tools" }, exists }),
+    "node.exe",
+    "an extension means the caller already named the file"
+  );
+  assert.equal(
+    resolveExecutable("caddy", { platform: "linux", env: { PATH: "/usr/bin" }, exists }),
+    "caddy",
+    "the operating system resolves bare names off Windows"
+  );
+  assert.equal(resolveExecutable("", { platform: "win32", env: {} }), null);
+});
+
+test(
+  "a resolved package-manager shim runs, where the bare name cannot",
+  { skip: process.platform !== "win32" ? "Windows-only: PATHEXT resolution" : false },
+  async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "resolve-run-"));
+    const shim = path.join(dir, "fake-manager.cmd");
+    fs.writeFileSync(shim, "@echo off\r\necho manager-ran %1\r\n");
+
+    try {
+      const bare = await attempt("fake-manager", ["install"]);
+      assert.equal(bare.code, null, "a bare name is not startable");
+      assert.equal(bare.threw, false);
+
+      const resolved = resolveExecutable("fake-manager", {
+        platform: "win32",
+        env: { PATH: dir, PATHEXT: ".CMD" },
+        exists: fs.existsSync
+      });
+      assert.equal(resolved, shim);
+
+      const target = toSpawnTarget(resolved, ["install"]);
+      const ran = await attempt(target.command, target.args, {
+        windowsVerbatimArguments: target.windowsVerbatimArguments
+      });
+      assert.equal(ran.code, 0, ran.output);
+      assert.match(ran.output, /manager-ran install/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+);
+
+test(
+  "a shim under a path with a space runs only in the canonical cmd.exe form",
+  { skip: process.platform !== "win32" ? "Windows-only: cmd.exe quoting" : false },
+  async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "spaced shim "));
+    const shim = path.join(dir, "echo args.cmd");
+    fs.writeFileSync(shim, "@echo off\r\necho spaced-shim-ran %1\r\n");
+    const comspec = process.env.ComSpec || "cmd.exe";
+
+    try {
+      // What the previous wrapping did: hand cmd.exe the display line as one
+      // argument. With a quoted program inside it, Node escapes the quotes and cmd
+      // reports the program as "not recognized".
+      const naive = await attempt(comspec, [
+        "/d",
+        "/s",
+        "/c",
+        commandLineFor(shim, ["hello"])
+      ]);
+      assert.notEqual(naive.code, 0, `the naive form should not run: ${naive.output}`);
+      assert.match(naive.output, /not recognized/i);
+
+      const target = toSpawnTarget(shim, ["hello"]);
+      const canonical = await attempt(target.command, target.args, {
+        windowsVerbatimArguments: target.windowsVerbatimArguments
+      });
+      assert.equal(canonical.code, 0, canonical.output);
+      assert.match(canonical.output, /spaced-shim-ran hello/);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

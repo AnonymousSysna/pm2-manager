@@ -1,4 +1,6 @@
+import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import path from "node:path";
 
 /**
  * How to launch a command on the current platform.
@@ -25,6 +27,15 @@ export interface SpawnTarget {
   args: string[];
   /** The command line as a human would type it, for logs and error messages. */
   display: string;
+  /**
+   * Pass this as `windowsVerbatimArguments`. When the shim is wrapped, `args` is a
+   * finished `cmd.exe` command line, and Node's own argument escaping would destroy
+   * it: Node escapes the inner quotes with backslashes, which `cmd.exe` does not
+   * read as escapes. Measured against a shim in a directory whose name contains a
+   * space: with the escaping left on, `cmd.exe` answers "The network path was not
+   * found."; verbatim, it runs.
+   */
+  windowsVerbatimArguments: boolean;
 }
 
 /** True when `command` is a Windows shim that has to run through `cmd.exe`. */
@@ -67,14 +78,81 @@ export function toSpawnTarget(
 ): SpawnTarget {
   const display = commandLineFor(command, args);
   if (!windowsShellRequired(command, platform)) {
-    return { command, args, display };
+    return { command, args, display, windowsVerbatimArguments: false };
   }
 
+  // `cmd /c` strips the outer pair of quotes only when `/s` is set and the string
+  // starts and ends with one. The extra pair is what keeps a program path with a
+  // space intact: without it `cmd` sees `"C:\Program Files\nodejs\npm.cmd"` inside a
+  // line it has already started parsing and reports "is not recognized".
   return {
     command: comspec,
-    args: ["/d", "/s", "/c", display],
-    display
+    args: ["/d", "/s", "/c", `"${display}"`],
+    display,
+    windowsVerbatimArguments: true
   };
+}
+
+export interface ResolveExecutableOptions {
+  platform?: NodeJS.Platform;
+  env?: NodeJS.ProcessEnv;
+  exists?: (candidate: string) => boolean;
+}
+
+/**
+ * The absolute path of a bare command name, or null when it is not on PATH.
+ *
+ * Windows is the reason this exists. `child_process.spawn` does not apply
+ * `PATHEXT`: `spawn("npm")` fails with ENOENT even though `npm.cmd` is on PATH, and
+ * `spawn("scoop")` fails the same way, so a package-manager fallback such as the
+ * scoop install of caddy could never run. Resolving the name to its real file first
+ * turns it into a path (a `.cmd` or `.bat` then goes through the shell rule above).
+ *
+ * A command that already names a path, or already carries an extension, is
+ * returned untouched: the caller has said what it wants. Everywhere except Windows
+ * the operating system resolves bare names itself, so nothing is looked up.
+ *
+ * Null is a "look it up yourself" answer, not a verdict that the command is
+ * missing, so callers must fall back to the bare name. Not every Windows
+ * executable is a file on PATH: `winget` is an App Execution Alias under
+ * `%LOCALAPPDATA%\Microsoft\WindowsApps` whose reparse point `existsSync` cannot
+ * see, and the bare name still starts. Measured on this machine: `winget` resolves
+ * to null, runs bare, and exits 0.
+ */
+export function resolveExecutable(
+  command: string,
+  options: ResolveExecutableOptions = {}
+): string | null {
+  const platform = options.platform ?? process.platform;
+  const env = options.env ?? process.env;
+  const exists = options.exists ?? existsSync;
+  const name = String(command || "").trim();
+  if (!name) {
+    return null;
+  }
+  const hasPathSegment = name.includes("/") || name.includes("\\");
+  if (platform !== "win32" || hasPathSegment || path.extname(name) !== "") {
+    return name;
+  }
+
+  const extensions = String(env.PATHEXT || ".COM;.EXE;.BAT;.CMD")
+    .split(";")
+    .map((extension) => extension.trim().toLowerCase())
+    .filter(Boolean);
+  const directories = String(env.PATH || "")
+    .split(";")
+    .map((directory) => directory.trim())
+    .filter(Boolean);
+
+  for (const directory of directories) {
+    for (const extension of extensions) {
+      const candidate = path.join(directory, `${name}${extension}`);
+      if (exists(candidate)) {
+        return candidate;
+      }
+    }
+  }
+  return null;
 }
 
 export interface TerminationPlan {

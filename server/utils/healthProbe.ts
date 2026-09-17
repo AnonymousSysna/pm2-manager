@@ -87,6 +87,7 @@ export function runHealthCommand(
     try {
       const target = toSpawnTarget(command, args);
       child = spawn(target.command, target.args, {
+      windowsVerbatimArguments: target.windowsVerbatimArguments,
         cwd,
         env: process.env,
         windowsHide: true
