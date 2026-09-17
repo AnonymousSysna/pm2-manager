@@ -20,7 +20,7 @@ import Badge from "./ui/Badge";
 import Button from "./ui/Button";
 import Modal from "./ui/Modal";
 import ProgressBar from "./ui/ProgressBar";
-import { InsetCard, StatCard } from "./ui/Surface";
+import { InsetCard } from "./ui/Surface";
 import TabGroup from "./ui/TabGroup";
 import { Skeleton } from "./ui/Skeleton";
 import { Eyebrow, SubsectionTitle, SupportingCopy } from "./ui/Typography";
@@ -173,8 +173,8 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
     { label: "Cron restart", value: process.cronRestart || env.cron_restart || "-" },
     { label: "Node", value: env.node_version || "-" },
     { label: "PM2", value: env.version || "-" },
-    { label: "Working dir", value: env.pm_cwd || "-" },
-    { label: "Exec path", value: env.pm_exec_path || "-" },
+    { label: "Working dir", value: env.pm_cwd || "-", wide: true },
+    { label: "Exec path", value: env.pm_exec_path || "-", wide: true },
     { label: "Unstable restarts", value: env.unstable_restarts ?? "-" }
   ];
 
@@ -192,26 +192,18 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
       title={process.name}
       onClose={onClose}
       position="right"
+      size="lg"
       closeLabel="Close process details"
     >
-      <TabGroup items={tabs} value={tab} onChange={setTab} className="mb-4" />
+      <TabGroup items={tabs} value={tab} onChange={setTab} className="mb-3" />
 
       {tab === "Summary" && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            {summaryItems.map((item) => (
-              <StatCard
-                key={item.label}
-                label={item.label}
-                value={item.tone ? <Badge tone={item.tone}>{String(item.value)}</Badge> : String(item.value)}
-                className="break-all"
-              />
-            ))}
-          </div>
+        <div className="space-y-3">
+          <DetailFacts items={summaryItems} />
 
           {healthEnabled && (
-            <InsetCard>
-              <div className="mb-3 flex items-center justify-between gap-2">
+            <InsetCard padding="sm">
+              <div className="mb-2 flex items-center justify-between gap-2">
                 <div>
                   <SubsectionTitle className="text-sm">Persistent health checks</SubsectionTitle>
                   <SupportingCopy size="xs">
@@ -225,14 +217,16 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
                 </Badge>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <StatCard label="Availability" value={healthSummary.availabilityPct === null || healthSummary.availabilityPct === undefined ? "-" : `${healthSummary.availabilityPct}%`} />
-                <StatCard label="Current downtime" value={formatDuration(healthSummary.currentDowntimeMs || 0)} />
-                <StatCard label="Last latency" value={healthSummary.lastLatencyMs ? `${healthSummary.lastLatencyMs} ms` : "-"} />
-                <StatCard label="Last code" value={healthSummary.lastStatusCode ?? "-"} />
-              </div>
+              <DetailFacts
+                items={[
+                  { label: "Availability", value: healthSummary.availabilityPct === null || healthSummary.availabilityPct === undefined ? "-" : `${healthSummary.availabilityPct}%` },
+                  { label: "Current downtime", value: formatDuration(healthSummary.currentDowntimeMs || 0) },
+                  { label: "Last latency", value: healthSummary.lastLatencyMs ? `${healthSummary.lastLatencyMs} ms` : "-" },
+                  { label: "Last code", value: healthSummary.lastStatusCode ?? "-" }
+                ]}
+              />
 
-              <div className="mt-3 space-y-2">
+              <div className="mt-2 space-y-1">
                 {healthSummary.lastReason && (
                   <SupportingCopy size="xs">Last failure reason: {healthSummary.lastReason}</SupportingCopy>
                 )}
@@ -244,7 +238,7 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
                   .slice(-8)
                   .reverse()
                   .map((item, index) => (
-                    <div key={`${item.ts}-${index}`} className="flex items-center justify-between gap-3 border-b border-border/60 py-2 text-xs last:border-b-0">
+                    <div key={`${item.ts}-${index}`} className="flex items-center justify-between gap-3 border-b border-border/60 py-1.5 text-xs last:border-b-0">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <Badge tone={item.healthy ? "success" : "danger"}>{item.healthy ? "Pass" : "Fail"}</Badge>
@@ -262,12 +256,12 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
             </InsetCard>
           )}
 
-          <InsetCard>
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <InsetCard padding="sm">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <SubsectionTitle className="text-sm">Recent resource history</SubsectionTitle>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5">
                 {typeof onOpenLogs === "function" && (
-                  <Button type="button" size="sm" variant="secondary" onClick={() => onOpenLogs(process.name)}>
+                  <Button type="button" size="sm" variant="outline" onClick={() => onOpenLogs(process.name)}>
                     <ScrollText size={14} />
                     Logs
                   </Button>
@@ -275,7 +269,7 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
                 <Button
                   type="button"
                   size="sm"
-                  variant="secondary"
+                  variant="outline"
                   onClick={() => {
                     if (typeof onViewDeployHistory === "function") {
                       onViewDeployHistory(process.name);
@@ -292,9 +286,9 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
               <SupportingCopy>No metrics.</SupportingCopy>
             )}
             {!metricsLoading && metricsPoints.length > 0 && (
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {metricsPoints.slice(-10).reverse().map((item, index) => (
-                  <div key={`${item.ts}-${index}`} className="space-y-1 text-xs">
+                  <div key={`${item.ts}-${index}`} className="space-y-0.5 text-xs">
                     <div className="flex justify-between text-text-2">
                       <span>{item.ts ? new Date(item.ts).toLocaleTimeString() : `Point ${index + 1}`}</span>
                       <span>CPU {item.cpu}% | MEM {formatMemoryMB(item.memory)}</span>
@@ -361,7 +355,7 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
       )}
 
       {tab === "Actions" && (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <ActionSection
             title="Runtime"
             actions={[
@@ -387,8 +381,8 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
               { label: "Rollback", icon: Undo2, variant: "warning", disabled: loadingAction.rollback, onClick: () => runAction("rollback", process.name) }
             ]}
           />
-          <Button type="button" className="w-full" variant="danger" disabled={loadingAction.delete} onClick={() => runAction("delete", process.name)}>
-            <Trash2 size={16} />
+          <Button type="button" className="w-full" size="sm" variant="danger" disabled={loadingAction.delete} onClick={() => runAction("delete", process.name)}>
+            <Trash2 size={14} />
             Delete process
           </Button>
         </div>
@@ -399,14 +393,13 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
 
 function MetricsHistorySkeleton() {
   return (
-    <div className="space-y-3" aria-hidden="true">
+    <div className="space-y-2" aria-hidden="true">
       {Array.from({ length: 4 }).map((_, index) => (
-        <div key={index} className="space-y-1 text-xs">
+        <div key={index} className="space-y-0.5 text-xs">
           <div className="flex justify-between">
             <Skeleton className="h-3 w-28" />
             <Skeleton className="h-3 w-24" />
           </div>
-          <Skeleton className="h-2.5 w-full rounded-full" />
           <Skeleton className="h-2.5 w-full rounded-full" />
         </div>
       ))}
@@ -414,22 +407,38 @@ function MetricsHistorySkeleton() {
   );
 }
 
+function DetailFacts({ items }) {
+  return (
+    <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5">
+      {items.map((item) => (
+        <div key={item.label} className={item.wide ? "col-span-2 min-w-0" : "min-w-0"}>
+          <Eyebrow as="dt">{item.label}</Eyebrow>
+          <dd
+            className="mt-0.5 truncate text-xs text-text-1"
+            title={typeof item.value === "string" && item.value.length > 28 ? item.value : undefined}
+          >
+            {item.tone ? <Badge tone={item.tone}>{String(item.value)}</Badge> : String(item.value)}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 function QuickAction({ label, icon: Icon, variant, onClick, disabled }) {
   return (
-    <Button type="button" variant={variant} disabled={disabled} onClick={onClick}>
-      <Icon size={16} />
+    <Button type="button" variant={variant} size="sm" className="justify-start" disabled={disabled} onClick={onClick}>
+      <Icon size={14} />
       {label}
     </Button>
   );
 }
 
-function ActionSection({ title, description: _description, actions }) {
+function ActionSection({ title, actions }) {
   return (
-    <InsetCard>
-      <div className="mb-3">
-        <SubsectionTitle className="text-sm">{title}</SubsectionTitle>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
+    <section>
+      <SubsectionTitle className="mb-1.5 text-xs">{title}</SubsectionTitle>
+      <div className="grid grid-cols-2 gap-1.5">
         {actions.map((action) => (
           <QuickAction
             key={action.label}
@@ -441,6 +450,6 @@ function ActionSection({ title, description: _description, actions }) {
           />
         ))}
       </div>
-    </InsetCard>
+    </section>
   );
 }

@@ -654,9 +654,9 @@ export default function Dashboard() {
               {hiddenCount > 0 ? <span>+{hiddenCount} more</span> : null}
             </div>
           ) : null}
-          <button type="button" className="git-pull-toast-cancel" onClick={cancelPull}>
+          <Button type="button" variant="secondary" size="sm" className="justify-self-start" onClick={cancelPull}>
             Cancel
-          </button>
+          </Button>
         </div>
       ),
       action: {
@@ -824,29 +824,23 @@ export default function Dashboard() {
     }
 
     if (action === "gitPull") {
+      let statusResult = null;
       try {
         setLoadingAction((prev) => ({ ...prev, [`${name}:gitPullCheck`]: true }));
-        const statusResult = await toast.promise(
-          processApi.gitStatus(name).then((response) => {
-            if (!response.success) {
-              throw new Error(response.error || "Unable to check Git changes");
-            }
-            return response;
-          }),
-          {
-            loading: `Checking Git changes for ${name}...`,
-            success: `Git check finished for ${name}`,
-            error: (error) => getErrorMessage(error, "Unable to check Git changes")
-          }
-        );
-        if (statusResult?.data?.dirty) {
-          openGitPullConfirmation(name, statusResult.data);
-          return false;
+        statusResult = await processApi.gitStatus(name);
+        if (!statusResult?.success) {
+          throw new Error(statusResult?.error || "Unable to check Git changes");
         }
-      } catch (_error) {
+      } catch (error) {
+        toast.error(getErrorMessage(error, "Unable to check Git changes"));
         return false;
       } finally {
         setLoadingAction((prev) => ({ ...prev, [`${name}:gitPullCheck`]: false }));
+      }
+
+      if (statusResult?.data?.dirty) {
+        openGitPullConfirmation(name, statusResult.data);
+        return false;
       }
 
       return executeAction(action, name, overridePayload || {});

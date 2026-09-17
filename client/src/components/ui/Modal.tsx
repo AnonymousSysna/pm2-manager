@@ -10,6 +10,13 @@ const sizeMap = {
   xl: "max-w-3xl"
 };
 
+const drawerSizeMap = {
+  sm: "max-w-sm",
+  md: "max-w-md",
+  lg: "max-w-lg",
+  xl: "max-w-xl"
+};
+
 const dialogPanelClasses = "border border-border/80 bg-surface text-text-1 shadow-2xl shadow-black/25";
 const dialogHeaderClasses = "flex shrink-0 items-start justify-between gap-3 border-b border-border/70 pb-3";
 const dialogBodyClasses = "min-h-0 flex-1 overflow-y-auto py-4";
@@ -60,7 +67,12 @@ export default function Modal({
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
-          className={cn("absolute right-0 top-0 flex h-full w-full max-w-xl flex-col border-l p-4", dialogPanelClasses, className)}
+          className={cn(
+            "absolute right-0 top-0 flex h-full w-full flex-col border-l p-3",
+            drawerSizeMap[size] || drawerSizeMap.lg,
+            dialogPanelClasses,
+            className
+          )}
         >
           <div className={dialogHeaderClasses}>
             <div className="min-w-0 flex-1">

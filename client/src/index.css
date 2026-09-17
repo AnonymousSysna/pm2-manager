@@ -822,23 +822,6 @@
   white-space: nowrap;
 }
 
-.git-pull-toast-cancel {
-  justify-self: start;
-  min-height: 30px;
-  border: 1px solid rgb(var(--color-border));
-  border-radius: 999px;
-  background: rgb(var(--color-surface-2) / 0.72);
-  color: rgb(var(--color-text-1));
-  padding: 0 12px;
-  font-size: 12px;
-  font-weight: 650;
-  cursor: pointer;
-}
-
-.git-pull-toast-cancel:hover {
-  background: rgb(var(--color-surface-3) / 0.9);
-}
-
 @layer components {
   .process-main-card-topbar {
     @apply flex flex-col gap-2 border-b border-border/70 px-3 py-2.5 lg:flex-row lg:items-center lg:justify-between lg:px-4;
