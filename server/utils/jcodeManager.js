@@ -559,10 +559,124 @@ async function runJcodeAction(payload = {}) {
   }
 }
 
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'"'"'`)}'`;
+}
+
+function normalizeTerminalSize(value, fallback, min, max) {
+  const normalized = Number(value);
+  if (!Number.isFinite(normalized)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, Math.floor(normalized)));
+}
+
+function normalizeTerminalMode(value) {
+  const mode = String(value || "start").trim().toLowerCase();
+  return ["start", "connect", "resume"].includes(mode) ? mode : "start";
+}
+
+function resolveTerminalCwd(value) {
+  const requested = String(value || process.env.JCODE_WORKING_DIR || "").trim();
+  const fallback = process.cwd();
+  if (!requested) {
+    return fallback;
+  }
+
+  const resolved = path.resolve(requested.replace(/^~/, os.homedir()));
+  try {
+    return fs.statSync(resolved).isDirectory() ? resolved : fallback;
+  } catch (_error) {
+    return fallback;
+  }
+}
+
+async function createJcodeTerminalProcess(payload = {}) {
+  const binaryPath = await resolveJcodeBinary();
+  if (!binaryPath) {
+    return {
+      success: false,
+      child: null,
+      error: "Install JCode first"
+    };
+  }
+
+  const mode = normalizeTerminalMode(payload.mode);
+  const resumeName = String(payload.resume || "").trim();
+  const args = [];
+  if (mode === "connect") {
+    args.push("connect");
+  } else if (mode === "resume" && resumeName) {
+    args.push("--resume", resumeName.slice(0, 80));
+  }
+
+  const cols = normalizeTerminalSize(payload.cols, 100, 40, 240);
+  const rows = normalizeTerminalSize(payload.rows, 30, 12, 80);
+  const cwd = resolveTerminalCwd(payload.cwd);
+  const env = withJcodePathEnv({
+    ...process.env,
+    TERM: process.env.TERM || "xterm-256color",
+    COLORTERM: process.env.COLORTERM || "truecolor",
+    COLUMNS: String(cols),
+    LINES: String(rows),
+    FORCE_COLOR: process.env.FORCE_COLOR || "1"
+  });
+
+  let command = binaryPath;
+  let spawnArgs = args;
+  let pty = false;
+  let label = [binaryPath, ...args].join(" ");
+
+  // JCode is a terminal UI. On Linux, util-linux `script` gives it a real pseudo-terminal
+  // without adding a native node-pty dependency to PM2 Manager.
+  const scriptPath = process.platform === "linux" ? await commandPath("script") : null;
+  if (scriptPath) {
+    pty = true;
+    command = scriptPath;
+    const terminalCommand = [binaryPath, ...args].map(shellQuote).join(" ");
+    spawnArgs = ["-qfec", terminalCommand, "/dev/null"];
+    label = terminalCommand;
+  }
+
+  try {
+    const child = spawn(command, spawnArgs, {
+      cwd,
+      env,
+      windowsHide: true,
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+
+    return {
+      success: true,
+      child,
+      error: null,
+      meta: {
+        pid: child.pid,
+        pty,
+        command: label,
+        cwd,
+        rows,
+        cols,
+        mode
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      child: null,
+      error: error?.message || "Unable to start JCode terminal"
+    };
+  }
+}
+
 module.exports = {
   getJcodeStatus,
   installJcode,
   startJcodeGateway,
   stopJcodeGateway,
-  runJcodeAction
+  runJcodeAction,
+  resolveJcodeBinary,
+  withJcodePathEnv,
+  createJcodeTerminalProcess
 };

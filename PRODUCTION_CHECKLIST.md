@@ -57,3 +57,5 @@ Use this before exposing PM2 Manager outside localhost.
 - The backend listens on an internal local port, normally `8001`, so Caddy can own public port `8000` for HTTPS.
 - Open the selected public port in the VPS firewall/security group.
 - Use a subdomain instead if you want standard HTTPS on port `443` without showing a port in the URL.
+
+- JCode browser terminal: install JCode first, then verify `/dashboard/jcode` starts a session, accepts input, and stops cleanly on disconnect.

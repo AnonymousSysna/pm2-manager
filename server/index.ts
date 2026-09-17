@@ -32,6 +32,7 @@ const caddyRoutes = require("./routes/caddy");
 const jcodeRoutes = require("./routes/jcode");
 const systemRoutes = require("./routes/system");
 const { registerPM2Monitor } = require("./socket/pm2Monitor");
+const { registerJcodeTerminal } = require("./socket/jcodeTerminal");
 const { isIpAllowed, getRequestIp } = require("./utils/ipAccess");
 const { getPM2QueueState } = require("./utils/pm2Client");
 
@@ -416,6 +417,7 @@ const io = new Server(server, {
 
 app.set("io", io);
 registerPM2Monitor(io);
+registerJcodeTerminal(io);
 app.use(notFoundHandler);
 app.use(errorHandler);
 

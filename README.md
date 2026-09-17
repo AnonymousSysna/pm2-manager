@@ -605,3 +605,8 @@ The server serves the built React app for `/`, `/dashboard`, and nested dashboar
 ### Local TypeScript setup
 
 Run `npm run setup` from the repository root after cloning. This installs client and server dependencies without rewriting package-lock files. Use `npm run setup:dev` when you also want root dev-only tools. If npm shows an Arborist/`edgesOut` error, run `npm run repair:npm`.
+
+
+### JCode extension terminal
+
+The JCode dashboard tab can now start an interactive JCode session inside the browser. Press **Start session** to launch the server-side `jcode` terminal client and stream output through the existing authenticated Socket.IO connection. The JCode gateway controls remain available for `jcode serve`, pairing, and provider setup, but the main workflow is now terminal-first.
