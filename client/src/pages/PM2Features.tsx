@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Copy, Play, ShieldCheck, TerminalSquare } from "lucide-react";
+import { AlertTriangle, Copy, Play, TerminalSquare } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { pm2Admin, processes as processApi } from "../api";
 import toast, { getErrorMessage } from "../lib/toast";
@@ -15,7 +15,6 @@ import Select from "../components/ui/Select";
 import { Skeleton } from "../components/ui/Skeleton";
 import TabButton from "../components/ui/TabButton";
 import Textarea from "../components/ui/Textarea";
-import { Eyebrow, SupportingCopy } from "../components/ui/Typography";
 
 const riskTone = {
   read: "neutral",
@@ -181,7 +180,6 @@ export default function PM2Features() {
               <InsetPanel padding="sm" className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-sm font-semibold text-text-1">{selectedCategoryMeta.label}</p>
-                  <SupportingCopy size="xs">{selectedCategoryMeta.summary}</SupportingCopy>
                 </div>
                 <Badge tone="info">{selectedFeatures.length} actions</Badge>
               </InsetPanel>
@@ -243,22 +241,13 @@ export default function PM2Features() {
             )}
           </section>
 
-          <section className="page-panel space-y-3">
-            <PanelHeader title="Covered another way" />
-            {(catalog.coverageNotes || []).map((item) => (
-              <InsetPanel key={item.command} padding="sm">
-                <Eyebrow>{item.command}</Eyebrow>
-                <SupportingCopy size="xs" className="mt-1">{item.coverage}</SupportingCopy>
-              </InsetPanel>
-            ))}
-          </section>
         </aside>
       </section>
 
       {pendingFeature && (
         <ConfirmDialog
           title={`Run ${pendingFeature.label}?`}
-          description="This is a high-impact PM2 operation. It can stop apps, change startup behavior, run deploy hooks, or install executable PM2 modules."
+          description="This can change PM2 or running apps."
           confirmLabel="Run action"
           confirmVariant="danger"
           onClose={() => setPendingFeature(null)}
@@ -294,7 +283,7 @@ function FeatureCard({ feature, form, processes, running, onChange, onRun }) {
 
       {feature.risk === "sensitive-read" && (
         <Banner tone="warning" className="text-xs">
-          This can show environment variables, paths, or logs. Output is redacted where possible, but review before sharing.
+          Sensitive output. Review before sharing.
         </Banner>
       )}
 
@@ -310,12 +299,7 @@ function FeatureCard({ feature, form, processes, running, onChange, onRun }) {
             />
           ))}
         </div>
-      ) : (
-        <div className="flex items-center gap-2 text-xs text-text-3">
-          <ShieldCheck size={14} />
-          No extra input needed.
-        </div>
-      )}
+      ) : null}
     </article>
   );
 }

@@ -10,6 +10,8 @@ const {
   getPublicOrigins,
   mergeOrigins,
   upsertEnvContent,
+  needsGeneratedValue,
+  needsStrongSecretGeneratedValue,
   buildAdminNextSteps
 } = require("./onetap");
 
@@ -107,6 +109,21 @@ runTest("upsertEnvContent updates values and removes obsolete keys", () => {
     next,
     "PM2_USER=admin_123\nPORT=9000\n\nTRUST_PROXY=1\n"
   );
+});
+
+
+runTest("installer recognizes .env.example placeholders as generated values", () => {
+  assert.equal(needsGeneratedValue("replace_with_at_least_32_random_characters"), true);
+  assert.equal(needsGeneratedValue("replace_with_admin_username"), true);
+  assert.equal(needsGeneratedValue("$2a$10$replace_with_bcrypt_hash"), true);
+  assert.equal(needsGeneratedValue("admin_abc123"), false);
+});
+
+runTest("installer regenerates missing, placeholder, or short production secrets", () => {
+  assert.equal(needsStrongSecretGeneratedValue(""), true);
+  assert.equal(needsStrongSecretGeneratedValue("replace_with_at_least_32_random_characters"), true);
+  assert.equal(needsStrongSecretGeneratedValue("too-short"), true);
+  assert.equal(needsStrongSecretGeneratedValue("a".repeat(64)), false);
 });
 
 runTest("buildAdminNextSteps includes an elevated rerun path", () => {

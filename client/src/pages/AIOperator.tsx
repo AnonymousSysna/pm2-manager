@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Bot, CheckCircle2, Copy, KeyRound, Play, Send, ShieldCheck, TerminalSquare, Zap } from "lucide-react";
+import { Bot, Copy, KeyRound, Play, Send, ShieldCheck, Zap } from "lucide-react";
 import { aiOperator, pm2Admin, processes as processApi } from "../api";
 import toast, { getErrorMessage } from "../lib/toast";
 import Badge from "../components/ui/Badge";
@@ -12,7 +12,7 @@ import { ConfirmDialog } from "../components/ui/Modal";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 import Select from "../components/ui/Select";
 import Textarea from "../components/ui/Textarea";
-import { Eyebrow, SupportingCopy } from "../components/ui/Typography";
+import { Eyebrow } from "../components/ui/Typography";
 
 const STORAGE_KEY = "pm2_ai_operator_settings";
 
@@ -121,7 +121,7 @@ function PlannedActionCard({ action, onRun, running }) {
             <p className="font-medium text-text-1">{action.actionId}</p>
             <Badge tone="neutral">{action.confidence || "medium"}</Badge>
           </div>
-          <p className="mt-1 text-xs text-text-3">{action.reason || "Prepared by the AI operator."}</p>
+          {action.reason ? <p className="mt-1 text-xs text-text-3">{action.reason}</p> : null}
         </div>
         <Button type="button" size="sm" variant="outlinePrimary" onClick={() => onRun(action)} disabled={running}>
           <Play size={13} />
@@ -143,7 +143,6 @@ function ExecutionCard({ execution }) {
         <Badge tone={riskTone[execution.risk] || "neutral"}>{execution.risk || "unknown"}</Badge>
         <span className="text-sm font-medium text-text-1">{execution.label || execution.actionId}</span>
       </div>
-      {execution.reason ? <p className="text-xs text-text-3">{execution.reason}</p> : null}
       {execution.command ? (
         <code className="block break-all rounded-md border border-border bg-bg/60 px-2 py-1 text-xs text-text-3">{execution.command}</code>
       ) : null}
@@ -157,7 +156,7 @@ export default function AIOperator() {
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      content: "Paste your AI provider URL, API key, and model. I can chat about PM2, prepare guarded actions, and execute read/write actions only when the selected mode allows it."
+      content: "Paste your provider URL, API key, and model. Then ask what to check or run."
     }
   ]);
   const [prompt, setPrompt] = useState("");
@@ -320,7 +319,7 @@ export default function AIOperator() {
       />
 
       <Banner tone="warning" icon={<ShieldCheck size={16} />}>
-        <strong className="text-text-1">Operator guardrails are on.</strong> API keys are sent only to your PM2 Manager backend for the current request. Critical PM2 actions still need a separate confirmation, and no raw shell prompt is exposed.
+        <strong className="text-text-1">Guardrails on.</strong> Critical actions need confirmation. No raw shell.
       </Banner>
 
       <section className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
@@ -350,8 +349,7 @@ export default function AIOperator() {
                 onChange={(event) => updateSetting("rememberKey", event.target.checked)}
               />
               <span>
-                Remember key in this browser
-                <span className="mt-0.5 block text-xs text-text-3">Convenient, but less safe on a shared computer.</span>
+                Remember key
               </span>
             </label>
             <Button type="button" variant="secondary" onClick={testConnection} disabled={testing || !settings.apiKey || !settings.model || !settings.baseUrl} className="w-full">
@@ -369,11 +367,6 @@ export default function AIOperator() {
                 <option value="write">Auto-run checks + safe writes</option>
               </Select>
             </Field>
-            <InsetPanel padding="sm" className="space-y-2 text-sm text-text-3">
-              <div className="flex items-center gap-2 text-text-2"><ShieldCheck size={14} /> No arbitrary terminal</div>
-              <div className="flex items-center gap-2 text-text-2"><AlertTriangle size={14} /> Critical actions always confirm</div>
-              <div className="flex items-center gap-2 text-text-2"><TerminalSquare size={14} /> Uses the PM2 feature allowlist</div>
-            </InsetPanel>
           </section>
 
           <section className="page-panel space-y-3">
@@ -390,9 +383,7 @@ export default function AIOperator() {
             </div>
             {lastUsage ? (
               <Textarea readOnly value={stringifyOutput(lastUsage)} className="min-h-[90px] font-mono text-xs" />
-            ) : (
-              <SupportingCopy size="xs">Usage appears here when the provider returns token details.</SupportingCopy>
-            )}
+            ) : null}
           </section>
         </aside>
 
@@ -409,7 +400,7 @@ export default function AIOperator() {
               {sending ? (
                 <div className="flex items-center gap-2 text-sm text-text-3">
                   <Bot size={16} className="animate-pulse" />
-                  AI operator is thinking through the safest PM2 path...
+                  Thinking...
                 </div>
               ) : null}
             </div>
@@ -435,7 +426,6 @@ export default function AIOperator() {
                 className="min-h-[110px] resize-y"
               />
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs text-text-3">Provider keys are not written to server logs. Critical work stays behind confirmation.</p>
                 <Button type="submit" disabled={!canSend}>
                   {settings.executeMode === "plan" ? <Send size={14} /> : <Zap size={14} />}
                   {sending ? "Working..." : settings.executeMode === "plan" ? "Ask AI" : "Ask + run guarded"}
@@ -467,7 +457,7 @@ export default function AIOperator() {
       {pendingAction && (
         <ConfirmDialog
           title={`Run critical action: ${pendingAction.actionId}?`}
-          description="This can disrupt running processes. Confirm only when the target and effect are exactly what you expect."
+          description="This can disrupt running processes."
           confirmLabel="Run critical action"
           confirmVariant="danger"
           onConfirm={confirmCriticalAction}

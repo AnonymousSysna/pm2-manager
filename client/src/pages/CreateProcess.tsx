@@ -639,9 +639,6 @@ export default function CreateProcess() {
                       placeholder="/root/my-app"
                     />
                   </Field>
-                  <SupportingCopy size="xs">
-                    Static sites are detected automatically when the folder has <code>index.html</code> and no <code>package.json</code>.
-                  </SupportingCopy>
                 </>
               )}
 
@@ -670,9 +667,6 @@ export default function CreateProcess() {
                       placeholder="repo-name or relative/path/inside/allowed/root"
                     />
                   </Field>
-                  <SupportingCopy size="xs">
-                    Static repos are supported too. PM2 Manager auto-serves them when no <code>package.json</code> exists.
-                  </SupportingCopy>
 
                   <Field label=".env File Content (Optional)">
                     <Textarea
@@ -685,9 +679,7 @@ export default function CreateProcess() {
                       <StatusText as="p" tone="danger" className="mt-1 text-xs">
                         Invalid `.env` syntax on line(s): {envFileValidationErrors.slice(0, 5).map((item) => item.line).join(", ")}.
                       </StatusText>
-                    ) : (
-                      <SupportingCopy size="xs" className="mt-1">Checked while typing.</SupportingCopy>
-                    )}
+                    ) : null}
                   </Field>
                 </>
               )}
@@ -698,11 +690,7 @@ export default function CreateProcess() {
             <>
               <InsetCard className="flow-strip">
                 <SubsectionTitle className="text-sm">Runtime match</SubsectionTitle>
-                <SupportingCopy className="mt-1">
-                  {runtimeHint.reason}
-                  {" · "}
-                  <code>{runtimeHint.interpreter}</code> / <code>{runtimeHint.execMode}</code>
-                </SupportingCopy>
+                <div className="mt-1 text-sm text-text-2"><code>{runtimeHint.interpreter}</code> / <code>{runtimeHint.execMode}</code></div>
                 <div className="mt-2">
                   <Button type="button" variant="info" size="sm" onClick={applyRuntimeHint}>
                     Apply
@@ -750,9 +738,6 @@ export default function CreateProcess() {
                       onChange={(e) => update("node_version", e.target.value)}
                       placeholder="20, 20.12, or 20.12.2"
                     />
-                    <SupportingCopy size="xs" className="mt-1">
-                      Keeps installs and builds on the expected Node version.
-                    </SupportingCopy>
                   </Field>
                   {String(form.node_version || "").trim() && (
                     <label className="flex items-center gap-3 text-sm text-text-2">
@@ -789,11 +774,6 @@ export default function CreateProcess() {
 
               <Field label="Port">
                 <Input type="number" value={form.port} onChange={(e) => update("port", e.target.value)} />
-                {(mode === "project" || mode === "git") && (
-                  <SupportingCopy size="xs" className="mt-1">
-                    Static sites use this port. Blank uses <code>3000</code>.
-                  </SupportingCopy>
-                )}
               </Field>
 
               <label className="flex items-center gap-3 text-sm text-text-2">
@@ -832,9 +812,7 @@ export default function CreateProcess() {
                       />
                       {maxMemoryRestartError ? (
                         <StatusText as="p" tone="danger" className="mt-1 text-xs">{maxMemoryRestartError}</StatusText>
-                      ) : (
-                        <SupportingCopy size="xs" className="mt-1">Format: number + `K`, `M`, or `G`.</SupportingCopy>
-                      )}
+                      ) : null}
                     </Field>
 
                     <Field label="Node Args">
@@ -855,7 +833,6 @@ export default function CreateProcess() {
                         onChange={(e) => update("cron_restart", e.target.value)}
                         placeholder="0 4 * * *"
                       />
-                      <SupportingCopy size="xs" className="mt-1">Leave blank to disable scheduled restart.</SupportingCopy>
                     </Field>
 
                     <div className="space-y-2">
@@ -910,7 +887,6 @@ export default function CreateProcess() {
             <div className="space-y-3">
               <InsetCard>
                 <SubsectionTitle className="text-sm">Review</SubsectionTitle>
-                <SupportingCopy className="mt-1">Check the config before launch.</SupportingCopy>
               </InsetCard>
               <pre className="max-h-96 overflow-auto rounded border border-border bg-surface-2 p-3 text-xs text-text-2">
                 {JSON.stringify(buildPayload(), null, 2)}
@@ -946,7 +922,6 @@ export default function CreateProcess() {
       {isLaunching && (
         <Modal
           title="Launching"
-          description="Preparing files, dependencies, and PM2 start."
           onClose={() => {}}
           showCloseButton={false}
           disableClose
@@ -1003,7 +978,6 @@ export default function CreateProcess() {
       {templateDialog?.mode === "save" && (
         <Modal
           title="Save template"
-          description="Save this setup for the next process."
           onClose={() => setTemplateDialog(null)}
           size="sm"
           actions={(

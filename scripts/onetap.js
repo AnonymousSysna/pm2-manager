@@ -18,9 +18,21 @@ const PLACEHOLDER_VALUES = new Set([
   "replace_with_admin_username",
   "replace_with_long_random_secret",
   "replace_with_long_random_token",
+  "replace_with_at_least_32_random_characters",
   "$2a$10$replace_with_bcrypt_hash",
   "/user/pm2-manager/apps/"
 ]);
+
+const PLACEHOLDER_PATTERNS = [
+  /^replace_/i,
+  /replace[_-]?with/i,
+  /^changeme$/i,
+  /^change[-_]?this/i,
+  /^your[-_]?secret/i,
+  /^dev[-_]?secret/i,
+  /^admin$/i
+];
+const MIN_GENERATED_SECRET_LENGTH = 32;
 
 function parseBoolean(value) {
   if (value === undefined || value === null || value === "") {
@@ -317,9 +329,22 @@ function getEnvValue(envValues, key) {
   return String(envValues[key] || "").trim();
 }
 
+function looksLikePlaceholder(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return false;
+  }
+  return PLACEHOLDER_VALUES.has(normalized) || PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
 function needsGeneratedValue(value) {
   const normalized = String(value || "").trim();
-  return !normalized || PLACEHOLDER_VALUES.has(normalized);
+  return !normalized || looksLikePlaceholder(normalized);
+}
+
+function needsStrongSecretGeneratedValue(value) {
+  const normalized = String(value || "").trim();
+  return needsGeneratedValue(normalized) || normalized.length < MIN_GENERATED_SECRET_LENGTH;
 }
 
 function randomHex(bytes) {
@@ -638,12 +663,14 @@ function prepareEnvFile(appDir, options) {
     removals.push("PM2_PASS");
   }
 
-  if (needsGeneratedValue(getEnvValue(currentValues, "JWT_SECRET"))) {
+  if (needsStrongSecretGeneratedValue(getEnvValue(currentValues, "JWT_SECRET"))) {
     updates.JWT_SECRET = randomHex(32);
+    generatedCredentials.JWT_SECRET = "generated";
   }
 
-  if (needsGeneratedValue(getEnvValue(currentValues, "METRICS_TOKEN"))) {
+  if (needsStrongSecretGeneratedValue(getEnvValue(currentValues, "METRICS_TOKEN"))) {
     updates.METRICS_TOKEN = randomHex(32);
+    generatedCredentials.METRICS_TOKEN = "generated";
   }
 
   updates.PORT = String(options.port);
@@ -1002,6 +1029,18 @@ function printSummary({
     }
   }
 
+  if (envResult.generatedCredentials.JWT_SECRET || envResult.generatedCredentials.METRICS_TOKEN) {
+    console.log("");
+    console.log("Generated internal secrets");
+    if (envResult.generatedCredentials.JWT_SECRET) {
+      console.log("- JWT_SECRET: generated and stored in .env");
+    }
+    if (envResult.generatedCredentials.METRICS_TOKEN) {
+      console.log("- METRICS_TOKEN: generated and stored in .env");
+    }
+    console.log("- These internal secrets are intentionally not printed.");
+  }
+
   if (sslResult.warnings.length > 0) {
     console.log("");
     console.log("Warnings");
@@ -1100,6 +1139,9 @@ module.exports = {
   getPublicOrigins,
   mergeOrigins,
   upsertEnvContent,
+  looksLikePlaceholder,
+  needsGeneratedValue,
+  needsStrongSecretGeneratedValue,
   createPasswordHash,
   installDependencies,
   buildClient,

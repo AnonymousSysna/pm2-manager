@@ -4,7 +4,7 @@ export default function Field({
   label,
   htmlFor,
   required = false,
-  description,
+  description: _description,
   className,
   children
 }) {
@@ -29,7 +29,6 @@ export default function Field({
           {children}
         </>
       )}
-      {description ? <p className="text-xs text-text-3">{description}</p> : null}
     </div>
   );
 }

@@ -7,9 +7,9 @@ Web app for operating PM2-managed services with real-time monitoring, deployment
 - Auth: JWT cookies plus CSRF protection
 - Default app URL: `http://<host>:8000`
 
-### v1.0.7 clean reinstall note
+### v1.0.8 clean reinstall note
 
-The one-tap installer is safe to run after removing the old PM2 process or old project folder. It now prints progress for dependency install, build, PM2 start, backend readiness, HTTPS setup, and final URLs. If a target folder exists but is broken/non-empty, run with `--force-clean` to move the old folder aside before cloning again.
+The one-tap installer is safe to run after removing the old PM2 process or old project folder. It now prints progress for dependency install, build, PM2 start, backend readiness, HTTPS setup, and final URLs. If a target folder exists but is broken/non-empty, run with `--force-clean` to move the old folder aside before cloning again. The installer also generates production-safe `PM2_USER`, `PM2_PASS_HASH`, `JWT_SECRET`, and `METRICS_TOKEN` automatically so copied `.env.example` placeholders cannot crash the server.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/AnonymousSysna/pm2-manager/main/scripts/onetap.sh | bash -s -- --force-clean
@@ -123,14 +123,16 @@ npm --prefix client install
 cp .env.example .env
 ```
 
-Required keys:
+Required keys for a manual install:
 
 ```env
-PM2_USER=replace_with_admin_username
-PM2_PASS_HASH=$2a$10$replace_with_bcrypt_hash
-JWT_SECRET=replace_with_long_random_secret
-METRICS_TOKEN=replace_with_long_random_token
+PM2_USER=your_admin_username
+PM2_PASS_HASH=your_bcrypt_password_hash
+JWT_SECRET=<at least 32 random characters>
+METRICS_TOKEN=<at least 32 random characters>
 ```
+
+The one-tap installer auto-generates these values. You only need to set them manually when you skip `scripts/onetap.sh`.
 
 ### 4. Build the client
 
@@ -588,7 +590,7 @@ npm --prefix client test
 ## Deployment Notes
 
 - In production mode, the server serves `client/dist`
-- Set strong values for `PM2_USER`, `PM2_PASS_HASH` or `PM2_PASS`, `JWT_SECRET`, and `METRICS_TOKEN` before exposing the app
+- For one-tap installs, confirm the generated `.env` contains `PM2_PASS_HASH`, `JWT_SECRET`, and `METRICS_TOKEN`. For manual installs, set strong values before exposing the app.
 
 ## PM2 Feature Workspace
 

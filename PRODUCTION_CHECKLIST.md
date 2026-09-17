@@ -4,7 +4,8 @@ Use this before exposing PM2 Manager outside localhost.
 
 ## Required
 
-- Replace every placeholder in `.env`.
+- For one-tap installs, confirm the installer generated `.env` secrets automatically.
+- For manual installs, replace every placeholder in `.env`.
 - Use `PM2_PASS_HASH`, not `PM2_PASS`, in production.
 - Use a `JWT_SECRET` with at least 32 random characters.
 - Use a `METRICS_TOKEN` with at least 32 random characters.

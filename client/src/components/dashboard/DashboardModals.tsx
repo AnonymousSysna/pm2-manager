@@ -28,7 +28,6 @@ export function DeployProcessModal({
   return (
     <Modal
       title={`Deploy ${process.name}`}
-      description="Pull the target branch, run optional install and build steps, then restart the process."
       onClose={onClose}
       disableClose={deploySubmitting}
       disableOverlayClose={deploySubmitting}
@@ -129,7 +128,6 @@ export function ProcessMetaModal({
   return (
     <Modal
       title={`Monitoring rules: ${process.name}`}
-      description="Store restart dependencies, threshold alerts, and persistent health checks with the process."
       onClose={onClose}
       size="lg"
     >
@@ -272,14 +270,12 @@ export function DotEnvEditorModal({
   return (
     <Modal
       title={`Environment file: ${process.name}`}
-      description="Edit values parsed from the current .env file. Sensitive keys stay masked unless you reveal them."
       onClose={onClose}
       size="xl"
       disableClose={dotEnvSaving}
       disableOverlayClose={dotEnvSaving}
     >
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-text-3">Only existing `KEY=VALUE` entries are editable here.</p>
         <Button
           type="button"
           variant="secondary"
@@ -298,7 +294,6 @@ export function DotEnvEditorModal({
           {dotEnvValidationError && (
             <Banner tone="warning" className="text-xs">
               <p>{dotEnvValidationError}</p>
-              <p className="mt-1">Fix malformed lines before saving changes.</p>
             </Banner>
           )}
           {dotEnvFields.length === 0 && (
@@ -353,7 +348,6 @@ export function DotEnvDiffModal({
   return (
     <Modal
       title="Review environment changes"
-      description="Confirm the diff before writing it back to disk."
       onClose={onClose}
       size="lg"
       disableClose={dotEnvSaving}

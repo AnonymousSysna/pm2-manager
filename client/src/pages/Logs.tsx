@@ -406,9 +406,6 @@ export default function Logs() {
       {showCreateHint && (
         <Banner tone="info" className="text-base">
           <p>Process creation request was accepted for <span className="font-semibold">{selected || defaultProcess}</span>. Waiting for first logs...</p>
-          <p className="mt-1 text-xs text-text-3">
-            If this stays empty, click Refresh Logs and check process status on Dashboard.
-          </p>
         </Banner>
       )}
 

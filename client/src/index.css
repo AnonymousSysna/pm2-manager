@@ -71,7 +71,7 @@
 
 @layer components {
   .page-panel {
-    @apply rounded-xl border border-border/80 bg-surface p-3 shadow-[0_20px_60px_-48px_rgba(0,0,0,0.9)] md:p-4;
+    @apply rounded-xl border border-border/80 bg-surface p-3 shadow-[0_20px_60px_-48px_rgba(0,0,0,0.9)];
   }
 
   .page-title {
@@ -107,7 +107,7 @@
   }
 
   .panel-title-row {
-    @apply flex flex-col gap-2 md:flex-row md:items-center md:justify-between;
+    @apply flex flex-col gap-1.5 md:flex-row md:items-center md:justify-between;
   }
 
   .panel-actions {
@@ -155,7 +155,7 @@
   }
 
   .flow-strip {
-    @apply rounded-xl border border-border/70 bg-surface-2/55 p-3;
+    @apply rounded-lg border border-border/70 bg-surface-2/55 p-2.5;
   }
 
   .compact-stat-grid {
@@ -163,7 +163,7 @@
   }
 
   .compact-process-card {
-    @apply rounded-xl border border-border/70 bg-surface-2/55 p-3;
+    @apply rounded-lg border border-border/70 bg-surface-2/55 p-2.5;
   }
 
   .metric-thread {
@@ -171,7 +171,7 @@
   }
 
   .metric-thread-item {
-    @apply rounded-lg border border-border/60 bg-surface/55 px-2.5 py-2;
+    @apply rounded-md border border-border/60 bg-surface/55 px-2 py-1.5;
   }
 
   .action-menu-anchor {

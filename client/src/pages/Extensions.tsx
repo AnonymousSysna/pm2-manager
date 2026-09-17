@@ -225,11 +225,8 @@ export default function Extensions() {
           <InsetPanel padding="sm">
             <TerminalSquare className="text-brand-400" size={22} />
           </InsetPanel>
-          <div className="text-sm text-text-3">
-            PM2 can use interpreters installed on this server. Cluster mode is Node.js-focused.
-            <div className="text-text-2">
-              Installed: {interpreterState.totals.installed} / Supported presets: {interpreterState.totals.supported}
-            </div>
+          <div className="text-sm text-text-2">
+            Installed: {interpreterState.totals.installed} / Supported presets: {interpreterState.totals.supported}
           </div>
           <div className="ml-auto">
             <Button type="button" variant="outlineInfo" disabled={interpreterState.loading} onClick={loadInterpreters}>

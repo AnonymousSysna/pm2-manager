@@ -190,7 +190,6 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
   return (
     <Modal
       title={process.name}
-      description="Status, PM2 environment, health probes, and manual actions for this process."
       onClose={onClose}
       position="right"
       closeLabel="Close process details"
@@ -427,12 +426,11 @@ function QuickAction({ label, icon: Icon, variant, onClick, disabled }) {
   );
 }
 
-function ActionSection({ title, description, actions }) {
+function ActionSection({ title, description: _description, actions }) {
   return (
     <InsetCard>
       <div className="mb-3">
         <SubsectionTitle className="text-sm">{title}</SubsectionTitle>
-        <SupportingCopy size="xs" className="mt-1">{description}</SupportingCopy>
       </div>
       <div className="grid grid-cols-2 gap-2">
         {actions.map((action) => (
