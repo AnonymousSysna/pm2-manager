@@ -63,7 +63,7 @@ export default function ProcessListPanel({
 
         <div className="process-main-card-actions">
           {items.length > 0 && (
-            <Button type="button" size="sm" variant="outlineInfo" onClick={() => controls.openBulkActionConfirmation?.("restart", "all")}>
+            <Button type="button" size="sm" variant="outlineInfo" className="process-restart-all-button" onClick={() => controls.openBulkActionConfirmation?.("restart", "all")}>
               <RefreshCw size={14} />
               Restart all
             </Button>

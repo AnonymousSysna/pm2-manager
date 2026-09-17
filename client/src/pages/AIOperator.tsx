@@ -36,6 +36,8 @@ const suggestedPrompts = [
   "Save PM2 list"
 ];
 
+const criticalActions = ["delete", "kill-daemon", "resurrect", "startup", "unstartup", "send-signal", "update-daemon"];
+
 const riskTone = {
   read: "neutral",
   "sensitive-read": "warning",
@@ -84,7 +86,7 @@ function summarizeAction(action) {
     .filter(([, value]) => value !== undefined && value !== null && String(value) !== "")
     .slice(0, 4)
     .map(([key, value]) => `${key}: ${String(value)}`);
-  return entries.length ? entries.join(" · ") : "No extra input";
+  return entries.length ? entries.join(" · ") : "No input";
 }
 
 function stringifyOutput(value) {
@@ -102,8 +104,8 @@ function MessageBubble({ message }) {
   return (
     <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
       <div className={`message-bubble ${mine ? "message-bubble-user" : "message-bubble-ai"}`}>
-        <div className="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-[0.14em] text-text-3">
-          {mine ? "You" : "AI Operator"}
+        <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-3">
+          {mine ? "You" : "AI"}
         </div>
         <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
       </div>
@@ -113,39 +115,43 @@ function MessageBubble({ message }) {
 
 function PlannedActionCard({ action, onRun, running }) {
   return (
-    <InsetPanel padding="sm" className="space-y-2">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="font-medium text-text-1">{action.actionId}</p>
-            <Badge tone="neutral">{action.confidence || "medium"}</Badge>
-          </div>
-          {action.reason ? <p className="mt-1 text-xs text-text-3">{action.reason}</p> : null}
+    <InsetPanel padding="sm" className="ai-action-row">
+      <div className="min-w-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <p className="truncate text-sm font-semibold text-text-1">{action.actionId}</p>
+          <Badge tone="neutral">{action.confidence || "medium"}</Badge>
         </div>
-        <Button type="button" size="sm" variant="outlinePrimary" onClick={() => onRun(action)} disabled={running}>
-          <Play size={13} />
-          Run
-        </Button>
+        <p className="mt-1 truncate text-xs text-text-3">{action.reason || summarizeAction(action)}</p>
       </div>
-      <code className="block rounded-md border border-border bg-bg/60 px-2 py-1 text-xs text-text-3">
-        {summarizeAction(action)}
-      </code>
+      <Button type="button" size="sm" variant="outlinePrimary" onClick={() => onRun(action)} disabled={running} className="shrink-0">
+        <Play size={13} />
+        Run
+      </Button>
     </InsetPanel>
   );
 }
 
 function ExecutionCard({ execution }) {
   return (
-    <InsetPanel padding="sm" className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
+    <InsetPanel padding="sm" className="ai-execution-card">
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         <Badge tone={statusTone[execution.status] || "neutral"}>{String(execution.status || "planned").replace(/_/g, " ")}</Badge>
         <Badge tone={riskTone[execution.risk] || "neutral"}>{execution.risk || "unknown"}</Badge>
-        <span className="text-sm font-medium text-text-1">{execution.label || execution.actionId}</span>
+        <span className="min-w-0 truncate text-sm font-medium text-text-1">{execution.label || execution.actionId}</span>
       </div>
       {execution.command ? (
-        <code className="block break-all rounded-md border border-border bg-bg/60 px-2 py-1 text-xs text-text-3">{execution.command}</code>
+        <code className="block truncate rounded-md border border-border/70 bg-bg/50 px-2 py-1 text-[11px] text-text-3">{execution.command}</code>
       ) : null}
-      {execution.output ? <Textarea readOnly value={execution.output} className="min-h-[96px] font-mono text-xs" /> : null}
+      {execution.output ? <Textarea readOnly value={execution.output} className="min-h-[74px] font-mono text-xs" /> : null}
+    </InsetPanel>
+  );
+}
+
+function CompactMetric({ label, value }) {
+  return (
+    <InsetPanel padding="sm" className="min-w-0">
+      <Eyebrow>{label}</Eyebrow>
+      <p className="mt-1 truncate text-sm font-semibold text-text-1">{value}</p>
     </InsetPanel>
   );
 }
@@ -155,7 +161,7 @@ export default function AIOperator() {
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      content: "Add your provider details, then ask what to check or run."
+      content: "Connect a provider, then ask what to check or run."
     }
   ]);
   const [prompt, setPrompt] = useState("");
@@ -195,6 +201,7 @@ export default function AIOperator() {
   }, []);
 
   const canSend = settings.baseUrl.trim() && settings.model.trim() && settings.apiKey.trim() && prompt.trim() && !sending;
+  const connected = Boolean(settings.baseUrl.trim() && settings.model.trim() && settings.apiKey.trim());
 
   const updateSetting = (name, value) => {
     setSettings((prev) => ({ ...prev, [name]: value }));
@@ -267,7 +274,7 @@ export default function AIOperator() {
   };
 
   const runAction = async (action) => {
-    if (["delete", "kill-daemon", "resurrect", "startup", "unstartup", "send-signal", "update-daemon"].includes(action.actionId)) {
+    if (criticalActions.includes(action.actionId)) {
       setPendingAction(action);
       return;
     }
@@ -300,153 +307,142 @@ export default function AIOperator() {
   };
 
   return (
-    <div className="compact-page-stack">
+    <div className="ai-page compact-page-stack">
       <PageIntro
         title="AI Operator"
         actions={(
           <>
-            <Badge tone="success">Guarded</Badge>
-            <Button type="button" variant="secondary" onClick={copyTranscript}>
+            <Badge tone={connected ? "success" : "warning"}>{connected ? "Ready" : "Setup needed"}</Badge>
+            <Button type="button" size="sm" variant="secondary" onClick={copyTranscript}>
               <Copy size={14} />
-              Copy chat
+              Copy
             </Button>
           </>
         )}
       />
 
-      <section className="operator-layout">
-        <aside className="operator-side-stack">
-          <section className="operator-compact-panel">
-            <PanelHeader title="AI connection" />
-            <Field label="Provider">
-              <Select value={settings.provider} onChange={(event) => changeProvider(event.target.value)}>
-                <option value="openai-compatible">OpenAI compatible</option>
-                <option value="anthropic">Anthropic Claude</option>
-              </Select>
-            </Field>
-            <Field label="Provider URL">
-              <Input value={settings.baseUrl} onChange={(event) => updateSetting("baseUrl", event.target.value)} placeholder="https://api.openai.com/v1" />
-            </Field>
-            <Field label="Model">
-              <Input value={settings.model} onChange={(event) => updateSetting("model", event.target.value)} placeholder="gpt-4o-mini, claude-sonnet-4-5" />
-            </Field>
-            <Field label="API key">
-              <Input type="password" value={settings.apiKey} onChange={(event) => updateSetting("apiKey", event.target.value)} placeholder="sk-..." autoComplete="off" />
-            </Field>
-            <label className="flex items-start gap-2 rounded-lg border border-border bg-surface-2/60 p-2 text-sm text-text-2">
-              <input
-                type="checkbox"
-                className="mt-1"
-                checked={settings.rememberKey}
-                onChange={(event) => updateSetting("rememberKey", event.target.checked)}
-              />
-              <span>
-                Remember key
-              </span>
-            </label>
-            <Button type="button" variant="secondary" onClick={testConnection} disabled={testing || !settings.apiKey || !settings.model || !settings.baseUrl} className="w-full">
+      <section className="ai-setup-card">
+        <div className="ai-setup-head">
+          <div className="min-w-0">
+            <Eyebrow>Connection</Eyebrow>
+            <h2 className="panel-heading mt-1">Provider, key, and run mode</h2>
+          </div>
+          <div className="ai-setup-actions">
+            <Button type="button" size="sm" variant="secondary" onClick={testConnection} disabled={testing || !settings.apiKey || !settings.model || !settings.baseUrl}>
               <KeyRound size={14} />
-              {testing ? "Testing..." : "Test connection"}
+              {testing ? "Testing" : "Test"}
             </Button>
-          </section>
+          </div>
+        </div>
 
-          <section className="operator-compact-panel">
-            <PanelHeader title="Execution mode" />
-            <Field label="Mode">
-              <Select value={settings.executeMode} onChange={(event) => updateSetting("executeMode", event.target.value)}>
-                <option value="plan">Plan only</option>
-                <option value="read">Auto-run checks only</option>
-                <option value="write">Auto-run checks + safe writes</option>
-              </Select>
-            </Field>
-          </section>
-
-          <section className="operator-compact-panel">
-            <PanelHeader title="Live context" />
-            <div className="operator-summary-grid">
-              <InsetPanel padding="sm">
-                <Eyebrow>Processes</Eyebrow>
-                <p className="mt-1 text-xl font-semibold text-text-1">{processes.length}</p>
-              </InsetPanel>
-              <InsetPanel padding="sm">
-                <Eyebrow>Provider</Eyebrow>
-                <p className="mt-1 truncate text-sm font-semibold text-text-1">{settings.provider}</p>
-              </InsetPanel>
-              <InsetPanel padding="sm">
-                <Eyebrow>Mode</Eyebrow>
-                <p className="mt-1 truncate text-sm font-semibold text-text-1">{settings.executeMode}</p>
-              </InsetPanel>
-            </div>
-            {lastUsage ? (
-              <Textarea readOnly value={stringifyOutput(lastUsage)} className="min-h-[72px] font-mono text-xs" />
-            ) : null}
-          </section>
-        </aside>
-
-        <section className="compact-page-stack">
-          <section className="operator-console">
-            <PanelHeader
-              title="Operator terminal"
-              actions={<Badge tone={settings.executeMode === "plan" ? "neutral" : "warning"}>{settings.executeMode}</Badge>}
+        <div className="ai-setup-grid">
+          <Field label="Provider" className="ai-provider-field">
+            <Select value={settings.provider} onChange={(event) => changeProvider(event.target.value)}>
+              <option value="openai-compatible">OpenAI compatible</option>
+              <option value="anthropic">Anthropic Claude</option>
+            </Select>
+          </Field>
+          <Field label="Provider URL" className="ai-url-field">
+            <Input value={settings.baseUrl} onChange={(event) => updateSetting("baseUrl", event.target.value)} placeholder="https://api.openai.com/v1" />
+          </Field>
+          <Field label="Model" className="ai-model-field">
+            <Input value={settings.model} onChange={(event) => updateSetting("model", event.target.value)} placeholder="gpt-4o-mini" />
+          </Field>
+          <Field label="API key" className="ai-key-field">
+            <Input type="password" value={settings.apiKey} onChange={(event) => updateSetting("apiKey", event.target.value)} placeholder="sk-..." autoComplete="off" />
+          </Field>
+          <Field label="Mode" className="ai-mode-field">
+            <Select value={settings.executeMode} onChange={(event) => updateSetting("executeMode", event.target.value)}>
+              <option value="plan">Plan only</option>
+              <option value="read">Auto checks</option>
+              <option value="write">Safe writes</option>
+            </Select>
+          </Field>
+          <label className="ai-remember-key">
+            <input
+              type="checkbox"
+              checked={settings.rememberKey}
+              onChange={(event) => updateSetting("rememberKey", event.target.checked)}
             />
+            <span>Remember key</span>
+          </label>
+        </div>
+      </section>
 
-            <div className="operator-messages">
-              {messages.map((message, index) => <MessageBubble key={`${message.role}-${index}`} message={message} />)}
-              {sending ? (
-                <div className="flex items-center gap-2 text-sm text-text-3">
-                  <Bot size={16} className="animate-pulse" />
-                  Thinking...
-                </div>
-              ) : null}
-            </div>
+      <section className="ai-workspace">
+        <section className="ai-terminal-panel">
+          <PanelHeader
+            title="Terminal"
+            actions={<Badge tone={settings.executeMode === "plan" ? "neutral" : "warning"}>{settings.executeMode}</Badge>}
+          />
 
-            <div className="flex flex-wrap gap-2">
-              {suggestedPrompts.map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  className="prompt-chip"
-                  onClick={() => setPrompt(item)}
-                >
-                  {item}
-                </button>
-              ))}
-            </div>
-
-            <form onSubmit={sendPrompt} className="space-y-2">
-              <Textarea
-                value={prompt}
-                onChange={(event) => setPrompt(event.target.value)}
-                placeholder="Ask what to check or run"
-                className="min-h-[86px] resize-y"
-              />
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <Button type="submit" disabled={!canSend}>
-                  {settings.executeMode === "plan" ? <Send size={14} /> : <Zap size={14} />}
-                  {sending ? "Working..." : settings.executeMode === "plan" ? "Ask AI" : "Ask + run guarded"}
-                </Button>
+          <div className="operator-messages ai-message-window">
+            {messages.map((message, index) => <MessageBubble key={`${message.role}-${index}`} message={message} />)}
+            {sending ? (
+              <div className="flex items-center gap-2 text-sm text-text-3">
+                <Bot size={16} className="animate-pulse" />
+                Working...
               </div>
-            </form>
+            ) : null}
+          </div>
+
+          <div className="ai-prompt-strip">
+            {suggestedPrompts.map((item) => (
+              <button key={item} type="button" className="prompt-chip" onClick={() => setPrompt(item)}>
+                {item}
+              </button>
+            ))}
+          </div>
+
+          <form onSubmit={sendPrompt} className="ai-prompt-form">
+            <Textarea
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+              placeholder="Ask what to check or run"
+              className="ai-prompt-input resize-y"
+            />
+            <Button type="submit" disabled={!canSend} className="ai-send-button">
+              {settings.executeMode === "plan" ? <Send size={14} /> : <Zap size={14} />}
+              {sending ? "Working" : settings.executeMode === "plan" ? "Ask" : "Ask + run"}
+            </Button>
+          </form>
+        </section>
+
+        <aside className="ai-right-rail">
+          <section className="ai-side-card">
+            <PanelHeader title="Context" />
+            <div className="ai-context-grid">
+              <CompactMetric label="Processes" value={processes.length} />
+              <CompactMetric label="Providers" value={providers.length || 2} />
+              <CompactMetric label="Mode" value={settings.executeMode} />
+            </div>
           </section>
 
-          {(lastActions.length > 0 || lastExecutions.length > 0) && (
-            <section className="grid gap-3 lg:grid-cols-2">
-              <div className="page-panel space-y-2 p-3">
-                <PanelHeader title="Prepared actions" />
-                {lastActions.length > 0 ? lastActions.map((action, index) => (
-                  <PlannedActionCard key={`${action.actionId}-${index}`} action={action} onRun={runAction} running={runningActionId === action.actionId} />
-                )) : <InsetPanel padding="sm" className="text-sm text-text-3">No PM2 actions prepared.</InsetPanel>}
-              </div>
+          <section className="ai-side-card ai-queue-card">
+            <PanelHeader title="Prepared actions" />
+            <div className="ai-card-list">
+              {lastActions.length > 0 ? lastActions.map((action, index) => (
+                <PlannedActionCard key={`${action.actionId}-${index}`} action={action} onRun={runAction} running={runningActionId === action.actionId} />
+              )) : <InsetPanel padding="sm" className="text-sm text-text-3">No actions prepared.</InsetPanel>}
+            </div>
+          </section>
 
-              <div className="page-panel space-y-2 p-3">
-                <PanelHeader title="Execution log" />
-                {lastExecutions.length > 0 ? lastExecutions.map((execution, index) => (
-                  <ExecutionCard key={`${execution.actionId}-${index}`} execution={execution} />
-                )) : <InsetPanel padding="sm" className="text-sm text-text-3">No actions executed yet.</InsetPanel>}
-              </div>
+          <section className="ai-side-card ai-queue-card">
+            <PanelHeader title="Execution log" />
+            <div className="ai-card-list">
+              {lastExecutions.length > 0 ? lastExecutions.map((execution, index) => (
+                <ExecutionCard key={`${execution.actionId}-${index}`} execution={execution} />
+              )) : <InsetPanel padding="sm" className="text-sm text-text-3">No actions executed.</InsetPanel>}
+            </div>
+          </section>
+
+          {lastUsage ? (
+            <section className="ai-side-card">
+              <PanelHeader title="Usage" />
+              <Textarea readOnly value={stringifyOutput(lastUsage)} className="min-h-[72px] font-mono text-xs" />
             </section>
-          )}
-        </section>
+          ) : null}
+        </aside>
       </section>
 
       {pendingAction && (

@@ -4,13 +4,12 @@ import { useSearchParams } from "react-router-dom";
 import { pm2Admin, processes as processApi } from "../api";
 import toast, { getErrorMessage } from "../lib/toast";
 import Badge from "../components/ui/Badge";
-import Banner from "../components/ui/Banner";
 import Button from "../components/ui/Button";
 import Field from "../components/ui/Field";
 import Input from "../components/ui/Input";
 import InsetPanel from "../components/ui/InsetPanel";
 import { ConfirmDialog } from "../components/ui/Modal";
-import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
+import { PanelHeader } from "../components/ui/PageLayout";
 import Select from "../components/ui/Select";
 import { Skeleton } from "../components/ui/Skeleton";
 import TabButton from "../components/ui/TabButton";
@@ -149,36 +148,35 @@ export default function PM2Features() {
 
   return (
     <div className="compact-page-stack">
-      <PageIntro title="PM2 Tools" />
+      <section className="pm2-tools-control-panel">
+        <div className="pm2-tools-topbar">
+          <div className="min-w-0">
+            <h1 className="page-heading">PM2 Tools</h1>
+            <div className="pm2-tools-meta-row">
+              <Badge tone="neutral">{processes.length} processes</Badge>
+              <Badge tone="info">{selectedFeatures.length} actions</Badge>
+              {selectedCategoryMeta ? <Badge tone="success">{selectedCategoryMeta.label}</Badge> : null}
+            </div>
+          </div>
+          {runningId ? <Badge tone="warning">Running</Badge> : <Badge tone="neutral">Ready</Badge>}
+        </div>
 
-      <section className="flow-strip space-y-2">
-        <PanelHeader title="Feature map" />
         {loading ? (
-          <div className="grid gap-2 md:grid-cols-4">
-            {Array.from({ length: 8 }).map((_, index) => <Skeleton key={index} className="h-20 w-full" />)}
+          <div className="pm2-category-skeletons">
+            {Array.from({ length: 7 }).map((_, index) => <Skeleton key={index} className="h-10 w-full" />)}
           </div>
         ) : (
-          <>
-            <div className="pm2-category-strip">
-              {(catalog.categories || []).map((category) => (
-                <TabButton
-                  key={category.id}
-                  active={selectedCategory === category.id}
-                  onClick={() => setSelectedCategory(category.id)}
-                >
-                  {category.label}
-                </TabButton>
-              ))}
-            </div>
-            {selectedCategoryMeta ? (
-              <InsetPanel padding="sm" className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold text-text-1">{selectedCategoryMeta.label}</p>
-                </div>
-                <Badge tone="info">{selectedFeatures.length} actions</Badge>
-              </InsetPanel>
-            ) : null}
-          </>
+          <div className="pm2-category-strip" aria-label="PM2 feature groups">
+            {(catalog.categories || []).map((category) => (
+              <TabButton
+                key={category.id}
+                active={selectedCategory === category.id}
+                onClick={() => setSelectedCategory(category.id)}
+              >
+                {category.label}
+              </TabButton>
+            ))}
+          </div>
         )}
       </section>
 
@@ -205,9 +203,17 @@ export default function PM2Features() {
           )}
         </div>
 
-        <aside className="compact-page-stack">
+        <aside className="pm2-result-stack">
           <section className="result-panel space-y-2">
-            <PanelHeader title="Last result" />
+            <PanelHeader
+              title="Result"
+              actions={lastResult ? (
+                <Button type="button" size="sm" variant="secondary" onClick={copyOutput}>
+                  <Copy size={14} />
+                  Copy
+                </Button>
+              ) : null}
+            />
             {lastResult ? (
               <>
                 <div className="flex flex-wrap items-center gap-2">
@@ -221,16 +227,12 @@ export default function PM2Features() {
                 <Textarea
                   readOnly
                   value={stringifyOutput(lastResult)}
-                  className="min-h-[220px] resize-y font-mono text-xs"
+                  className="min-h-[260px] resize-y font-mono text-xs"
                 />
-                <Button type="button" variant="secondary" onClick={copyOutput} className="w-full">
-                  <Copy size={14} />
-                  Copy output
-                </Button>
               </>
             ) : (
-              <InsetPanel padding="sm" className="text-sm text-text-3">
-                Run a feature to see the command, exit code, and cleaned output here.
+              <InsetPanel padding="sm" className="result-empty-state">
+                Select an action and run it.
               </InsetPanel>
             )}
           </section>
@@ -257,31 +259,22 @@ export default function PM2Features() {
 }
 
 function FeatureCard({ feature, form, processes, running, onChange, onRun }) {
+  const hasFields = (feature.fields || []).length > 0;
+
   return (
-    <article className="pm2-feature-card space-y-2">
-      <div className="pm2-feature-topline">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="panel-heading">{feature.label}</h2>
-            <Badge tone={riskTone[feature.risk] || "neutral"}>{feature.risk}</Badge>
-          </div>
-          <p className="command-chip mt-2">
-            {feature.commandPreview}
-          </p>
+    <article className="pm2-feature-card">
+      <div className="pm2-feature-main">
+        <div className="pm2-feature-title-row">
+          <h2 className="pm2-feature-title">{feature.label}</h2>
+          <Badge tone={riskTone[feature.risk] || "neutral"}>{feature.risk}</Badge>
         </div>
-        <Button type="button" size="sm" variant={feature.risk === "critical" ? "danger" : "secondary"} disabled={running} onClick={onRun}>
-          {feature.risk === "critical" ? <AlertTriangle size={14} /> : <Play size={14} />}
-          {running ? "Running..." : "Run"}
-        </Button>
+        <p className="command-chip">{feature.commandPreview}</p>
+        {feature.risk === "sensitive-read" ? (
+          <p className="pm2-inline-warning">Sensitive output. Review before sharing.</p>
+        ) : null}
       </div>
 
-      {feature.risk === "sensitive-read" && (
-        <Banner tone="warning" className="text-xs">
-          Sensitive output. Review before sharing.
-        </Banner>
-      )}
-
-      {(feature.fields || []).length > 0 ? (
+      {hasFields ? (
         <div className="pm2-feature-fields">
           {feature.fields.map((field) => (
             <FeatureField
@@ -293,7 +286,21 @@ function FeatureCard({ feature, form, processes, running, onChange, onRun }) {
             />
           ))}
         </div>
-      ) : null}
+      ) : (
+        <div className="pm2-feature-no-fields">No input</div>
+      )}
+
+      <Button
+        type="button"
+        size="sm"
+        variant={feature.risk === "critical" ? "danger" : "secondary"}
+        disabled={running}
+        onClick={onRun}
+        className="pm2-feature-run"
+      >
+        {feature.risk === "critical" ? <AlertTriangle size={14} /> : <Play size={14} />}
+        {running ? "Running..." : "Run"}
+      </Button>
     </article>
   );
 }
