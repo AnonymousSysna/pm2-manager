@@ -1,18 +1,36 @@
+import type { ElementType, ReactNode } from "react";
 import { cn } from "../../lib/cn";
+import { PolymorphicProps, resolveTag } from "./polymorphic";
 
-export function Eyebrow({ as: Comp = "p", className = "", ...props }) {
+export function Eyebrow<E extends ElementType = "p">({ as, className = "", ...props }: PolymorphicProps<E>) {
+  const Comp = resolveTag(as, "p");
   return <Comp className={cn("meta-label", className)} {...props} />;
 }
 
-export function SubsectionTitle({ as: Comp = "h3", className = "", ...props }) {
+export function SubsectionTitle<E extends ElementType = "h3">({ as, className = "", ...props }: PolymorphicProps<E>) {
+  const Comp = resolveTag(as, "h3");
   return <Comp className={cn("subsection-title", className)} {...props} />;
 }
 
-export function MetricValue({ as: Comp = "p", className = "", ...props }) {
+export function MetricValue<E extends ElementType = "p">({ as, className = "", ...props }: PolymorphicProps<E>) {
+  const Comp = resolveTag(as, "p");
   return <Comp className={cn("metric-value", className)} {...props} />;
 }
 
-export function SupportingCopy({ as: Comp = "p", tone = "muted", size = "sm", className = "", ...props }) {
+type SupportingCopyProps = {
+  tone?: "default" | "muted";
+  size?: "sm" | "xs";
+  children?: ReactNode;
+};
+
+export function SupportingCopy<E extends ElementType = "p">({
+  as,
+  tone = "muted",
+  size = "sm",
+  className = "",
+  ...props
+}: PolymorphicProps<E, SupportingCopyProps>) {
+  const Comp = resolveTag(as, "p");
   return (
     <Comp
       className={cn(

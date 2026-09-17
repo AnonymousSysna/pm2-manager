@@ -1,6 +1,12 @@
+import type { ButtonHTMLAttributes } from "react";
 import { cn } from "../../lib/cn";
 
-export default function TabButton({ active = false, className = "", type = "button", ...props }) {
+export default function TabButton({
+  active = false,
+  className = "",
+  type = "button",
+  ...props
+}: { active?: boolean; className?: string } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className">) {
   return (
     <button
       type={type}

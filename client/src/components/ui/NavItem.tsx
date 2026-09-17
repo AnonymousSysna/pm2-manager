@@ -1,6 +1,15 @@
+import type { ElementType } from "react";
 import { cn } from "../../lib/cn";
+import { ButtonAttrs, PolymorphicProps, resolveTag } from "./polymorphic";
 
-export default function NavItem({ as: Comp = "button", active = false, className = "", type = "button", ...props }) {
+export default function NavItem<E extends ElementType = "button">({
+  as,
+  active = false,
+  className = "",
+  type = "button",
+  ...props
+}: PolymorphicProps<E, { active?: boolean } & ButtonAttrs>) {
+  const Comp = resolveTag(as, "button");
   return (
     <Comp
       type={Comp === "button" ? type : undefined}

@@ -1,7 +1,8 @@
-import { useEffect, useId } from "react";
+import { useEffect, useId, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "../../lib/cn";
-import Button from "./Button";
+import Button, { type ButtonVariant } from "./Button";
+import { SupportingCopy } from "./Typography";
 
 const sizeMap = {
   sm: "max-w-md",
@@ -22,9 +23,32 @@ const dialogHeaderClasses = "flex shrink-0 items-start justify-between gap-3 bor
 const dialogBodyClasses = "min-h-0 flex-1 overflow-y-auto py-4";
 const dialogFooterClasses = "flex shrink-0 flex-wrap justify-end gap-2 border-t border-border/70 pt-3";
 
+/**
+ * Note the description below is rendered and wired to `aria-describedby`.
+ * Audit finding: it used to be destructured as `_description` and dropped, so a
+ * modal could be passed an explanation that never appeared and a dialog could
+ * not be described to a screen reader.
+ */
+export type ModalProps = {
+  title?: ReactNode;
+  description?: ReactNode;
+  actions?: ReactNode;
+  children?: ReactNode;
+  onClose?: () => void;
+  closeLabel?: string;
+  size?: keyof typeof sizeMap;
+  /** "right" renders a side drawer instead of a centered dialog. */
+  position?: "center" | "right";
+  className?: string;
+  bodyClassName?: string;
+  showCloseButton?: boolean;
+  disableClose?: boolean;
+  disableOverlayClose?: boolean;
+};
+
 export default function Modal({
   title,
-  description: _description,
+  description,
   actions,
   children,
   onClose,
@@ -36,8 +60,9 @@ export default function Modal({
   showCloseButton = true,
   disableClose = false,
   disableOverlayClose = false
-}) {
+}: ModalProps) {
   const titleId = useId();
+  const descriptionId = useId();
 
   useEffect(() => {
     const onEsc = (event) => {
@@ -49,6 +74,17 @@ export default function Modal({
     window.addEventListener("keydown", onEsc);
     return () => window.removeEventListener("keydown", onEsc);
   }, [disableClose, onClose]);
+
+  const titleBlock = (
+    <div className="min-w-0 flex-1">
+      <h2 id={titleId} className="panel-heading">{title}</h2>
+      {description ? (
+        <SupportingCopy size="xs" className="mt-1" id={descriptionId}>
+          {description}
+        </SupportingCopy>
+      ) : null}
+    </div>
+  );
 
   if (position === "right") {
     return (
@@ -67,6 +103,7 @@ export default function Modal({
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
+          aria-describedby={description ? descriptionId : undefined}
           className={cn(
             "absolute right-0 top-0 flex h-full w-full flex-col border-l p-3",
             drawerSizeMap[size] || drawerSizeMap.lg,
@@ -75,9 +112,7 @@ export default function Modal({
           )}
         >
           <div className={dialogHeaderClasses}>
-            <div className="min-w-0 flex-1">
-              <h2 id={titleId} className="panel-heading">{title}</h2>
-            </div>
+            {titleBlock}
             {showCloseButton ? (
               <Button type="button" variant="ghost" size="icon" onClick={onClose} disabled={disableClose} aria-label={closeLabel}>
                 <X size={20} />
@@ -107,12 +142,11 @@ export default function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        aria-describedby={description ? descriptionId : undefined}
         className={cn("relative z-10 flex max-h-[calc(100vh-2rem)] w-full flex-col rounded-2xl p-4", dialogPanelClasses, sizeMap[size] || sizeMap.md, className)}
       >
         <div className={dialogHeaderClasses}>
-          <div className="min-w-0 flex-1">
-            <h2 id={titleId} className="panel-heading">{title}</h2>
-          </div>
+          {titleBlock}
           {showCloseButton ? (
             <Button type="button" variant="ghost" size="icon" onClick={onClose} disabled={disableClose} aria-label={closeLabel}>
               <X size={18} />
@@ -126,6 +160,18 @@ export default function Modal({
   );
 }
 
+export type ConfirmDialogProps = {
+  title?: ReactNode;
+  description?: ReactNode;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  confirmVariant?: ButtonVariant;
+  onConfirm?: () => void;
+  onClose?: () => void;
+  confirmDisabled?: boolean;
+  closeLabel?: string;
+};
+
 export function ConfirmDialog({
   title,
   description,
@@ -136,7 +182,7 @@ export function ConfirmDialog({
   onClose,
   confirmDisabled = false,
   closeLabel
-}) {
+}: ConfirmDialogProps) {
   const confirmDescriptionId = useId();
 
   return (

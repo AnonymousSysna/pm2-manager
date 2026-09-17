@@ -108,6 +108,15 @@ because everything in those files ships to the browser.
 - Shared primitives carry a stable class hook (`banner`, `page-heading`,
   `panel-heading`, `meta-label`) so a contract test can assert the component's
   role instead of an incidental utility such as a corner radius.
+- Primitive props are declared, not inferred. `PolymorphicProps` in
+  `components/ui/polymorphic.ts` types the `as`-polymorphic primitives, so a
+  misspelled or missing prop is a compile error instead of a silently
+  ignored attribute. This is what caught `<Field>` being typed as requiring
+  `htmlFor` and `description` from every one of its 36 call sites.
+- A prop a component accepts must be honoured. `Modal` accepts
+  `description`; it now renders it and points `aria-describedby` at it.
+  `Field` never honoured `description`, so the prop is gone rather than
+  declared and dropped.
 - Tests assert the copy users actually see. When a label changes on purpose the
   assertion moves with it in the same change, so the suite keeps catching
   regressions instead of drifting out of date.

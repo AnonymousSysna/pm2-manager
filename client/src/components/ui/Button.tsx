@@ -1,4 +1,6 @@
+import type { ElementType } from "react";
 import { cn } from "../../lib/cn";
+import { ButtonAttrs, PolymorphicProps, resolveTag } from "./polymorphic";
 import { getSemanticOutlineButtonClasses } from "./semanticTones";
 
 const variants = {
@@ -27,14 +29,18 @@ const sizes = {
   icon: "h-11 w-11 p-0"
 };
 
-export default function Button({
-  as: Comp = "button",
+export type ButtonVariant = keyof typeof variants | keyof typeof outlineToneByVariant;
+export type ButtonSize = keyof typeof sizes;
+
+export default function Button<E extends ElementType = "button">({
+  as,
   type = "button",
   variant = "primary",
   size = "md",
   className = "",
   ...props
-}) {
+}: PolymorphicProps<E, { variant?: ButtonVariant; size?: ButtonSize } & ButtonAttrs>) {
+  const Comp = resolveTag(as, "button");
   return (
     <Comp
       type={Comp === "button" ? type : undefined}
