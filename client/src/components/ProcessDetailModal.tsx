@@ -237,7 +237,7 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
                   <SupportingCopy size="xs">Last failure reason: {healthSummary.lastReason}</SupportingCopy>
                 )}
                 {healthPoints.filter((item) => item?.skipped !== true).length === 0 && (
-                  <SupportingCopy>No health probe results have been recorded yet.</SupportingCopy>
+                  <SupportingCopy>No health data.</SupportingCopy>
                 )}
                 {healthPoints
                   .filter((item) => item?.skipped !== true)
@@ -289,7 +289,7 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
             </div>
             {metricsLoading && <MetricsHistorySkeleton />}
             {!metricsLoading && metricsPoints.length === 0 && (
-              <SupportingCopy>No metrics history has been recorded yet.</SupportingCopy>
+              <SupportingCopy>No metrics.</SupportingCopy>
             )}
             {!metricsLoading && metricsPoints.length > 0 && (
               <div className="space-y-2">
@@ -328,7 +328,7 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
             )}
           </div>
           {envEntries.length === 0 ? (
-            <SupportingCopy className="p-4">No PM2 environment variables were returned for this process.</SupportingCopy>
+            <SupportingCopy className="p-4">No environment values.</SupportingCopy>
           ) : (
             envEntries.map(([key, value]) => (
               <div key={key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_40px] items-center gap-2 border-b border-border/70 p-2 text-xs last:border-b-0">
@@ -364,7 +364,6 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
         <div className="space-y-4">
           <ActionSection
             title="Runtime"
-            description="Common PM2 controls for this process."
             actions={[
               { label: "Start", icon: Play, variant: "success", disabled: isOnline || loadingAction.start, onClick: () => runAction("start", process.name) },
               { label: "Stop", icon: Square, variant: "danger", disabled: isStopped || loadingAction.stop, onClick: () => runAction("stop", process.name) },
@@ -374,7 +373,6 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
           />
           <ActionSection
             title="Code and packages"
-            description="Pull code or run package tasks in the process working directory."
             actions={[
               { label: "Git pull", icon: GitBranch, variant: "secondary", disabled: loadingAction.gitPull, onClick: () => runAction("gitPull", process.name) },
               { label: "NPM install", icon: Download, variant: "secondary", disabled: loadingAction.npmInstall, onClick: () => runAction("npmInstall", process.name) },
@@ -383,7 +381,6 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
           />
           <ActionSection
             title="Advanced"
-            description="Schedule, duplicate, or roll back when you are changing process behavior."
             actions={[
               { label: "Schedule restart", icon: AlarmClock, variant: "secondary", disabled: loadingAction.schedule, onClick: () => runAction("schedule", process.name) },
               { label: "Duplicate", icon: Copy, variant: "secondary", disabled: loadingAction.duplicate, onClick: () => runAction("duplicate", process.name) },

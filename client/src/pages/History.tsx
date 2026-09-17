@@ -145,7 +145,6 @@ export default function History() {
     <div className="space-y-4">
       <PageIntro
         title="History"
-        description="Review deployments, restarts, and audit records, then filter down to one process or action."
       />
 
       <section className="page-panel">
@@ -182,7 +181,7 @@ export default function History() {
         </p>
         <div className="max-h-60 space-y-2 overflow-y-auto text-base">
           {deploymentHistoryLoading && <HistoryListSkeleton showSteps />}
-          {!deploymentHistoryLoading && deploymentHistory.length === 0 && <p className="text-text-3">No deployments yet.</p>}
+          {!deploymentHistoryLoading && deploymentHistory.length === 0 && <p className="text-text-3">No deployments.</p>}
           {deploymentHistory.map((item, idx) => (
             <InsetPanel key={`${item.ts}-${idx}`} padding="sm">
               <p className="text-text-1">
@@ -253,7 +252,7 @@ export default function History() {
         </p>
         <div className="max-h-60 space-y-2 overflow-y-auto text-base">
           {restartHistoryLoading && <HistoryListSkeleton />}
-          {!restartHistoryLoading && restartHistory.length === 0 && <p className="text-text-3">No restart history yet.</p>}
+          {!restartHistoryLoading && restartHistory.length === 0 && <p className="text-text-3">No restarts.</p>}
           {restartHistory.map((item, idx) => (
             <InsetPanel key={`${item.ts}-${idx}`} padding="sm">
               <p className="text-text-1">
@@ -334,7 +333,7 @@ export default function History() {
         </p>
         <div className="max-h-72 space-y-2 overflow-y-auto text-base">
           {auditHistoryLoading && <HistoryListSkeleton />}
-          {!auditHistoryLoading && auditHistory.length === 0 && <p className="text-text-3">No audit entries yet.</p>}
+          {!auditHistoryLoading && auditHistory.length === 0 && <p className="text-text-3">No audit entries.</p>}
           {auditHistory.map((item, idx) => (
             <InsetPanel key={`${item.ts}-${idx}`} padding="sm">
               <p className="text-text-1">

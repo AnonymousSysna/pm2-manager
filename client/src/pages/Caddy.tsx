@@ -125,7 +125,6 @@ export default function Caddy() {
     <div className="space-y-4">
       <PageIntro
         title="Caddy Reverse Proxy"
-        description="Check Caddy service status, restart it, and map domains to upstream ports."
       />
 
       <section className="page-panel compact-page-stack p-3">
@@ -205,7 +204,7 @@ export default function Caddy() {
         <PanelHeader title="Managed Domains" className="mb-2" />
         {loading && <ManagedDomainsSkeleton />}
         {!loading && (!Array.isArray(status.managedSites) || status.managedSites.length === 0) && (
-          <p className="text-sm text-text-3">No managed domains yet.</p>
+          <p className="text-sm text-text-3">No domains.</p>
         )}
         {Array.isArray(status.managedSites) && status.managedSites.length > 0 && (
           <div className="space-y-2">

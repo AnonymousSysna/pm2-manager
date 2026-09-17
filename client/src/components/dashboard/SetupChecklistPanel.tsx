@@ -7,7 +7,6 @@ export default function SetupChecklistPanel({ checklistItems, checklistDoneCount
     <section className="page-panel compact-page-stack p-3">
       <PanelHeader
         title="Initial setup"
-        description={`${checklistDoneCount} of ${checklistItems.length} tasks complete. Add a process, alerts, startup recovery, and a domain before you depend on this host.`}
         actions={(
           <Button type="button" size="sm" variant="secondary" onClick={onDismiss}>
             Hide checklist

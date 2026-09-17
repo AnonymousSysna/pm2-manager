@@ -126,7 +126,6 @@ export default function Notifications() {
     <div className="space-y-4">
       <PageIntro
         title="Notifications"
-        description="Filter the event feed by severity or category, inspect full errors, and clear stored notification history."
       />
 
       <section className="page-panel">
@@ -171,7 +170,7 @@ export default function Notifications() {
             !loading && (
               <div className="flex flex-col items-center justify-center py-12 text-text-3">
                 <Bell size={24} />
-                <p className="mt-2 text-sm">No notifications found.</p>
+                <p className="mt-2 text-sm">No notifications.</p>
               </div>
             )
           )}
@@ -225,7 +224,7 @@ export default function Notifications() {
       {clearConfirmOpen && (
         <ConfirmDialog
           title="Clear Notification History"
-          description="Delete all stored notification history? Live notifications will still appear as they arrive."
+          description="Delete all stored notification history?"
           confirmLabel="Clear History"
           onClose={() => setClearConfirmOpen(false)}
           onConfirm={clearHistory}

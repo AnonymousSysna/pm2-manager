@@ -43,7 +43,7 @@ export function DeployProcessModal({
             <p className="mt-1 text-xs text-text-3">Elapsed {deployElapsedSec}s</p>
             {deployElapsedSec >= 300 && (
               <p className="mt-1 text-xs text-warning-300">
-                This is taking longer than expected. Check git access, build output, and network access on the host.
+                Taking longer than expected.
               </p>
             )}
           </InsetCard>
@@ -68,7 +68,7 @@ export function DeployProcessModal({
             Run npm install
           </label>
         ) : (
-          <p className="text-xs text-text-3">`npm install` is unavailable because no package.json was detected.</p>
+          <p className="text-xs text-text-3">Install unavailable.</p>
         )}
 
         {Boolean(npmCapabilitiesByProcess[process.name]?.hasBuildScript) ? (
@@ -81,7 +81,7 @@ export function DeployProcessModal({
             Run npm run build
           </label>
         ) : (
-          <p className="text-xs text-text-3">`npm run build` is unavailable because no build script was detected.</p>
+          <p className="text-xs text-text-3">Build unavailable.</p>
         )}
 
         <Field label="After deploy">
@@ -230,9 +230,6 @@ export function ProcessMetaModal({
             />
           </Field>
         </div>
-        <p className="text-xs text-text-3">
-          Checks run against `127.0.0.1` on the process port unless you override the port here.
-        </p>
       </div>
 
       <div className="mt-4 flex justify-between gap-2">
@@ -298,7 +295,7 @@ export function DotEnvEditorModal({
             </Banner>
           )}
           {dotEnvFields.length === 0 && (
-            <p className="text-sm text-text-3">No editable entries were found.</p>
+            <p className="text-sm text-text-3">No entries.</p>
           )}
           {dotEnvFields.map((item, index) => (
             <div key={`${item.key}-${index}`} className="grid grid-cols-1 gap-2 md:grid-cols-[220px_1fr] md:items-center">

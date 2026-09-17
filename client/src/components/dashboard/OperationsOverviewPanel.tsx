@@ -126,7 +126,6 @@ export default function OperationsOverviewPanel({
     <section className="page-panel dashboard-triage-panel">
       <PanelHeader
         title="Triage"
-        description="Fix the riskiest service first. Stable systems stay quiet."
         actions={(
           <>
             <Button type="button" size="sm" variant="secondary" onClick={onOpenHistory}>
@@ -153,7 +152,7 @@ export default function OperationsOverviewPanel({
           label="Health"
           title={failingHealthNames.length > 0 ? `${failingHealthNames.length} failing` : "Clear"}
           tone={failingHealthNames.length > 0 ? "danger" : "success"}
-          detail={failingHealthNames.length > 0 ? summarizeNames(failingHealthNames) : "No unhealthy probes."}
+          detail={failingHealthNames.length > 0 ? summarizeNames(failingHealthNames) : "Clear."}
           actionLabel={failingHealthNames[0] ? "Open logs" : null}
           onAction={failingHealthNames[0] ? () => onOpenLogs(failingHealthNames[0]) : null}
         />
@@ -161,7 +160,7 @@ export default function OperationsOverviewPanel({
           label="Runtime"
           title={stoppedOrErroredNames.length > 0 ? `${stoppedOrErroredNames.length} stopped` : "Running"}
           tone={stoppedOrErroredNames.length > 0 ? "warning" : "success"}
-          detail={stoppedOrErroredNames.length > 0 ? summarizeNames(stoppedOrErroredNames) : "No stopped services."}
+          detail={stoppedOrErroredNames.length > 0 ? summarizeNames(stoppedOrErroredNames) : "Clear."}
           actionLabel={stoppedOrErroredNames[0] ? "Review" : "History"}
           onAction={() => onOpenHistory()}
         />
@@ -169,7 +168,7 @@ export default function OperationsOverviewPanel({
           label="Alerts"
           title={`${alerts.length} recent`}
           tone={alerts.length > 0 ? "info" : "neutral"}
-          detail={alerts.length > 0 ? summarizeNames(alertProcessNames) : "No alert noise."}
+          detail={alerts.length > 0 ? summarizeNames(alertProcessNames) : "Clear."}
           actionLabel="History"
           onAction={() => onOpenHistory()}
         />
@@ -197,7 +196,7 @@ export default function OperationsOverviewPanel({
         {attentionItems.length === 0 ? (
           <div className="quiet-empty-state">
             <ShieldX size={16} className="mx-auto mb-2 rotate-180 text-success-300" />
-            No current errors, stops, or unhealthy checks.
+            All clear.
           </div>
         ) : (
           <div className="space-y-2">
@@ -234,7 +233,7 @@ export default function OperationsOverviewPanel({
 
 function summarizeNames(names = []) {
   if (names.length === 0) {
-    return "No processes in this bucket.";
+    return "No processes.";
   }
   if (names.length <= 3) {
     return names.join(", ");

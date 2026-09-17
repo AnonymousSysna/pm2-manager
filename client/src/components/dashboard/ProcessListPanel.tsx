@@ -364,7 +364,7 @@ function ActionMenuItem({ icon, children, disabled = false, onClick }) {
 }
 
 function EmptyState() {
-  return <p className="quiet-empty-state process-empty-state">No processes found.</p>;
+  return <p className="quiet-empty-state process-empty-state">No processes.</p>;
 }
 
 function StatusBadge({ status }) {

@@ -17,7 +17,7 @@ const dialogFooterClasses = "flex shrink-0 flex-wrap justify-end gap-2 border-t 
 
 export default function Modal({
   title,
-  description,
+  description: _description,
   actions,
   children,
   onClose,
@@ -31,7 +31,6 @@ export default function Modal({
   disableOverlayClose = false
 }) {
   const titleId = useId();
-  const descriptionId = useId();
 
   useEffect(() => {
     const onEsc = (event) => {
@@ -61,13 +60,11 @@ export default function Modal({
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
-          aria-describedby={description ? descriptionId : undefined}
           className={cn("absolute right-0 top-0 flex h-full w-full max-w-xl flex-col border-l p-4", dialogPanelClasses, className)}
         >
           <div className={dialogHeaderClasses}>
             <div className="min-w-0 flex-1">
               <h2 id={titleId} className="panel-heading">{title}</h2>
-              {description ? <p id={descriptionId} className="panel-muted mt-1">{description}</p> : null}
             </div>
             {showCloseButton ? (
               <Button type="button" variant="ghost" size="icon" onClick={onClose} disabled={disableClose} aria-label={closeLabel}>
@@ -98,13 +95,11 @@ export default function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        aria-describedby={description ? descriptionId : undefined}
         className={cn("relative z-10 flex max-h-[calc(100vh-2rem)] w-full flex-col rounded-2xl p-4", dialogPanelClasses, sizeMap[size] || sizeMap.md, className)}
       >
         <div className={dialogHeaderClasses}>
           <div className="min-w-0 flex-1">
             <h2 id={titleId} className="panel-heading">{title}</h2>
-            {description ? <p id={descriptionId} className="panel-muted mt-1">{description}</p> : null}
           </div>
           {showCloseButton ? (
             <Button type="button" variant="ghost" size="icon" onClick={onClose} disabled={disableClose} aria-label={closeLabel}>

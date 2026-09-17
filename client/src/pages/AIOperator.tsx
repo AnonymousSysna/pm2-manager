@@ -161,7 +161,7 @@ export default function AIOperator() {
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      content: "Paste an error, ask for a fix, or click Auto repair."
+      content: "Ready."
     }
   ]);
   const [prompt, setPrompt] = useState("");
@@ -263,7 +263,7 @@ export default function AIOperator() {
           context: { processes }
         }),
         {
-          loading: modeOverride === "write" ? "AI is checking and applying safe fixes..." : modeOverride === "read" ? "AI is checking the server..." : "AI is preparing a plan...",
+          loading: modeOverride === "write" ? "AI working..." : modeOverride === "read" ? "AI checking..." : "AI planning...",
           success: modeOverride === "write" ? "AI finished the safe work" : "AI response ready",
           error: (error) => getErrorMessage(error, "AI request failed")
         }
@@ -296,7 +296,7 @@ export default function AIOperator() {
 
   const workNow = async () => {
     if (busy) return;
-    await runOperatorPrompt("Diagnose the dashboard and apply safe fixes that are allowed. Do not run critical or destructive actions.", "write");
+    await runOperatorPrompt("Diagnose and apply safe fixes.", "write");
   };
 
   const diagnoseNow = async () => {
@@ -399,7 +399,7 @@ export default function AIOperator() {
         <div className="ai-connection-summary-main">
           <div className="min-w-0">
             <Eyebrow>Connection</Eyebrow>
-            <h2 className="panel-heading mt-1">Provider, key, and run mode</h2>
+            <h2 className="panel-heading mt-1">Connection</h2>
           </div>
           <div className="ai-connection-pills">
             <Badge tone={connected ? "success" : "warning"}>{connected ? "Ready" : "Setup needed"}</Badge>
@@ -419,7 +419,7 @@ export default function AIOperator() {
       {connectionModalOpen ? (
         <Modal
           title="Connection"
-          description="Provider, key, and run mode"
+          description="Connection"
           size="md"
           onClose={() => setConnectionModalOpen(false)}
           className="ai-connection-dialog"
@@ -502,7 +502,7 @@ export default function AIOperator() {
             {sending ? (
               <div className="flex items-center gap-2 text-sm text-text-3">
                 <Bot size={16} className="animate-pulse" />
-                AI is working...
+                Working...
               </div>
             ) : null}
           </div>
@@ -519,7 +519,7 @@ export default function AIOperator() {
             <Textarea
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
-              placeholder="Paste an error, ask what broke, or tell it what to fix"
+              placeholder="Ask AI"
               className="ai-prompt-input resize-y"
             />
             <Button type="submit" disabled={!canSend} className="ai-send-button">
@@ -554,7 +554,7 @@ export default function AIOperator() {
             <div className="ai-card-list">
               {lastActions.length > 0 ? lastActions.map((action, index) => (
                 <PlannedActionCard key={`${action.actionId}-${index}`} action={action} onRun={runAction} running={runningActionId === action.actionId} />
-              )) : <InsetPanel padding="sm" className="text-sm text-text-3">No actions prepared.</InsetPanel>}
+              )) : <InsetPanel padding="sm" className="text-sm text-text-3">No actions.</InsetPanel>}
             </div>
           </section>
 
@@ -563,7 +563,7 @@ export default function AIOperator() {
             <div className="ai-card-list">
               {lastExecutions.length > 0 ? lastExecutions.map((execution, index) => (
                 <ExecutionCard key={`${execution.actionId}-${index}`} execution={execution} />
-              )) : <InsetPanel padding="sm" className="text-sm text-text-3">No actions executed.</InsetPanel>}
+              )) : <InsetPanel padding="sm" className="text-sm text-text-3">No runs.</InsetPanel>}
             </div>
           </section>
 
@@ -579,7 +579,7 @@ export default function AIOperator() {
       {pendingAction && (
         <ConfirmDialog
           title={`Run critical action: ${pendingAction.actionId}?`}
-          description="This can disrupt running processes."
+          description="This can affect running apps."
           confirmLabel="Run critical action"
           confirmVariant="danger"
           onConfirm={confirmCriticalAction}

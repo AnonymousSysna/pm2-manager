@@ -48,7 +48,7 @@ function stringifyOutput(result) {
   if (data.parsed) {
     return JSON.stringify(data.parsed, null, 2);
   }
-  return String(data.output || "").trim() || "No output returned.";
+  return String(data.output || "").trim() || "No output.";
 }
 
 function featurePayload(feature, forms, preferredProcess) {
@@ -220,7 +220,7 @@ export default function PM2Features() {
             ))}
           </div>
         ) : (
-          <InsetPanel padding="sm" className="result-empty-state">No PM2 actions found.</InsetPanel>
+          <InsetPanel padding="sm" className="result-empty-state">No actions.</InsetPanel>
         )}
       </section>
 
@@ -255,7 +255,7 @@ export default function PM2Features() {
           </div>
         ) : (
           <InsetPanel padding="sm" className="result-empty-state">
-            Run an action to see output here.
+            No result.
           </InsetPanel>
         )}
       </section>
@@ -304,7 +304,7 @@ export default function PM2Features() {
                 ))}
               </div>
             ) : (
-              <InsetPanel padding="sm" className="result-empty-state">No options needed.</InsetPanel>
+              <InsetPanel padding="sm" className="result-empty-state">No options.</InsetPanel>
             )}
           </div>
         </Modal>
@@ -313,7 +313,7 @@ export default function PM2Features() {
       {pendingFeature && (
         <ConfirmDialog
           title={`Run ${pendingFeature.label}?`}
-          description="This can change PM2 or running apps."
+          description="This can affect running apps."
           confirmLabel="Run action"
           confirmVariant="danger"
           onClose={() => setPendingFeature(null)}

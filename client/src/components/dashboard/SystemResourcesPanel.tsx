@@ -7,7 +7,6 @@ export default function SystemResourcesPanel({ systemResources, bytesToGB }) {
     <section className="page-panel compact-page-stack p-3">
       <PanelHeader
         title="Host Capacity"
-        description="CPU, memory, disk, and mount usage on the machine running PM2."
       />
       {!systemResources ? (
         <div className="space-y-3">

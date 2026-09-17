@@ -632,7 +632,6 @@ export default function Dashboard() {
               loading: (
                 <div className="task-toast-body">
                   <span>Waiting for npm to return.</span>
-                  <span>This toast updates only when the server returns done or error.</span>
                 </div>
               ),
               success: (result) => taskResultDescription(result),

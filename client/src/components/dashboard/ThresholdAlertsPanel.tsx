@@ -9,9 +9,8 @@ export default function ThresholdAlertsPanel({ alerts = [], onOpenLogs }) {
     <section className="page-panel compact-page-stack p-3">
       <PanelHeader
         title="Alert Feed"
-        description="Recent threshold and health incidents worth investigating before they turn into noisy restarts."
       />
-      {alerts.length === 0 && <p className="text-sm text-text-3">No active alerts in the current session.</p>}
+      {alerts.length === 0 && <p className="text-sm text-text-3">No alerts.</p>}
       <div className="max-h-64 space-y-2 overflow-y-auto text-sm">
         {alerts
           .slice()

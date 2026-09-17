@@ -400,12 +400,11 @@ export default function Logs() {
     <div className="space-y-4">
       <PageIntro
         title="Logs"
-        description="Tail one process or up to 12 together, search entries, export the current view, or flush a single process log."
       />
 
       {showCreateHint && (
         <Banner tone="info" className="text-base">
-          <p>Process creation request was accepted for <span className="font-semibold">{selected || defaultProcess}</span>. Waiting for first logs...</p>
+          <p>Process creation request was accepted for <span className="font-semibold">{selected || defaultProcess}</span>. Waiting...</p>
         </Banner>
       )}
 
@@ -557,8 +556,8 @@ export default function Logs() {
         {(selected || combinedView) && visibleEntries.length === 0 && (
           <>
             {logsLoading && <LogsViewerSkeleton />}
-            {!logsLoading && hasActiveFilter && entries.length > 0 && <p className="text-text-3">No logs match your current filter.</p>}
-            {!logsLoading && (!hasActiveFilter || entries.length === 0) && <p className="text-text-3">Waiting for logs from the selected process.</p>}
+            {!logsLoading && hasActiveFilter && entries.length > 0 && <p className="text-text-3">No matches.</p>}
+            {!logsLoading && (!hasActiveFilter || entries.length === 0) && <p className="text-text-3">Waiting for logs.</p>}
           </>
         )}
 

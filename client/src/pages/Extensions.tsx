@@ -283,7 +283,7 @@ export default function Extensions() {
 
           {!interpreterState.loading && interpreterState.interpreters.length === 0 ? (
             <InsetPanel className="text-sm text-text-3">
-              No interpreter presets detected.
+              No presets.
             </InsetPanel>
           ) : null}
         </div>

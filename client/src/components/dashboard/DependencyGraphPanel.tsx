@@ -6,10 +6,9 @@ export default function DependencyGraphPanel({ dependencyEdges = [] }) {
     <section className="page-panel compact-page-stack p-3">
       <PanelHeader
         title="Dependencies"
-        description="Saved startup dependencies from process metadata."
       />
       {dependencyEdges.length === 0 ? (
-        <p className="text-sm text-text-3">No declared process dependencies.</p>
+        <p className="text-sm text-text-3">No dependencies.</p>
       ) : (
         <div className="space-y-2">
           {dependencyEdges.map((edge) => (

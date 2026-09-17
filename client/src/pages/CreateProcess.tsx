@@ -112,7 +112,7 @@ const MAX_MEMORY_RESTART_PATTERN = /^\d+(M|G|K|m|g|k)$/;
 const DEFAULT_RUNTIME_HINT = {
   interpreter: "node",
   execMode: "cluster",
-  reason: "Node.js app detected. Project and Git modes also auto-detect plain static sites when index.html exists without package.json."
+  reason: "Node.js app detected."
 };
 
 function inferRuntimeHint(mode, form) {
@@ -575,7 +575,6 @@ export default function CreateProcess() {
     <section className="mx-auto max-w-4xl space-y-4">
       <PageIntro
         title="Add process"
-        description="Choose a source, confirm runtime, then launch."
       />
 
       <div className="page-panel">
@@ -937,7 +936,7 @@ export default function CreateProcess() {
               <Eyebrow className="mb-2">Live Steps</Eyebrow>
               <div className="max-h-48 space-y-1 overflow-y-auto">
                 {liveCreateSteps.length === 0 && (
-                  <SupportingCopy size="xs">Waiting for the first server step...</SupportingCopy>
+                  <SupportingCopy size="xs">Waiting...</SupportingCopy>
                 )}
                 {liveCreateSteps.map((step) => {
                   const status = String(step.status || "").trim();
@@ -949,7 +948,7 @@ export default function CreateProcess() {
                         [{symbol}] {formatCreateStepLabel(step.label)}
                       </StatusText>
                       {Number.isFinite(Number(step.durationMs)) && status !== "started" && (
-                        <SupportingCopy size="xs">Duration: {Math.max(0, Number(step.durationMs))}ms</SupportingCopy>
+                        <SupportingCopy size="xs">{Math.max(0, Number(step.durationMs))}ms</SupportingCopy>
                       )}
                       {status === "error" && step.error && (
                         <StatusText as="p" tone="danger">{String(step.error)}</StatusText>

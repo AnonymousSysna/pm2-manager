@@ -38,7 +38,6 @@ export default function MetricsHistoryPanel({ chartProcess, onChartProcessChange
     <section className="page-panel compact-page-stack p-3">
       <PanelHeader
         title="Resource Trends"
-        description="Compare CPU and memory movement for one process without opening the detail drawer."
       />
       <Select value={chartProcess} onChange={(e) => onChartProcessChange(e.target.value)} className="w-full">
         {processes.map((proc) => (
