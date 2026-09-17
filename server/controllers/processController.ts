@@ -144,7 +144,7 @@ function scheduleSelfRestart(processName, actorContext = "unknown") {
           error: error?.message || "self restart failed"
         });
       });
-  }, 900);
+  }, 3500);
 
   if (typeof timer.unref === "function") {
     timer.unref();
@@ -1151,13 +1151,13 @@ async function restartProcess(name, actorContext = "unknown") {
   const { actor, ip } = normalizeActorContext(actorContext);
 
   if (isDashboardSelfProcess(processName)) {
-    scheduleSelfRestart(processName, actorContext);
     const result = {
       success: true,
       data: {
         processName,
         accepted: true,
         deferred: true,
+        restartDelayMs: 3500,
         message: "Restart accepted. The dashboard will reconnect after the PM2 process comes back online."
       },
       error: null
@@ -1169,6 +1169,7 @@ async function restartProcess(name, actorContext = "unknown") {
       details: result.data,
       error: null
     });
+    scheduleSelfRestart(processName, actorContext);
     return result;
   }
 
@@ -1233,6 +1234,9 @@ async function runBulkAction(action, names = [], actorContext = "unknown") {
   }
 
   const uniqueNames = [...new Set(sanitizedNames)];
+  const orderedNames = safeAction === "restart"
+    ? [...uniqueNames].sort((a, b) => Number(isDashboardSelfProcess(a)) - Number(isDashboardSelfProcess(b)))
+    : uniqueNames;
   const handler = {
     start: startProcess,
     stop: stopProcess,
@@ -1240,7 +1244,7 @@ async function runBulkAction(action, names = [], actorContext = "unknown") {
   }[safeAction];
 
   const results = [];
-  for (const processName of uniqueNames) {
+  for (const processName of orderedNames) {
     const result = await handler(processName, actorContext);
     results.push({
       name: processName,

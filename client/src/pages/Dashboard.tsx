@@ -48,31 +48,111 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isDashboardSelfProcessName(name) {
+  const value = String(name || "").trim().toLowerCase();
+  return value === "pm2-dashboard" || value === "pm2-manager" || value.includes("pm2-dashboard");
+}
+
+function isRestartResponseInterrupted(error) {
+  const code = String(error?.code || "").toLowerCase();
+  const message = String(getErrorMessage(error, error?.message || "")).toLowerCase();
+  return (
+    code === "timeout" ||
+    code === "econnaborted" ||
+    message.includes("timeout") ||
+    message.includes("network error") ||
+    message.includes("failed to fetch") ||
+    message.includes("load failed") ||
+    message.includes("connection") ||
+    message.includes("aborted")
+  );
+}
+
+function withTimeout(promise, timeoutMs, message = "Operation timed out") {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error(message);
+      error.code = "TIMEOUT";
+      reject(error);
+    }, timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+async function readyProbe(timeoutMs = 4500) {
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  try {
+    const response = await fetch(`/ready?_=${Date.now()}`, {
+      cache: "no-store",
+      credentials: "same-origin",
+      signal: controller?.signal
+    });
+    return response.ok ? { ok: true, status: response.status } : { ok: false, status: response.status };
+  } catch (error) {
+    return { ok: false, error };
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
 async function waitForDashboardReadyAfterDeferredAction(timeoutMs = 70000) {
   const started = Date.now();
   let lastError = null;
+  let sawUnavailable = false;
 
-  // Give PM2 a moment to perform deferred self-actions before checking readiness.
-  await sleep(1800);
+  // Give PM2 a moment to run the deferred self-action before checking readiness.
+  await sleep(1400);
 
   while (Date.now() - started < timeoutMs) {
-    try {
-      const response = await fetch(`/ready?_=${Date.now()}`, {
-        cache: "no-store",
-        credentials: "same-origin"
-      });
-      if (response.ok) {
+    const probe = await readyProbe();
+    if (probe.ok) {
+      // Fast restarts can come back before we catch the downtime. Do not hang forever
+      // waiting for a down state that may have already passed.
+      if (sawUnavailable || Date.now() - started > 6500) {
         return true;
       }
-      lastError = new Error(`Readiness returned ${response.status}`);
-    } catch (error) {
-      lastError = error;
+    } else {
+      sawUnavailable = true;
+      lastError = probe.error || new Error(`Readiness returned ${probe.status || "unavailable"}`);
     }
 
-    await sleep(1500);
+    await sleep(1200);
   }
 
   throw new Error(lastError?.message || "Dashboard did not become ready again");
+}
+
+async function runDashboardSelfRestart(name, restartFn) {
+  try {
+    const result = await withTimeout(
+      restartFn(name),
+      9000,
+      "Restart request timed out while dashboard was reconnecting"
+    );
+    if (!result?.success) {
+      throw new Error(result?.error || `Failed to restart ${name}`);
+    }
+  } catch (error) {
+    if (!isRestartResponseInterrupted(error)) {
+      throw error;
+    }
+  }
+
+  await waitForDashboardReadyAfterDeferredAction();
+  return {
+    success: true,
+    data: {
+      processName: name,
+      deferred: true,
+      reconnected: true,
+      message: "Dashboard restarted and became ready again."
+    },
+    error: null
+  };
 }
 
 
@@ -118,6 +198,48 @@ function taskErrorDescription(error, fallback = "Check the process logs for deta
       <span>{message}</span>
     </div>
   );
+}
+
+async function runVisibleActionProgress(work, messages, options = {}) {
+  const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Math.max(5000, Number(options.timeoutMs)) : 90000;
+  const loadingText = messages?.loading || "Working...";
+  let toastId = null;
+
+  try {
+    toastId = toast.info(loadingText, {
+      duration: timeoutMs + 5000,
+      showProgress: true,
+      description: options.loadingDescription || null
+    });
+  } catch (_error) {
+    toastId = null;
+  }
+
+  try {
+    const result = await withTimeout(
+      Promise.resolve().then(work),
+      timeoutMs,
+      messages?.timeout || "Operation timed out"
+    );
+    if (toastId !== null && toastId !== undefined) {
+      toast.dismiss(toastId);
+    }
+    const successText = typeof messages?.success === "function" ? messages.success(result) : messages?.success || "Completed";
+    toast.success(successText, {
+      description: typeof options.successDescription === "function" ? options.successDescription(result) : options.successDescription || null
+    });
+    return result;
+  } catch (error) {
+    if (toastId !== null && toastId !== undefined) {
+      toast.dismiss(toastId);
+    }
+    const errorText = typeof messages?.error === "function" ? messages.error(error) : messages?.error || getErrorMessage(error);
+    toast.error(errorText, {
+      description: typeof options.errorDescription === "function" ? options.errorDescription(error) : options.errorDescription || null,
+      action: options.errorAction
+    });
+    throw error;
+  }
 }
 
 const SENSITIVE_ENV_KEY_PATTERN = /(pass(word)?|secret|token|api[_-]?key|private|credential|auth|pwd)/i;
@@ -605,19 +727,46 @@ export default function Dashboard() {
         return true;
       }
 
-      const actionRequest = handlers[action](name).then(async (result) => {
-        if (!result.success) {
-          throw new Error(result.error || `Failed to ${action}`);
-        }
+      const actionRequest = action === "restart" && isDashboardSelfProcessName(name)
+        ? runDashboardSelfRestart(name, handlers.restart)
+        : handlers[action](name).then(async (result) => {
+            if (!result.success) {
+              throw new Error(result.error || `Failed to ${action}`);
+            }
 
-        if (result?.data?.deferred) {
-          await waitForDashboardReadyAfterDeferredAction();
-        }
+            if (result?.data?.deferred) {
+              await waitForDashboardReadyAfterDeferredAction();
+            }
 
-        return result;
-      });
+            return result;
+          });
 
-      if (action === "npmBuild" || action === "npmInstall") {
+      if (action === "restart" && isDashboardSelfProcessName(name)) {
+        await runVisibleActionProgress(
+          () => actionRequest,
+          {
+            loading: `Restart running for ${name}...`,
+            success: `Restart completed for ${name}`,
+            error: (error) => getErrorMessage(error, `Restart failed for ${name}`),
+            timeout: `Restart timed out for ${name}`
+          },
+          {
+            timeoutMs: 90000,
+            loadingDescription: (
+              <div className="task-toast-body">
+                <span>Waiting for the dashboard to reconnect.</span>
+              </div>
+            ),
+            successDescription: (result) => taskResultDescription(result),
+            errorDescription: (error) => taskErrorDescription(error, "Open logs for restart details."),
+            errorAction: {
+              label: "Open logs",
+              onClick: () => navigate(`/dashboard/logs?process=${encodeURIComponent(name)}`),
+              successLabel: "Opening"
+            }
+          }
+        );
+      } else if (action === "npmBuild" || action === "npmInstall") {
         await toast.promise(
           actionRequest,
           {
@@ -860,28 +1009,79 @@ export default function Dashboard() {
     }[action] || action;
 
     try {
-      const result = await toast.promise(
-        processApi.bulkAction(action, names).then(async (response) => {
-          if (!response || (!response.success && !response.data)) {
-            throw new Error(response?.error || `Failed to ${action} selected processes`);
+      const mayRestartDashboard = action === "restart" && names.some(isDashboardSelfProcessName);
+      const bulkRequest = async () => {
+        let response;
+        try {
+          response = mayRestartDashboard
+            ? await withTimeout(
+                processApi.bulkAction(action, names),
+                10000,
+                "Restart request timed out while dashboard was reconnecting"
+              )
+            : await processApi.bulkAction(action, names);
+        } catch (error) {
+          if (!mayRestartDashboard || !isRestartResponseInterrupted(error)) {
+            throw error;
           }
-
-          const mayRestartDashboard = action === "restart" && names.some((item) => (
-            String(item || "").toLowerCase().includes("pm2-dashboard") ||
-            String(item || "").toLowerCase().includes("pm2-manager")
-          ));
-          if (mayRestartDashboard) {
-            await waitForDashboardReadyAfterDeferredAction();
-          }
-
-          return response;
-        }),
-        {
-          loading: `${actionLabel} ${names.length} process${names.length === 1 ? "" : "es"}...`,
-          success: `${actionLabel} finished`,
-          error: (error) => getErrorMessage(error, `Failed to ${action} selected processes`)
+          await waitForDashboardReadyAfterDeferredAction();
+          return {
+            success: true,
+            data: {
+              action,
+              total: names.length,
+              successCount: names.length,
+              failedCount: 0,
+              results: names.map((item) => ({ name: item, success: true, error: null })),
+              reconnected: true
+            },
+            error: null
+          };
         }
-      );
+
+        if (!response || (!response.success && !response.data)) {
+          throw new Error(response?.error || `Failed to ${action} selected processes`);
+        }
+
+        if (mayRestartDashboard) {
+          await waitForDashboardReadyAfterDeferredAction();
+        }
+
+        return response;
+      };
+
+      const result = mayRestartDashboard
+        ? await runVisibleActionProgress(
+            bulkRequest,
+            {
+              loading: `${actionLabel} ${names.length} process${names.length === 1 ? "" : "es"}...`,
+              success: `${actionLabel} completed`,
+              error: (error) => getErrorMessage(error, `Failed to ${action} selected processes`),
+              timeout: `${actionLabel} timed out`
+            },
+            {
+              timeoutMs: 90000,
+              loadingDescription: (
+                <div className="task-toast-body">
+                  <span>Waiting for the dashboard to reconnect.</span>
+                </div>
+              ),
+              errorDescription: (error) => taskErrorDescription(error, "Open logs for restart details."),
+              errorAction: {
+                label: "Open logs",
+                onClick: () => navigate("/dashboard/logs?process=pm2-dashboard"),
+                successLabel: "Opening"
+              }
+            }
+          )
+        : await toast.promise(
+            bulkRequest(),
+            {
+              loading: `${actionLabel} ${names.length} process${names.length === 1 ? "" : "es"}...`,
+              success: `${actionLabel} finished`,
+              error: (error) => getErrorMessage(error, `Failed to ${action} selected processes`)
+            }
+          );
 
       const responseData = result?.data || {};
       const allResults = Array.isArray(responseData.results) ? responseData.results : [];

@@ -9,8 +9,6 @@ import Button from "../components/ui/Button";
 import Checkbox from "../components/ui/Checkbox";
 import InsetPanel from "../components/ui/InsetPanel";
 import { ConfirmDialog } from "../components/ui/Modal";
-import Select from "../components/ui/Select";
-import Input from "../components/ui/Input";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 import { Skeleton } from "../components/ui/Skeleton";
 import StatusText from "../components/ui/StatusText";
@@ -443,29 +441,27 @@ export default function Logs() {
         </Banner>
       )}
 
-      <section className="page-panel logs-control-panel">
-        <div className="logs-control-grid">
-          <Select value={selected} onChange={(e) => setSelected(e.target.value)} className="logs-compact-control logs-process-select" disabled={combinedView}>
+      <section className="page-panel logs-toolbar-card">
+        <div className="logs-toolbar-main">
+          <select value={selected} onChange={(e) => setSelected(e.target.value)} className="logs-control-field logs-process-select" disabled={combinedView}>
             <option value="">Select process</option>
             {processOptions.map((proc) => (
               <option key={proc.name} value={proc.name}>
                 {proc.name}
               </option>
             ))}
-          </Select>
+          </select>
 
-          <Select value={lineCount} onChange={(e) => setLineCount(Number(e.target.value))} className="logs-compact-control logs-count-select">
+          <select value={lineCount} onChange={(e) => setLineCount(Number(e.target.value))} className="logs-control-field logs-count-select">
             {[50, 100, 200, 500].map((value) => (
               <option key={value} value={value}>
                 {value} lines
               </option>
             ))}
-          </Select>
+          </select>
 
-          <Input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="Search logs" className="logs-compact-control logs-search-input" />
-        </div>
+          <input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="Search logs" className="logs-control-field logs-search-input" />
 
-        <div className="logs-action-row">
           <div className="logs-filter-group" role="group" aria-label="Log stream filter">
             {[
               ["both", "All"],
@@ -477,7 +473,9 @@ export default function Logs() {
               </Button>
             ))}
           </div>
+        </div>
 
+        <div className="logs-toolbar-actions">
           <label className="logs-combined-toggle">
             <Checkbox checked={combinedView} onChange={(e) => setCombinedView(e.target.checked)} />
             Combined
@@ -505,7 +503,7 @@ export default function Logs() {
 
       {combinedView && (
         <section className="page-panel logs-target-panel">
-          <PanelHeader title="Targets" className="mb-2" />
+          <div className="logs-target-header">Targets</div>
           <div className="logs-target-grid">
             {processOptions.map((proc) => (
               <label key={proc.name} className="logs-target-chip">
