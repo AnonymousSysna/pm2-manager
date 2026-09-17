@@ -303,26 +303,69 @@ function setClientAssetHeaders(res, filePath) {
   res.setHeader("Cache-Control", "no-cache");
 }
 
+function latestBuiltAssetByExtension(extension) {
+  const assetsDir = path.join(clientDistPath, "assets");
+  try {
+    const files = fs.readdirSync(assetsDir)
+      .filter((fileName) => fileName.toLowerCase().endsWith(extension))
+      .map((fileName) => {
+        const filePath = path.join(assetsDir, fileName);
+        const stat = fs.statSync(filePath);
+        return { fileName, filePath, mtimeMs: stat.mtimeMs };
+      })
+      .sort((a, b) => b.mtimeMs - a.mtimeMs);
+    return files[0] || null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function buildFreshAppShellReloadScript() {
+  return [
+    "(() => {",
+    "  const key = 'pm2-dashboard:stale-asset-refresh-at';",
+    "  const now = Date.now();",
+    "  const last = Number(sessionStorage.getItem(key) || '0');",
+    "  if (now - last < 3000) {",
+    "    console.error('PM2 dashboard assets are stale. Please hard-refresh the page once.');",
+    "    return;",
+    "  }",
+    "  sessionStorage.setItem(key, String(now));",
+    "  const url = new URL(window.location.href);",
+    "  url.searchParams.set('__pm2_asset_refresh', String(now));",
+    "  window.location.replace(url.toString());",
+    "})();",
+    ""
+  ].join("\n");
+}
+
 function sendMissingAssetFallback(req, res) {
-  const assetPath = String(req.path || "");
+  const assetPath = String(req.originalUrl || req.path || "").split("?")[0];
   const ext = path.extname(assetPath).toLowerCase();
 
   res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
+  res.set("Clear-Site-Data", '"cache"');
   res.set("X-PM2-Dashboard-Asset", "missing");
 
   if (ext === ".js" || ext === ".mjs") {
-    res
-      .status(404)
-      .type("application/javascript")
-      .send("console.warn('PM2 dashboard asset is stale; reloading the app shell.'); window.location.reload();");
+    // Return 200 so browsers execute the recovery script. Script tags do not run 404 bodies.
+    res.status(200).type("application/javascript").send(buildFreshAppShellReloadScript());
     return;
   }
 
   if (ext === ".css") {
-    res
-      .status(404)
-      .type("text/css")
-      .send("/* PM2 dashboard asset is stale. Refresh the page to load the latest build. */");
+    const latestCss = latestBuiltAssetByExtension(".css");
+    if (latestCss) {
+      setClientAssetHeaders(res, latestCss.filePath);
+      res.set("X-PM2-Dashboard-Asset", "css-fallback");
+      res.sendFile(latestCss.filePath);
+      return;
+    }
+
+    // Return empty CSS instead of JSON so strict MIME checking never breaks the app shell.
+    res.status(200).type("text/css").send("/* stale PM2 dashboard CSS asset; app shell will refresh from JS fallback */\n");
     return;
   }
 
