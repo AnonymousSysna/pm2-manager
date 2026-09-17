@@ -998,7 +998,7 @@
   }
 
   .pm2-tools-control-panel {
-    @apply page-panel space-y-2 p-3;
+    @apply space-y-2;
   }
 
   .pm2-tools-topbar {
@@ -1027,12 +1027,6 @@
     align-items: start;
   }
 
-  @media (min-width: 1280px) {
-    .pm2-workspace-grid {
-      grid-template-columns: minmax(0, 1.35fr) minmax(330px, 0.75fr);
-    }
-  }
-
   .pm2-feature-list {
     @apply grid min-w-0 gap-2;
   }
@@ -1043,7 +1037,7 @@
 
   @media (min-width: 1024px) {
     .pm2-feature-card {
-      grid-template-columns: minmax(0, 1.1fr) minmax(260px, 0.88fr) auto;
+      grid-template-columns: minmax(0, 1.08fr) minmax(220px, 0.72fr) auto;
       align-items: center;
     }
   }
@@ -1066,6 +1060,22 @@
 
   .pm2-feature-fields {
     @apply grid min-w-0 gap-1.5 sm:grid-cols-2;
+  }
+
+  .pm2-feature-config-summary {
+    @apply flex min-h-9 min-w-0 items-center rounded-lg border border-border/60 bg-surface-2/50 px-2 text-left text-xs font-medium text-text-3 transition hover:border-brand-500/40 hover:bg-surface-3/60 hover:text-text-2 disabled:cursor-default disabled:hover:border-border/60 disabled:hover:bg-surface-2/50 disabled:hover:text-text-3;
+  }
+
+  .pm2-feature-config-summary span {
+    @apply truncate;
+  }
+
+  .pm2-feature-actions {
+    @apply flex min-w-max shrink-0 items-center justify-end gap-1.5;
+  }
+
+  .pm2-feature-options-button {
+    @apply shrink-0;
   }
 
   .pm2-feature-fields .space-y-1\.5 {
@@ -1094,7 +1104,23 @@
   }
 
   .result-panel {
-    @apply page-panel p-3 xl:sticky xl:top-header xl:self-start;
+    @apply page-panel p-3;
+  }
+
+  .pm2-result-bottom {
+    @apply min-w-0;
+  }
+
+  .pm2-options-modal-card {
+    @apply space-y-3;
+  }
+
+  .pm2-options-modal-topline {
+    @apply flex min-w-0 flex-wrap items-center gap-2;
+  }
+
+  .pm2-options-modal-fields {
+    @apply grid gap-2 sm:grid-cols-2;
   }
 
   .result-empty-state {

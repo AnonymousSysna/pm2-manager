@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Copy, Play, TerminalSquare } from "lucide-react";
+import { AlertTriangle, Copy, Play, Settings2, TerminalSquare } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { pm2Admin, processes as processApi } from "../api";
 import toast, { getErrorMessage } from "../lib/toast";
@@ -8,7 +8,7 @@ import Button from "../components/ui/Button";
 import Field from "../components/ui/Field";
 import Input from "../components/ui/Input";
 import InsetPanel from "../components/ui/InsetPanel";
-import { ConfirmDialog } from "../components/ui/Modal";
+import Modal, { ConfirmDialog } from "../components/ui/Modal";
 import { PanelHeader } from "../components/ui/PageLayout";
 import Select from "../components/ui/Select";
 import { Skeleton } from "../components/ui/Skeleton";
@@ -52,6 +52,26 @@ function stringifyOutput(result) {
   return String(data.output || "").trim() || "No output returned.";
 }
 
+function summarizeFeatureForm(feature, form) {
+  const fields = feature.fields || [];
+  if (!fields.length) {
+    return "Ready";
+  }
+
+  const filled = fields
+    .map((field) => {
+      const rawValue = form[field.name];
+      const value = rawValue === undefined || rawValue === null || rawValue === ""
+        ? field.defaultValue || "not set"
+        : rawValue;
+      return `${field.label}: ${String(value)}`;
+    })
+    .slice(0, 2);
+
+  const remaining = fields.length - filled.length;
+  return `${filled.join(" · ")}${remaining > 0 ? ` · +${remaining}` : ""}`;
+}
+
 export default function PM2Features() {
   const [searchParams] = useSearchParams();
   const preferredProcess = searchParams.get("process") || "";
@@ -63,6 +83,7 @@ export default function PM2Features() {
   const [runningId, setRunningId] = useState("");
   const [lastResult, setLastResult] = useState(null);
   const [pendingFeature, setPendingFeature] = useState(null);
+  const [optionsFeature, setOptionsFeature] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -148,7 +169,7 @@ export default function PM2Features() {
 
   return (
     <div className="compact-page-stack">
-      <section className="pm2-tools-control-panel">
+      <section className="ai-setup-card pm2-tools-control-panel">
         <div className="pm2-tools-topbar">
           <div className="min-w-0">
             <h1 className="page-heading">PM2 Tools</h1>
@@ -192,9 +213,8 @@ export default function PM2Features() {
               key={feature.id}
               feature={feature}
               form={{ ...makeDefaultForm(feature, preferredProcess), ...(forms[feature.id] || {}) }}
-              processes={processes}
               running={runningId === feature.id}
-              onChange={(name, value) => updateField(feature, name, value)}
+              onConfigure={() => setOptionsFeature(feature)}
               onRun={() => executeFeature(feature)}
             />
           ))}
@@ -203,42 +223,89 @@ export default function PM2Features() {
           )}
         </div>
 
-        <aside className="pm2-result-stack">
-          <section className="result-panel space-y-2">
-            <PanelHeader
-              title="Result"
-              actions={lastResult ? (
-                <Button type="button" size="sm" variant="secondary" onClick={copyOutput}>
-                  <Copy size={14} />
-                  Copy
-                </Button>
-              ) : null}
-            />
-            {lastResult ? (
-              <>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge tone={lastResult.success ? "success" : "danger"}>{lastResult.success ? "Success" : "Failed"}</Badge>
-                  {lastResult.data?.risk ? <Badge tone={riskTone[lastResult.data.risk] || "neutral"}>{lastResult.data.risk}</Badge> : null}
-                  {lastResult.data?.code !== undefined ? <Badge tone="neutral">code {lastResult.data.code}</Badge> : null}
-                </div>
-                <p className="break-all rounded-lg border border-border bg-surface-2/60 p-2 text-xs text-text-3">
-                  {lastResult.data?.command || lastResult.error || "No command recorded"}
-                </p>
-                <Textarea
-                  readOnly
-                  value={stringifyOutput(lastResult)}
-                  className="min-h-[260px] resize-y font-mono text-xs"
-                />
-              </>
-            ) : (
-              <InsetPanel padding="sm" className="result-empty-state">
-                Select an action and run it.
-              </InsetPanel>
-            )}
-          </section>
-
-        </aside>
+        <section className="result-panel pm2-result-bottom space-y-2">
+          <PanelHeader
+            title="Result"
+            actions={lastResult ? (
+              <Button type="button" size="sm" variant="secondary" onClick={copyOutput}>
+                <Copy size={14} />
+                Copy
+              </Button>
+            ) : null}
+          />
+          {lastResult ? (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tone={lastResult.success ? "success" : "danger"}>{lastResult.success ? "Success" : "Failed"}</Badge>
+                {lastResult.data?.risk ? <Badge tone={riskTone[lastResult.data.risk] || "neutral"}>{lastResult.data.risk}</Badge> : null}
+                {lastResult.data?.code !== undefined ? <Badge tone="neutral">code {lastResult.data.code}</Badge> : null}
+              </div>
+              <p className="break-all rounded-lg border border-border bg-surface-2/60 p-2 text-xs text-text-3">
+                {lastResult.data?.command || lastResult.error || "No command recorded"}
+              </p>
+              <Textarea
+                readOnly
+                value={stringifyOutput(lastResult)}
+                className="min-h-[210px] resize-y font-mono text-xs"
+              />
+            </>
+          ) : (
+            <InsetPanel padding="sm" className="result-empty-state">
+              Run an action to see output here.
+            </InsetPanel>
+          )}
+        </section>
       </section>
+
+      {optionsFeature && (
+        <Modal
+          title={`${optionsFeature.label} options`}
+          description={optionsFeature.commandPreview}
+          size="lg"
+          onClose={() => setOptionsFeature(null)}
+          actions={(
+            <>
+              <Button type="button" variant="secondary" onClick={() => setOptionsFeature(null)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant={optionsFeature.risk === "critical" ? "danger" : "primary"}
+                disabled={runningId === optionsFeature.id}
+                onClick={() => {
+                  const feature = optionsFeature;
+                  setOptionsFeature(null);
+                  executeFeature(feature);
+                }}
+              >
+                {runningId === optionsFeature.id ? "Running..." : "Run action"}
+              </Button>
+            </>
+          )}
+        >
+          <div className="ai-setup-card pm2-options-modal-card">
+            <div className="pm2-options-modal-topline">
+              <Badge tone={riskTone[optionsFeature.risk] || "neutral"}>{optionsFeature.risk}</Badge>
+              <span className="command-chip">{optionsFeature.commandPreview}</span>
+            </div>
+            {(optionsFeature.fields || []).length ? (
+              <div className="pm2-options-modal-fields">
+                {optionsFeature.fields.map((field) => (
+                  <FeatureField
+                    key={field.name}
+                    field={field}
+                    value={{ ...makeDefaultForm(optionsFeature, preferredProcess), ...(forms[optionsFeature.id] || {}) }[field.name] || ""}
+                    processes={processes}
+                    onChange={(value) => updateField(optionsFeature, field.name, value)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <InsetPanel padding="sm" className="result-empty-state">No options needed.</InsetPanel>
+            )}
+          </div>
+        </Modal>
+      )}
 
       {pendingFeature && (
         <ConfirmDialog
@@ -258,7 +325,7 @@ export default function PM2Features() {
   );
 }
 
-function FeatureCard({ feature, form, processes, running, onChange, onRun }) {
+function FeatureCard({ feature, form, running, onConfigure, onRun }) {
   const hasFields = (feature.fields || []).length > 0;
 
   return (
@@ -274,36 +341,38 @@ function FeatureCard({ feature, form, processes, running, onChange, onRun }) {
         ) : null}
       </div>
 
-      {hasFields ? (
-        <div className="pm2-feature-fields">
-          {feature.fields.map((field) => (
-            <FeatureField
-              key={field.name}
-              field={field}
-              value={form[field.name] || ""}
-              processes={processes}
-              onChange={(value) => onChange(field.name, value)}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="pm2-feature-no-fields">No input</div>
-      )}
-
-      <Button
+      <button
         type="button"
-        size="sm"
-        variant={feature.risk === "critical" ? "danger" : "secondary"}
-        disabled={running}
-        onClick={onRun}
-        className="pm2-feature-run"
+        className="pm2-feature-config-summary"
+        onClick={hasFields ? onConfigure : undefined}
+        disabled={!hasFields}
       >
-        {feature.risk === "critical" ? <AlertTriangle size={14} /> : <Play size={14} />}
-        {running ? "Running..." : "Run"}
-      </Button>
+        <span>{summarizeFeatureForm(feature, form)}</span>
+      </button>
+
+      <div className="pm2-feature-actions">
+        {hasFields ? (
+          <Button type="button" size="sm" variant="ghost" onClick={onConfigure} className="pm2-feature-options-button">
+            <Settings2 size={14} />
+            Options
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          size="sm"
+          variant={feature.risk === "critical" ? "danger" : "secondary"}
+          disabled={running}
+          onClick={onRun}
+          className="pm2-feature-run"
+        >
+          {feature.risk === "critical" ? <AlertTriangle size={14} /> : <Play size={14} />}
+          {running ? "Running..." : "Run"}
+        </Button>
+      </div>
     </article>
   );
 }
+
 
 function FeatureField({ field, value, processes, onChange }) {
   if (field.type === "select") {
