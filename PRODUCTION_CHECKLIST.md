@@ -1,0 +1,46 @@
+# Production Checklist
+
+Use this before exposing PM2 Manager outside localhost.
+
+## Required
+
+- Replace every placeholder in `.env`.
+- Use `PM2_PASS_HASH`, not `PM2_PASS`, in production.
+- Use a `JWT_SECRET` with at least 32 random characters.
+- Use a `METRICS_TOKEN` with at least 32 random characters.
+- Run `npm run build` before starting PM2 in production.
+- Run `npm run preflight` and fix every failed item.
+- Confirm `/ready` returns HTTP 200 after PM2 starts the dashboard.
+
+## Recommended
+
+- Put the dashboard behind HTTPS.
+- Set `TRUST_PROXY=1` when running behind Caddy, Nginx, Cloudflare, or another reverse proxy.
+- Set `COOKIE_SECURE=1` when HTTPS is always used.
+- Set `CORS_ALLOWED_ORIGINS` to the exact browser origin if the API and frontend use different origins.
+- Restrict `AUTH_ALLOWED_IPS` when possible.
+- Configure at least one alert channel before relying on the dashboard for production monitoring.
+- Run `npm run verify` before deploying changes when dependencies are installed.
+
+## Operational safety
+
+- Use the dashboard triage order: attention first, then logs, then action.
+- Prefer restart/reload before stop/kill.
+- Use delete only after exporting process config or confirming the process can be recreated.
+
+## PM2 Feature Workspace
+
+- Review who can log in before enabling public access; PM2 Features exposes high-impact operational commands.
+- Keep `PROJECTS_ROOT` tight so ecosystem and deploy commands cannot point at unexpected paths.
+- Treat module install/uninstall as code execution. Use it only for trusted PM2 modules such as `pm2-logrotate`.
+- Use `pm2 save` after intentional process changes that should survive reboot.
+- Prefer the Overview page for daily operations; use PM2 Features for advanced recovery/configuration work.
+
+## AI Operator
+
+- [ ] Keep provider URLs on HTTPS in production.
+- [ ] Leave `AI_ALLOW_HTTP=0` unless using a trusted local AI gateway.
+- [ ] Use provider API keys with spending limits or short-lived access where possible.
+- [ ] Do not use browser key memory on shared machines.
+- [ ] Test Plan-only mode before enabling auto-run checks or safe writes.
+- [ ] Confirm that critical PM2 actions still require manual confirmation.

@@ -6,6 +6,8 @@ const {
   sanitizeDomain,
   sanitizeUpstream,
   buildCaddyInstallCommands,
+  getPublicUrl,
+  getPublicOrigins,
   mergeOrigins,
   upsertEnvContent,
   buildAdminNextSteps
@@ -64,6 +66,20 @@ runTest("buildCaddyInstallCommands prefers the detected package manager", () => 
       "choco install caddy -y"
     ]
   );
+});
+
+
+runTest("getPublicUrl prefers HTTPS when a domain is configured", () => {
+  assert.equal(getPublicUrl({ domain: "pm2.example.com", port: 8000 }), "https://pm2.example.com");
+  assert.equal(getPublicUrl({ domain: "", port: 9000 }), "http://localhost:9000");
+});
+
+runTest("getPublicOrigins includes local and domain origins", () => {
+  assert.deepEqual(getPublicOrigins({ domain: "pm2.example.com", port: 8000 }), [
+    "http://localhost:8000",
+    "http://pm2.example.com",
+    "https://pm2.example.com"
+  ]);
 });
 
 runTest("mergeOrigins deduplicates existing and generated origins", () => {

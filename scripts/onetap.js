@@ -98,6 +98,22 @@ function normalizePort(rawValue, fallback = DEFAULT_PORT) {
   return port;
 }
 
+function getPublicUrl(options) {
+  if (options?.domain) {
+    return `https://${options.domain}`;
+  }
+  return `http://localhost:${normalizePort(options?.port, DEFAULT_PORT)}`;
+}
+
+function getPublicOrigins(options) {
+  const origins = [`http://localhost:${normalizePort(options?.port, DEFAULT_PORT)}`];
+  if (options?.domain) {
+    origins.push(`http://${options.domain}`);
+    origins.push(`https://${options.domain}`);
+  }
+  return origins;
+}
+
 function sanitizeDomain(value) {
   const domain = String(value || "").trim().toLowerCase();
   if (!domain) {
@@ -480,16 +496,19 @@ function buildOptions({ argv, env, appDir }) {
   const flags = parsed.flags;
   const defaultInstallDir = parsed.positionals[0] || env.PM2_MANAGER_DIR || path.join(os.homedir(), "pm2-manager");
   const port = normalizePort(flags.port ?? env.PM2_MANAGER_PORT ?? env.PORT, DEFAULT_PORT);
+  const domain = sanitizeDomain(flags.domain ?? env.PM2_MANAGER_DOMAIN ?? "");
+  const setupSsl = parseBoolean(flags["setup-ssl"] ?? env.PM2_MANAGER_SETUP_SSL);
+  const installCaddy = parseBoolean(flags["install-caddy"] ?? env.PM2_MANAGER_INSTALL_CADDY);
 
   const options = {
     appDir,
     targetDir: path.resolve(String(flags["target-dir"] || env.PM2_MANAGER_DIR || defaultInstallDir)),
     repoUrl: String(flags["repo-url"] || env.REPO_URL || DEFAULT_REPO_URL),
     port,
-    domain: sanitizeDomain(flags.domain ?? env.PM2_MANAGER_DOMAIN ?? ""),
+    domain,
     upstream: String(flags.upstream || env.PM2_MANAGER_UPSTREAM || `127.0.0.1:${port}`),
-    setupSsl: parseBoolean(flags["setup-ssl"] ?? env.PM2_MANAGER_SETUP_SSL),
-    installCaddy: parseBoolean(flags["install-caddy"] ?? env.PM2_MANAGER_INSTALL_CADDY),
+    setupSsl: setupSsl === undefined && domain ? true : setupSsl,
+    installCaddy: installCaddy === undefined && domain ? true : installCaddy,
     nonInteractive: isTruthyFlag(flags["non-interactive"]) || parseBoolean(env.CI) === true,
     caddyfilePath: String(env.CADDYFILE_PATH || "").trim()
   };
@@ -498,17 +517,23 @@ function buildOptions({ argv, env, appDir }) {
     options.upstream = sanitizeUpstream(options.upstream);
   }
 
+  options.publicUrl = getPublicUrl(options);
   return options;
 }
 
 async function maybePromptForSsl(options, privilegeContext) {
   if (options.nonInteractive || !isInteractive()) {
+    options.publicUrl = getPublicUrl(options);
     return options;
   }
 
-  if (options.setupSsl === undefined && privilegeContext.privileged) {
-    const answer = await prompt("Configure optional Caddy reverse proxy + SSL now? [y/N] ", "n");
-    options.setupSsl = parseBoolean(answer) === true;
+  if (options.setupSsl === undefined && !options.domain) {
+    const domain = await prompt(
+      "Public HTTPS domain for pm2-manager? Example pm2.example.com. Leave blank for local HTTP only: ",
+      ""
+    );
+    options.domain = sanitizeDomain(domain);
+    options.setupSsl = Boolean(options.domain);
   }
 
   if (options.setupSsl === true && !options.domain) {
@@ -520,10 +545,14 @@ async function maybePromptForSsl(options, privilegeContext) {
   }
 
   if (options.setupSsl === true && options.installCaddy === undefined) {
-    const answer = await prompt("Install Caddy automatically if it is missing? [Y/n] ", "y");
-    options.installCaddy = parseBoolean(answer) !== false;
+    options.installCaddy = true;
   }
 
+  if (options.setupSsl === true && !privilegeContext.privileged) {
+    console.log("SSL was requested. The installer will finish the app install and print the elevated command needed for Caddy/HTTPS.");
+  }
+
+  options.publicUrl = getPublicUrl(options);
   return options;
 }
 
@@ -592,6 +621,10 @@ function prepareEnvFile(appDir, options) {
   }
 
   updates.PORT = String(options.port);
+  updates.APP_PUBLIC_URL = getPublicUrl(options);
+  if (options.domain) {
+    updates.PM2_MANAGER_DOMAIN = options.domain;
+  }
 
   const currentProjectsRoot = getEnvValue(currentValues, "PROJECTS_ROOT");
   if (needsGeneratedValue(currentProjectsRoot) || currentProjectsRoot === "/user/pm2-manager/apps/") {
@@ -599,9 +632,7 @@ function prepareEnvFile(appDir, options) {
   }
 
   const currentOrigins = getEnvValue(currentValues, "CORS_ALLOWED_ORIGINS");
-  updates.CORS_ALLOWED_ORIGINS = mergeOrigins(currentOrigins || `http://localhost:${options.port}`, [
-    `http://localhost:${options.port}`
-  ]);
+  updates.CORS_ALLOWED_ORIGINS = mergeOrigins(currentOrigins || `http://localhost:${options.port}`, getPublicOrigins(options));
 
   const nextContent = upsertEnvContent(content, updates, removals);
   fs.writeFileSync(envPath, nextContent, "utf8");
@@ -619,11 +650,10 @@ function applyProxyEnvOverrides(appDir, options) {
   const currentValues = parseEnvContent(currentContent);
   const nextContent = upsertEnvContent(currentContent, {
     TRUST_PROXY: "1",
-    CORS_ALLOWED_ORIGINS: mergeOrigins(currentValues.CORS_ALLOWED_ORIGINS, [
-      `http://localhost:${options.port}`,
-      `http://${options.domain}`,
-      `https://${options.domain}`
-    ])
+    COOKIE_SECURE: "1",
+    APP_PUBLIC_URL: getPublicUrl(options),
+    PM2_MANAGER_DOMAIN: options.domain,
+    CORS_ALLOWED_ORIGINS: mergeOrigins(currentValues.CORS_ALLOWED_ORIGINS, getPublicOrigins(options))
   });
 
   if (nextContent === currentContent) {
@@ -748,6 +778,15 @@ async function maybeConfigureSsl(appDir, options, installContext) {
 
   result.attempted = true;
 
+  const dnsProbe = await validateDomainReadiness(options.domain);
+  result.probe = dnsProbe;
+  if (!dnsProbe.dnsResolved) {
+    result.warnings.push(`DNS is not ready for ${options.domain}: ${dnsProbe.dnsError || "lookup failed"}`);
+    result.nextSteps.push(`Point ${options.domain} to this server first, then re-run the installer with --domain ${options.domain}.`);
+    result.nextSteps.push("The dashboard still works through the local/internal HTTP URL until the domain is ready.");
+    return result;
+  }
+
   if (!installContext.privilegeContext.privileged) {
     result.warnings.push("Current user does not have the privileges required for system-level SSL setup.");
     result.nextSteps.push(
@@ -841,6 +880,7 @@ function printSummary({
   console.log(`- Privileges: ${installContext.privilegeContext.mode}`);
   console.log(`- PM2 app: ${APP_PROCESS_NAME} (${pm2Action})`);
   console.log(`- Local HTTP: http://localhost:${options.port}`);
+  console.log(`- Public URL: ${getPublicUrl(options)}`);
 
   if (options.domain && (sslResult.proxyConfigured || options.setupSsl === true)) {
     const scheme = sslResult.enabled ? "https" : "http";
@@ -948,6 +988,8 @@ module.exports = {
   sanitizeDomain,
   sanitizeUpstream,
   buildCaddyInstallCommands,
+  getPublicUrl,
+  getPublicOrigins,
   mergeOrigins,
   upsertEnvContent,
   buildAdminNextSteps

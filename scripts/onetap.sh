@@ -66,4 +66,13 @@ else
   cd "$APP_DIR"
 fi
 
-exec node "$APP_DIR/scripts/onetap.js" --app-dir "$APP_DIR" "${FORWARD_ARGS[@]}"
+# When launched as `curl ... | bash`, stdin belongs to the downloaded script,
+# not the user's terminal. Reopen /dev/tty so the Node installer can safely ask
+# for the public HTTPS domain during interactive installs.
+if [ -t 0 ]; then
+  exec node "$APP_DIR/scripts/onetap.js" --app-dir "$APP_DIR" "${FORWARD_ARGS[@]}"
+elif [ -r /dev/tty ]; then
+  exec node "$APP_DIR/scripts/onetap.js" --app-dir "$APP_DIR" "${FORWARD_ARGS[@]}" < /dev/tty
+else
+  exec node "$APP_DIR/scripts/onetap.js" --app-dir "$APP_DIR" "${FORWARD_ARGS[@]}"
+fi
