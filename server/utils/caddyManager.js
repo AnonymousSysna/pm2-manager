@@ -166,6 +166,59 @@ function sanitizeDomain(value) {
   return domain;
 }
 
+function normalizeSiteAddress(value) {
+  const raw = String(value || "").trim().toLowerCase().replace(/\/+$/, "");
+  if (!raw) {
+    throw new Error("Site address is required");
+  }
+  if (/\s/.test(raw)) {
+    throw new Error("Site address cannot contain spaces");
+  }
+
+  const parseTarget = raw.includes("://") ? raw : `https://${raw}`;
+  let parsed;
+  try {
+    parsed = new URL(parseTarget);
+  } catch (_error) {
+    throw new Error("Invalid site address format");
+  }
+
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    throw new Error("Site address must use http or https");
+  }
+  if (parsed.pathname !== "/" || parsed.search || parsed.hash) {
+    throw new Error("Site address must not include a path, query, or hash");
+  }
+
+  const hostname = parsed.hostname;
+  const port = parsed.port ? Number(parsed.port) : null;
+  if (!isDomainLike(hostname)) {
+    throw new Error("Invalid site address hostname");
+  }
+  if (port !== null && (!Number.isInteger(port) || port < 1 || port > 65535)) {
+    throw new Error("Invalid site address port");
+  }
+
+  const normalizedHost = parsed.port ? `${hostname}:${parsed.port}` : hostname;
+  return raw.includes("://") ? `${parsed.protocol}//${normalizedHost}` : normalizedHost;
+}
+
+function getSiteHost(siteAddress) {
+  const normalized = normalizeSiteAddress(siteAddress);
+  const parseTarget = normalized.includes("://") ? normalized : `https://${normalized}`;
+  return new URL(parseTarget).hostname;
+}
+
+function getSitePort(siteAddress) {
+  const normalized = normalizeSiteAddress(siteAddress);
+  const parseTarget = normalized.includes("://") ? normalized : `https://${normalized}`;
+  const parsed = new URL(parseTarget);
+  if (parsed.port) {
+    return Number(parsed.port);
+  }
+  return parsed.protocol === "http:" ? 80 : 443;
+}
+
 function sanitizeUpstream(value) {
   const upstream = String(value || "").trim();
   if (!upstream) {
@@ -190,9 +243,14 @@ function extractSiteAddresses(header) {
     .split(/[,\s]+/)
     .map((token) => token.trim())
     .filter(Boolean)
-    .map((token) => token.replace(/^https?:\/\//i, ""))
-    .map((token) => token.replace(/:\d+$/, ""))
-    .filter((token) => isDomainLike(token));
+    .map((token) => {
+      try {
+        return normalizeSiteAddress(token);
+      } catch (_error) {
+        return "";
+      }
+    })
+    .filter(Boolean);
 }
 
 function parseTopLevelSiteBlocks(content) {
@@ -267,10 +325,11 @@ async function readCaddyfileSites(caddyfilePath) {
   return sites;
 }
 
-function removeDomainBlocksFromContent(content, domain) {
+function removeDomainBlocksFromContent(content, siteAddress) {
+  const normalizedSiteAddress = normalizeSiteAddress(siteAddress);
   const parsed = parseTopLevelSiteBlocks(content);
   const ranges = parsed.blocks
-    .filter((block) => block.addresses.includes(domain))
+    .filter((block) => block.addresses.includes(normalizedSiteAddress))
     .map((block) => [block.start, block.end]);
 
   if (!ranges.length) {
@@ -331,12 +390,12 @@ function updateCaddyfileManagedSectionContent(existing, sites) {
   return next;
 }
 
-async function applyReverseProxyConfigChange({ caddyfilePath, domain, sites, status }) {
+async function applyReverseProxyConfigChange({ caddyfilePath, siteAddress, sites, status }) {
   const previousManagedSites = await readOptionalFile(MANAGED_SITES_PATH);
   const previousCaddyfile = await readOptionalFile(caddyfilePath);
   const nextManagedSitesContent = JSON.stringify(sites, null, 2);
   const nextCaddyfileContent = updateCaddyfileManagedSectionContent(
-    removeDomainBlocksFromContent(previousCaddyfile.content, domain),
+    removeDomainBlocksFromContent(previousCaddyfile.content, siteAddress),
     sites
   );
 
@@ -453,8 +512,24 @@ function getStatusPayload(caddyStatus, installInfo, sites, caddyfileSites) {
     ...(sites || {})
   };
   const managedSites = Object.entries(mergedSites)
-    .map(([domain, upstream]) => ({ domain, upstream }))
-    .sort((a, b) => a.domain.localeCompare(b.domain));
+    .map(([siteAddress, upstream]) => {
+      let host = siteAddress;
+      let publicUrl = siteAddress;
+      try {
+        host = getSiteHost(siteAddress);
+        publicUrl = siteAddress.includes("://") ? siteAddress : `https://${siteAddress}`;
+      } catch (_error) {
+        // Keep the raw address visible if an older stored value cannot be parsed.
+      }
+      return {
+        domain: siteAddress,
+        siteAddress,
+        host,
+        publicUrl,
+        upstream
+      };
+    })
+    .sort((a, b) => a.siteAddress.localeCompare(b.siteAddress));
 
   return {
     platform: installInfo.platform,
@@ -472,12 +547,22 @@ function isWildcardDomain(domain) {
   return String(domain || "").trim().startsWith("*.");
 }
 
-async function checkHttpsStatus(domain) {
-  const trimmed = String(domain || "").trim().toLowerCase();
+async function checkHttpsStatus(siteAddress) {
+  const trimmed = String(siteAddress || "").trim().toLowerCase();
   if (!trimmed) {
-    return { state: "unknown", message: "Empty domain" };
+    return { state: "unknown", message: "Empty site address" };
   }
-  if (isWildcardDomain(trimmed)) {
+
+  let host;
+  let port;
+  try {
+    host = getSiteHost(trimmed);
+    port = getSitePort(trimmed);
+  } catch (error) {
+    return { state: "unknown", message: error?.message || "Invalid site address" };
+  }
+
+  if (isWildcardDomain(host)) {
     return { state: "unknown", message: "Wildcard domain cannot be probed directly" };
   }
 
@@ -498,9 +583,9 @@ async function checkHttpsStatus(domain) {
 
     const socket = tls.connect(
       {
-        host: trimmed,
-        port: 443,
-        servername: trimmed,
+        host,
+        port,
+        servername: host,
         rejectUnauthorized: false,
         timeout: 5000
       },
@@ -533,7 +618,7 @@ async function checkHttpsStatus(domain) {
     );
 
     socket.on("timeout", () => {
-      finish(socket, { state: "inactive", message: "TLS probe timed out on port 443" });
+      finish(socket, { state: "inactive", message: `TLS probe timed out on port ${port}` });
     });
     socket.on("error", (error) => {
       finish(socket, { state: "inactive", message: error?.message || "TLS probe failed" });
@@ -655,17 +740,20 @@ async function installCaddy() {
 
 async function addReverseProxy(payload = {}) {
   try {
-    const domain = sanitizeDomain(payload.domain);
+    const siteAddress = normalizeSiteAddress(payload.siteAddress || payload.domain);
+    const domain = payload.domain && !String(payload.domain).includes(":")
+      ? sanitizeDomain(payload.domain)
+      : getSiteHost(siteAddress);
     const upstream = sanitizeUpstream(payload.upstream);
 
     const status = await detectCaddy();
 
     const caddyfilePath = getCaddyfilePath();
     const sites = await readManagedSites();
-    sites[domain] = upstream;
+    sites[siteAddress] = upstream;
     const { success: operationSuccess, validation, reload } = await applyReverseProxyConfigChange({
       caddyfilePath,
-      domain,
+      siteAddress,
       sites,
       status
     });
@@ -682,6 +770,8 @@ async function addReverseProxy(payload = {}) {
       success: operationSuccess,
       data: {
         domain,
+        siteAddress,
+        host: getSiteHost(siteAddress),
         upstream,
         caddyfilePath,
         validation,
@@ -701,16 +791,16 @@ async function addReverseProxy(payload = {}) {
 
 async function deleteReverseProxy(payload = {}) {
   try {
-    const domain = sanitizeDomain(payload.domain);
+    const siteAddress = normalizeSiteAddress(payload.siteAddress || payload.domain);
 
     const status = await detectCaddy();
 
     const caddyfilePath = getCaddyfilePath();
     const sites = await readManagedSites();
-    delete sites[domain];
+    delete sites[siteAddress];
     const { success: operationSuccess, validation, reload } = await applyReverseProxyConfigChange({
       caddyfilePath,
-      domain,
+      siteAddress,
       sites,
       status
     });
@@ -726,7 +816,8 @@ async function deleteReverseProxy(payload = {}) {
     return {
       success: operationSuccess,
       data: {
-        domain,
+        domain: siteAddress,
+        siteAddress,
         caddyfilePath,
         validation,
         reload,
@@ -820,6 +911,10 @@ module.exports = {
   addReverseProxy,
   deleteReverseProxy,
   restartCaddyService,
+  sanitizeDomain,
+  normalizeSiteAddress,
+  getSiteHost,
+  getSitePort,
   __test: {
     buildManagedSection,
     removeDomainBlocksFromContent,

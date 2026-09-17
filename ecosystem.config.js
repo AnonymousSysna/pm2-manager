@@ -14,8 +14,7 @@ module.exports = {
       instances: 1,
       exec_mode: "fork",
       env: {
-        NODE_ENV: "production",
-        PORT: process.env.PORT || 8000
+        NODE_ENV: "production"
       },
       watch: false,
       autorestart: true,

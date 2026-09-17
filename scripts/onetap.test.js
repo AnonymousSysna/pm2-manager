@@ -12,7 +12,9 @@ const {
   upsertEnvContent,
   needsGeneratedValue,
   needsStrongSecretGeneratedValue,
-  buildAdminNextSteps
+  buildAdminNextSteps,
+  finalizeNetworkOptions,
+  getCaddySiteAddress
 } = require("./onetap");
 
 function runTest(name, fn) {
@@ -72,15 +74,15 @@ runTest("buildCaddyInstallCommands prefers the detected package manager", () => 
 
 
 runTest("getPublicUrl prefers HTTPS when a domain is configured", () => {
-  assert.equal(getPublicUrl({ domain: "pm2.example.com", port: 8000 }), "https://pm2.example.com");
+  assert.equal(getPublicUrl({ domain: "pm2.example.com", port: 8001, publicPort: 8000 }), "https://pm2.example.com:8000");
   assert.equal(getPublicUrl({ domain: "", port: 9000 }), "http://localhost:9000");
 });
 
 runTest("getPublicOrigins includes local and domain origins", () => {
-  assert.deepEqual(getPublicOrigins({ domain: "pm2.example.com", port: 8000 }), [
-    "http://localhost:8000",
-    "http://pm2.example.com",
-    "https://pm2.example.com"
+  assert.deepEqual(getPublicOrigins({ domain: "pm2.example.com", port: 8001, publicPort: 8000 }), [
+    "http://localhost:8001",
+    "http://pm2.example.com:8000",
+    "https://pm2.example.com:8000"
   ]);
 });
 
@@ -137,7 +139,24 @@ runTest("buildAdminNextSteps includes an elevated rerun path", () => {
   });
 
   assert.match(steps[0], /sudo/);
-  assert.match(steps[1], /--setup-ssl --install-caddy --domain pm2.example.com --port 8000/);
+  assert.match(steps[1], /--setup-ssl --install-caddy --domain pm2.example.com --public-port 8000 --app-port 8000/);
+});
+
+runTest("domain HTTPS keeps public port and moves internal app port", () => {
+  const options = finalizeNetworkOptions({
+    domain: "srv1986869.hstgr.cloud",
+    port: 8000,
+    publicPort: 8000,
+    setupSsl: true,
+    upstreamExplicit: false,
+    appPortExplicit: false
+  });
+
+  assert.equal(options.port, 8001);
+  assert.equal(options.publicPort, 8000);
+  assert.equal(options.upstream, "127.0.0.1:8001");
+  assert.equal(options.publicUrl, "https://srv1986869.hstgr.cloud:8000");
+  assert.equal(getCaddySiteAddress(options), "https://srv1986869.hstgr.cloud:8000");
 });
 
 console.log("Installer helper checks completed.");

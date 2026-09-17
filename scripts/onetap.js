@@ -14,6 +14,8 @@ const DEFAULT_REPO_URL = "https://github.com/AnonymousSysna/pm2-manager.git";
 const APP_PACKAGE_NAME = "pm2-dashboard";
 const APP_PROCESS_NAME = "pm2-dashboard";
 const DEFAULT_PORT = 8000;
+const DEFAULT_PUBLIC_PORT = 8000;
+const DEFAULT_INTERNAL_PORT = 8001;
 const PLACEHOLDER_VALUES = new Set([
   "replace_with_admin_username",
   "replace_with_long_random_secret",
@@ -111,20 +113,60 @@ function normalizePort(rawValue, fallback = DEFAULT_PORT) {
   return port;
 }
 
-function getPublicUrl(options) {
-  if (options?.domain) {
-    return `https://${options.domain}`;
-  }
+function getPublicPort(options) {
+  return normalizePort(options?.publicPort ?? options?.port, DEFAULT_PUBLIC_PORT);
+}
+
+function getLocalUrl(options) {
   return `http://localhost:${normalizePort(options?.port, DEFAULT_PORT)}`;
 }
 
-function getPublicOrigins(options) {
-  const origins = [`http://localhost:${normalizePort(options?.port, DEFAULT_PORT)}`];
+function getPublicUrl(options) {
   if (options?.domain) {
-    origins.push(`http://${options.domain}`);
-    origins.push(`https://${options.domain}`);
+    const scheme = options?.setupSsl === false ? "http" : "https";
+    return `${scheme}://${options.domain}:${getPublicPort(options)}`;
+  }
+  return getLocalUrl(options);
+}
+
+function getCaddySiteAddress(options) {
+  if (!options?.domain) {
+    return "";
+  }
+  return `https://${options.domain}:${getPublicPort(options)}`;
+}
+
+function getPublicOrigins(options) {
+  const origins = [getLocalUrl(options)];
+  if (options?.domain) {
+    const publicPort = getPublicPort(options);
+    origins.push(`http://${options.domain}:${publicPort}`);
+    origins.push(`https://${options.domain}:${publicPort}`);
   }
   return origins;
+}
+
+function finalizeNetworkOptions(options) {
+  const publicPort = getPublicPort(options);
+  options.publicPort = publicPort;
+
+  if (options.domain && options.setupSsl !== false) {
+    if (!options.appPortExplicit && normalizePort(options.port, DEFAULT_PORT) === publicPort) {
+      options.port = publicPort < 65535 ? publicPort + 1 : DEFAULT_INTERNAL_PORT;
+    }
+    options.siteAddress = getCaddySiteAddress(options);
+  } else {
+    options.siteAddress = "";
+  }
+
+  if (!options.upstreamExplicit) {
+    options.upstream = `127.0.0.1:${normalizePort(options.port, DEFAULT_PORT)}`;
+  } else if (options.upstream) {
+    options.upstream = sanitizeUpstream(options.upstream);
+  }
+
+  options.publicUrl = getPublicUrl(options);
+  return options;
 }
 
 function sanitizeDomain(value) {
@@ -154,6 +196,11 @@ function sanitizeUpstream(value) {
     throw new Error("Invalid upstream format. Use host:port or https://host:port");
   }
   return upstream;
+}
+
+function getExplicitFlagOrEnv(flags, env, flagName, envName) {
+  const raw = flags[flagName] ?? env[envName];
+  return raw === undefined || raw === null || raw === "" ? undefined : raw;
 }
 
 function isTruthyFlag(value) {
@@ -488,13 +535,16 @@ function buildAdminNextSteps({
   appDir,
   domain,
   port,
+  publicPort,
   caddyInstallCommands,
   preferElevated
 }) {
   const quotedInstaller = `"${path.join(appDir, "scripts", "onetap.js")}"`;
   const commandPrefix = `node ${quotedInstaller}`;
   const domainFlag = domain ? ` --domain ${domain}` : "";
-  const sslCommand = `${commandPrefix} --setup-ssl --install-caddy${domainFlag} --port ${port}`;
+  const effectivePublicPort = publicPort || port;
+  const publicPortFlag = effectivePublicPort ? ` --public-port ${effectivePublicPort}` : "";
+  const sslCommand = `${commandPrefix} --setup-ssl --install-caddy${domainFlag}${publicPortFlag} --app-port ${port}`;
   const steps = [];
 
   if (platform === "windows") {
@@ -514,7 +564,7 @@ function buildAdminNextSteps({
     steps.push("No supported Caddy install command was detected automatically on this system.");
   }
 
-  steps.push("Before enabling SSL, make sure the chosen domain resolves to this server and ports 80/443 are reachable.");
+  steps.push(`Before enabling SSL, make sure the chosen domain resolves to this server and public port ${effectivePublicPort} is reachable.`);
   return steps;
 }
 
@@ -542,41 +592,44 @@ function buildOptions({ argv, env, appDir }) {
   const parsed = parseArgs(argv);
   const flags = parsed.flags;
   const defaultInstallDir = parsed.positionals[0] || env.PM2_MANAGER_DIR || path.join(os.homedir(), "pm2-manager");
-  const port = normalizePort(flags.port ?? env.PM2_MANAGER_PORT ?? env.PORT, DEFAULT_PORT);
+  const appPortRaw = getExplicitFlagOrEnv(flags, env, "app-port", "PM2_MANAGER_APP_PORT");
+  const legacyPortRaw = getExplicitFlagOrEnv(flags, env, "port", "PORT");
+  const publicPortRaw = getExplicitFlagOrEnv(flags, env, "public-port", "PM2_MANAGER_PUBLIC_PORT")
+    ?? getExplicitFlagOrEnv(flags, env, "port", "PM2_MANAGER_PORT");
+  const port = normalizePort(appPortRaw ?? legacyPortRaw, DEFAULT_PORT);
+  const publicPort = normalizePort(publicPortRaw ?? DEFAULT_PUBLIC_PORT, DEFAULT_PUBLIC_PORT);
   const domain = sanitizeDomain(flags.domain ?? env.PM2_MANAGER_DOMAIN ?? "");
   const setupSsl = parseBoolean(flags["setup-ssl"] ?? env.PM2_MANAGER_SETUP_SSL);
   const installCaddy = parseBoolean(flags["install-caddy"] ?? env.PM2_MANAGER_INSTALL_CADDY);
+  const upstreamRaw = getExplicitFlagOrEnv(flags, env, "upstream", "PM2_MANAGER_UPSTREAM");
 
   const options = {
     appDir,
     targetDir: path.resolve(String(flags["target-dir"] || env.PM2_MANAGER_DIR || defaultInstallDir)),
     repoUrl: String(flags["repo-url"] || env.REPO_URL || DEFAULT_REPO_URL),
     port,
+    publicPort,
     domain,
-    upstream: String(flags.upstream || env.PM2_MANAGER_UPSTREAM || `127.0.0.1:${port}`),
+    upstream: upstreamRaw ? String(upstreamRaw) : "",
+    upstreamExplicit: upstreamRaw !== undefined,
+    appPortExplicit: appPortRaw !== undefined || legacyPortRaw !== undefined,
     setupSsl: setupSsl === undefined && domain ? true : setupSsl,
     installCaddy: installCaddy === undefined && domain ? true : installCaddy,
     nonInteractive: isTruthyFlag(flags["non-interactive"]) || parseBoolean(env.CI) === true,
     caddyfilePath: String(env.CADDYFILE_PATH || "").trim()
   };
 
-  if (options.upstream) {
-    options.upstream = sanitizeUpstream(options.upstream);
-  }
-
-  options.publicUrl = getPublicUrl(options);
-  return options;
+  return finalizeNetworkOptions(options);
 }
 
 async function maybePromptForSsl(options, privilegeContext) {
   if (options.nonInteractive || !isInteractive()) {
-    options.publicUrl = getPublicUrl(options);
-    return options;
+    return finalizeNetworkOptions(options);
   }
 
   if (options.setupSsl === undefined && !options.domain) {
     const domain = await prompt(
-      "Public HTTPS domain for pm2-manager? Example pm2.example.com. Leave blank for local HTTP only: ",
+      "Domain for PM2 Manager public port? Example pm2.example.com. Leave blank for local HTTP only: ",
       ""
     );
     options.domain = sanitizeDomain(domain);
@@ -584,7 +637,7 @@ async function maybePromptForSsl(options, privilegeContext) {
   }
 
   if (options.setupSsl === true && !options.domain) {
-    const domain = await prompt("Domain for pm2-manager HTTPS (leave blank to skip SSL setup): ", "");
+    const domain = await prompt("Domain for PM2 Manager HTTPS public port (leave blank to skip SSL setup): ", "");
     options.domain = sanitizeDomain(domain);
     if (!options.domain) {
       options.setupSsl = false;
@@ -596,11 +649,10 @@ async function maybePromptForSsl(options, privilegeContext) {
   }
 
   if (options.setupSsl === true && !privilegeContext.privileged) {
-    console.log("SSL was requested. The installer will finish the app install and print the elevated command needed for Caddy/HTTPS.");
+    console.log("SSL was requested. The installer will finish the app install and print the elevated command needed for Caddy/HTTPS on the public port.");
   }
 
-  options.publicUrl = getPublicUrl(options);
-  return options;
+  return finalizeNetworkOptions(options);
 }
 
 function summarizeInstallContext(privilegeContext, caddyStatus) {
@@ -674,6 +726,7 @@ function prepareEnvFile(appDir, options) {
   }
 
   updates.PORT = String(options.port);
+  updates.PM2_MANAGER_PUBLIC_PORT = String(options.publicPort);
   updates.APP_PUBLIC_URL = getPublicUrl(options);
   if (options.domain) {
     updates.PM2_MANAGER_DOMAIN = options.domain;
@@ -706,6 +759,7 @@ function applyProxyEnvOverrides(appDir, options) {
     COOKIE_SECURE: "1",
     APP_PUBLIC_URL: getPublicUrl(options),
     PM2_MANAGER_DOMAIN: options.domain,
+    PM2_MANAGER_PUBLIC_PORT: String(options.publicPort),
     CORS_ALLOWED_ORIGINS: mergeOrigins(currentValues.CORS_ALLOWED_ORIGINS, getPublicOrigins(options))
   });
 
@@ -834,11 +888,12 @@ function waitForSocket(host, port, timeoutMs = 3000) {
   });
 }
 
-async function validateDomainReadiness(domain) {
+async function validateDomainReadiness(domain, publicPort = 443) {
   if (!domain || domain.startsWith("*.")) {
     return {
       dnsResolved: false,
       dnsError: domain ? "Wildcard domain cannot be probed directly" : "No domain configured",
+      publicPortReachable: false,
       port80Reachable: false,
       port443Reachable: false
     };
@@ -853,16 +908,14 @@ async function validateDomainReadiness(domain) {
     dnsError = error?.message || "DNS lookup failed";
   }
 
-  const [port80Reachable, port443Reachable] = await Promise.all([
-    waitForSocket(domain, 80, 3000),
-    waitForSocket(domain, 443, 3000)
-  ]);
+  const publicPortReachable = await waitForSocket(domain, publicPort, 3000);
 
   return {
     dnsResolved,
     dnsError,
-    port80Reachable,
-    port443Reachable
+    publicPortReachable,
+    port80Reachable: publicPort === 80 ? publicPortReachable : false,
+    port443Reachable: publicPort === 443 ? publicPortReachable : false
   };
 }
 
@@ -880,6 +933,7 @@ async function maybeConfigureSsl(appDir, options, installContext) {
     probe: {
       dnsResolved: false,
       dnsError: null,
+      publicPortReachable: false,
       port80Reachable: false,
       port443Reachable: false
     }
@@ -898,7 +952,7 @@ async function maybeConfigureSsl(appDir, options, installContext) {
 
   result.attempted = true;
 
-  const dnsProbe = await validateDomainReadiness(options.domain);
+  const dnsProbe = await validateDomainReadiness(options.domain, options.publicPort);
   result.probe = dnsProbe;
   if (!dnsProbe.dnsResolved) {
     result.warnings.push(`DNS is not ready for ${options.domain}: ${dnsProbe.dnsError || "lookup failed"}`);
@@ -915,6 +969,7 @@ async function maybeConfigureSsl(appDir, options, installContext) {
         appDir,
         domain: options.domain,
         port: options.port,
+        publicPort: options.publicPort,
         caddyInstallCommands: installContext.caddyInstallCommands,
         preferElevated: installContext.privilegeContext.elevationCommand
       })
@@ -934,6 +989,7 @@ async function maybeConfigureSsl(appDir, options, installContext) {
 
   const proxyResult = await addReverseProxy({
     domain: options.domain,
+    siteAddress: getCaddySiteAddress(options),
     upstream: options.upstream
   });
 
@@ -955,13 +1011,14 @@ async function maybeConfigureSsl(appDir, options, installContext) {
     result.warnings.push(restartResult.error);
   }
 
-  const probe = await validateDomainReadiness(options.domain);
+  const probe = await validateDomainReadiness(options.domain, options.publicPort);
   result.probe = probe;
 
   const statusAfter = await getCaddyStatus();
   result.caddyStatus = statusAfter;
   result.proxyConfigured = true;
-  const managedSite = statusAfter?.data?.managedSites?.find((entry) => entry.domain === options.domain);
+  const siteAddress = getCaddySiteAddress(options);
+  const managedSite = statusAfter?.data?.managedSites?.find((entry) => entry.siteAddress === siteAddress || entry.domain === siteAddress);
   const httpsState = managedSite?.https?.state || "unknown";
 
   result.httpOnly = false;
@@ -973,13 +1030,10 @@ async function maybeConfigureSsl(appDir, options, installContext) {
     if (!probe.dnsResolved && probe.dnsError) {
       result.warnings.push(`DNS probe failed: ${probe.dnsError}`);
     }
-    if (!probe.port80Reachable) {
-      result.warnings.push("Port 80 was not reachable during the installer probe.");
+    if (!probe.publicPortReachable) {
+      result.warnings.push(`Public port ${options.publicPort} was not reachable during the installer probe.`);
     }
-    if (!probe.port443Reachable) {
-      result.warnings.push("Port 443 was not reachable during the installer probe.");
-    }
-    result.nextSteps.push("HTTP on the local pm2-manager port remains valid until DNS/public reachability/ports 80 and 443 are fixed.");
+    result.nextSteps.push(`The root domain stays untouched. Open firewall port ${options.publicPort} and use ${getPublicUrl(options)} when TLS is ready.`);
   }
 
   return result;
@@ -1004,8 +1058,8 @@ function printSummary({
   console.log(`- Public URL: ${getPublicUrl(options)}`);
 
   if (options.domain && (sslResult.proxyConfigured || options.setupSsl === true)) {
-    const scheme = sslResult.enabled ? "https" : "http";
-    console.log(`- Domain target: ${scheme}://${options.domain}`);
+    console.log(`- Domain target: ${getCaddySiteAddress(options) || getPublicUrl(options)}`);
+    console.log("- Root domain: unchanged");
   }
 
   if (sslResult.attempted && sslResult.enabled) {
@@ -1132,6 +1186,9 @@ module.exports = {
   parseBoolean,
   parseArgs,
   normalizePort,
+  getPublicPort,
+  getCaddySiteAddress,
+  finalizeNetworkOptions,
   sanitizeDomain,
   sanitizeUpstream,
   buildCaddyInstallCommands,

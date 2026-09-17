@@ -52,3 +52,11 @@ Use this before exposing PM2 Manager outside localhost.
 - Confirm `curl -i http://localhost:8000/ready` returns a non-5xx response.
 - Confirm final installer summary prints the local URL, public URL, HTTPS status, generated credentials, and log commands.
 - Rotate generated credentials after pasting them into chat, tickets, logs, or screenshots.
+
+## Domain / HTTPS installer behavior
+
+- Entering a domain in the one-tap installer keeps the root domain untouched.
+- The public dashboard URL uses the public port, for example `https://your-domain.example:8000`.
+- The backend listens on an internal local port, normally `8001`, so Caddy can own public port `8000` for HTTPS.
+- Open the selected public port in the VPS firewall/security group.
+- Use a subdomain instead if you want standard HTTPS on port `443` without showing a port in the URL.

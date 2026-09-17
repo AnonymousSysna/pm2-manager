@@ -56,6 +56,7 @@ export default function Caddy() {
       setSaving(true);
       const result = await caddyApi.addProxy({
         domain: form.domain,
+        siteAddress: form.domain,
         upstream: form.upstream
       });
       if (!result.success) {
@@ -92,7 +93,7 @@ export default function Caddy() {
 
   const editProxy = (item) => {
     setForm({
-      domain: item.domain || "",
+      domain: item.siteAddress || item.domain || "",
       upstream: item.upstream || "localhost:3000"
     });
   };
@@ -178,7 +179,7 @@ export default function Caddy() {
               <Input
                 value={form.domain}
                 onChange={(event) => setForm((prev) => ({ ...prev, domain: event.target.value }))}
-                placeholder="example.com"
+                placeholder="example.com or https://example.com:8000"
                 disabled={!status.installed || saving || restarting || loading}
               />
               <Input
@@ -211,7 +212,7 @@ export default function Caddy() {
             {status.managedSites.map((item) => (
               <InsetPanel key={item.domain} padding="sm" className="flex items-start justify-between gap-3 text-sm">
                 <div>
-                  <p className="font-medium text-text-1">{item.domain}</p>
+                  <p className="font-medium text-text-1">{item.publicUrl || item.siteAddress || item.domain}</p>
                   <p className="text-text-3">reverse_proxy {item.upstream}</p>
                   <p className="text-xs text-text-3">
                     HTTPS:{" "}

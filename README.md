@@ -613,3 +613,14 @@ Additional PM2 endpoints:
 
 - `GET /api/v1/pm2/features`
 - `POST /api/v1/pm2/features/run`
+
+### One-tap domain behavior
+
+When a domain is entered during `scripts/onetap.sh`, the installer does **not** claim the root domain.
+It exposes PM2 Manager on the public port instead:
+
+```text
+https://your-domain.example:8000
+```
+
+To avoid port collision, the app listens internally on the next port, normally `127.0.0.1:8001`, and Caddy proxies the public TLS address `https://your-domain.example:8000` to that internal app port. Leave the domain prompt blank to skip the public HTTPS setup.
