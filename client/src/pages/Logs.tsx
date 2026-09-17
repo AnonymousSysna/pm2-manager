@@ -3,8 +3,10 @@ import { Terminal } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import toast, { getErrorMessage } from "../lib/toast";
 import { processes as processApi } from "../api";
+import { describeApiError } from "../lib/apiError";
 import { useSocket } from "../hooks/useSocket";
 import Banner from "../components/ui/Banner";
+import DataLoadError from "../components/DataLoadError";
 import Button from "../components/ui/Button";
 import Checkbox from "../components/ui/Checkbox";
 import InsetPanel from "../components/ui/InsetPanel";
@@ -124,6 +126,7 @@ export default function Logs() {
   const [processOptions, setProcessOptions] = useState([]);
   const [entries, setEntries] = useState([]);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [logsError, setLogsError] = useState("");
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [showCreateHint, setShowCreateHint] = useState(launchSource === "create" && Boolean(defaultProcess));
   const [createSummary, setCreateSummary] = useState(null);
@@ -192,9 +195,11 @@ export default function Logs() {
         const nextEntries = [];
         const nextCursor = new Map();
         let fallbackTimestamp = Date.now();
+        let failedTargets = 0;
         for (let i = 0; i < targets.length; i += 1) {
           const result = responses[i];
           if (!result.success) {
+            failedTargets += 1;
             continue;
           }
           const processName = targets[i];
@@ -233,11 +238,19 @@ export default function Logs() {
         }
         liveCursorRef.current = nextCursor;
         setEntries(nextEntries.slice(-Math.max(100, lineCount * Math.max(1, targets.length))));
+        if (failedTargets === 0) {
+          setLogsError("");
+        } else if (failedTargets === targets.length) {
+          // Every target failed, so an empty stream would be a lie.
+          setLogsError(responses.find((result) => !result.success)?.error || "Could not load logs.");
+        }
       } catch (error) {
         if (!active || logsRequestIdRef.current !== requestId) {
           return;
         }
-        toast.error(error?.response?.data?.error || error.message || "Unable to fetch logs");
+        // Keep the failure on the stream instead of "Waiting.", which otherwise
+        // means both "nothing has been written yet" and "the read failed".
+        setLogsError(describeApiError(error));
       } finally {
         if (active && logsRequestIdRef.current === requestId) {
           setLogsLoading(false);
@@ -592,8 +605,13 @@ export default function Logs() {
           {(selected || combinedView) && visibleEntries.length === 0 && (
             <>
               {logsLoading && <LogsViewerSkeleton />}
-              {!logsLoading && hasActiveFilter && entries.length > 0 && <p className="text-text-3">No matches.</p>}
-              {!logsLoading && (!hasActiveFilter || entries.length === 0) && <p className="text-text-3">Waiting.</p>}
+              {!logsLoading && logsError && (
+                <DataLoadError message={logsError} onRetry={() => setRefreshNonce((value) => value + 1)} />
+              )}
+              {!logsLoading && !logsError && hasActiveFilter && entries.length > 0 && (
+                <p className="text-text-3">No matches.</p>
+              )}
+              {!logsLoading && !logsError && (!hasActiveFilter || entries.length === 0) && <p className="text-text-3">Waiting.</p>}
             </>
           )}
 

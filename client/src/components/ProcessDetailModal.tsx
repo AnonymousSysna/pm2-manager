@@ -24,6 +24,8 @@ import { InsetCard } from "./ui/Surface";
 import TabGroup from "./ui/TabGroup";
 import { Skeleton } from "./ui/Skeleton";
 import { Eyebrow, SubsectionTitle, SupportingCopy } from "./ui/Typography";
+import DataLoadError from "./DataLoadError";
+import { describeApiError } from "../lib/apiError";
 
 const tabs = ["Summary", "Environment", "Actions"];
 const SENSITIVE_ENV_KEY_PATTERN = /(pass(word)?|secret|token|api[_-]?key|private|credential|auth|pwd)/i;
@@ -97,6 +99,8 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
   const [metricsPoints, setMetricsPoints] = useState([]);
   const [healthReport, setHealthReport] = useState({ points: [], summary: null });
   const [metricsLoading, setMetricsLoading] = useState(false);
+  const [telemetryError, setTelemetryError] = useState("");
+  const [telemetryReloadToken, setTelemetryReloadToken] = useState(0);
   const [revealSensitiveEnv, setRevealSensitiveEnv] = useState(false);
 
   useEffect(() => {
@@ -114,6 +118,9 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
         ]);
         if (active && metricsResult.success && Array.isArray(metricsResult.data)) {
           setMetricsPoints(metricsResult.data);
+          setTelemetryError("");
+        } else if (active && !metricsResult.success) {
+          setTelemetryError(metricsResult.error || `Could not load metrics for ${process.name}.`);
         }
         if (active && healthResult.success && healthResult.data) {
           setHealthReport({
@@ -121,10 +128,11 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
             summary: healthResult.data.summary || null
           });
         }
-      } catch (_error) {
+      } catch (error) {
+        // This panel polls every 10s, so hold the last sample and say the read
+        // failed rather than blanking the table and claiming there is no data.
         if (active) {
-          setMetricsPoints([]);
-          setHealthReport({ points: [], summary: null });
+          setTelemetryError(describeApiError(error));
         }
       } finally {
         if (active) {
@@ -139,7 +147,7 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
       active = false;
       clearInterval(timer);
     };
-  }, [process?.name]);
+  }, [process?.name, telemetryReloadToken]);
 
   useEffect(() => {
     setRevealSensitiveEnv(false);
@@ -282,7 +290,10 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
               </div>
             </div>
             {metricsLoading && <MetricsHistorySkeleton />}
-            {!metricsLoading && metricsPoints.length === 0 && (
+            {!metricsLoading && telemetryError && (
+              <DataLoadError message={telemetryError} onRetry={() => setTelemetryReloadToken((token) => token + 1)} />
+            )}
+            {!metricsLoading && !telemetryError && metricsPoints.length === 0 && (
               <SupportingCopy>No metrics.</SupportingCopy>
             )}
             {!metricsLoading && metricsPoints.length > 0 && (

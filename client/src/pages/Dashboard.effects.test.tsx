@@ -103,7 +103,7 @@ vi.mock("../components/dashboard/ProcessListPanel", () => ({
 
 vi.mock("../components/dashboard/MetricsHistoryPanel", () => ({
   __esModule: true,
-  default: ({ chartProcess, onChartProcessChange, processes, historyPoints }) => (
+  default: ({ chartProcess, onChartProcessChange, processes, historyPoints, metricsError, onRetry }) => (
     <section>
       <label htmlFor="chart-process">Chart process</label>
       <select id="chart-process" value={chartProcess} onChange={(event) => onChartProcessChange(event.target.value)}>
@@ -114,6 +114,10 @@ vi.mock("../components/dashboard/MetricsHistoryPanel", () => ({
         ))}
       </select>
       <output data-testid="history-points">{JSON.stringify(historyPoints)}</output>
+      <output data-testid="metrics-error">{metricsError}</output>
+      <button type="button" onClick={onRetry}>
+        Retry metrics
+      </button>
     </section>
   )
 }));
@@ -200,5 +204,37 @@ describe("Dashboard async effects", () => {
       expect(screen.getByTestId("history-points")).toHaveTextContent("55");
       expect(screen.getByTestId("history-points")).not.toHaveTextContent("99");
     });
+  });
+
+  it("reports a failed metrics read instead of drawing an empty chart, and recovers on retry", async () => {
+    let attempts = 0;
+    metricsMock.mockImplementation(() => {
+      attempts += 1;
+      if (attempts === 1) {
+        return Promise.reject({ response: { status: 500 } });
+      }
+      return Promise.resolve({ success: true, data: [{ cpu: 42, memory: 1024 }], error: null });
+    });
+
+    render(
+      <MemoryRouter>
+        <Dashboard />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("metrics-error")).toHaveTextContent(
+        "The server hit a problem. Retry, and check the server log if it repeats."
+      );
+    });
+    expect(screen.getByTestId("history-points")).toHaveTextContent("[]");
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry metrics" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("history-points")).toHaveTextContent("42");
+    });
+    expect(screen.getByTestId("metrics-error").textContent).toBe("");
+    expect(attempts).toBe(2);
   });
 });

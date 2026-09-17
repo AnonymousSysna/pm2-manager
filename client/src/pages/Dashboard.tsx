@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast, { getErrorMessage } from "../lib/toast";
+import { describeApiError } from "../lib/apiError";
 import { alerts as alertsApi, processes as processApi } from "../api";
 import { useSocket } from "../hooks/useSocket";
 import ProcessDetailModal from "../components/ProcessDetailModal";
@@ -259,6 +260,8 @@ export default function Dashboard() {
   const [processMeta, setProcessMeta] = useState({});
   const [chartProcess, setChartProcess] = useState("");
   const [historyPoints, setHistoryPoints] = useState([]);
+  const [metricsError, setMetricsError] = useState("");
+  const [metricsReloadToken, setMetricsReloadToken] = useState(0);
   const [monitoringSummary, setMonitoringSummary] = useState({});
   const [selectedNames, setSelectedNames] = useState({});
   const [editingMetaProcess, setEditingMetaProcess] = useState(null);
@@ -394,6 +397,7 @@ export default function Dashboard() {
     if (!chartProcess) {
       metricsRequestIdRef.current += 1;
       setHistoryPoints([]);
+      setMetricsError("");
       return;
     }
 
@@ -409,20 +413,25 @@ export default function Dashboard() {
         }
         if (result.success && Array.isArray(result.data)) {
           setHistoryPoints(result.data);
+          setMetricsError("");
           return;
         }
+        // An empty chart means "no samples yet", which is a different claim from
+        // "the read failed". Keep the failure visible instead of drawing nothing.
         setHistoryPoints([]);
+        setMetricsError(result.error || `Could not load metrics for ${chartProcess}.`);
       })
-      .catch(() => {
+      .catch((error) => {
         if (active && metricsRequestIdRef.current === requestId) {
           setHistoryPoints([]);
+          setMetricsError(describeApiError(error));
         }
       });
 
     return () => {
       active = false;
     };
-  }, [chartProcess]);
+  }, [chartProcess, metricsReloadToken]);
 
   useEffect(() => {
     if (!selectedProcess?.name) {
@@ -1472,6 +1481,8 @@ export default function Dashboard() {
             onChartProcessChange={setChartProcess}
             processes={processes}
             historyPoints={historyPoints}
+            metricsError={metricsError}
+            onRetry={() => setMetricsReloadToken((token) => token + 1)}
           />
           <DependencyGraphPanel dependencyEdges={dependencyEdges} />
         </div>

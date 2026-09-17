@@ -135,4 +135,63 @@ describe("Logs", () => {
       expect(screen.queryByText("api stale line")).not.toBeInTheDocument();
     });
   });
+
+  it("reports a failed stream read instead of showing Waiting", async () => {
+    logsMock.mockRejectedValue({ response: { status: 500 } });
+
+    render(
+      <MemoryRouter initialEntries={["/dashboard/logs"]}>
+        <Routes>
+          <Route path="/dashboard/logs" element={<Logs />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(
+      await screen.findByText("The server hit a problem. Retry, and check the server log if it repeats.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Waiting.")).not.toBeInTheDocument();
+    // The failure stays on the stream, so a toast would only repeat it.
+    expect(toastErrorMock).not.toHaveBeenCalled();
+  });
+
+  it("treats an unreadable log file as a failure, not an empty stream", async () => {
+    logsMock.mockResolvedValue({ success: false, data: null, error: "Log file is not readable" });
+
+    render(
+      <MemoryRouter initialEntries={["/dashboard/logs"]}>
+        <Routes>
+          <Route path="/dashboard/logs" element={<Logs />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Log file is not readable")).toBeInTheDocument();
+    expect(screen.queryByText("Waiting.")).not.toBeInTheDocument();
+  });
+
+  it("retries the stream and clears the error once lines arrive", async () => {
+    let attempts = 0;
+    logsMock.mockImplementation(() => {
+      attempts += 1;
+      if (attempts === 1) {
+        return Promise.reject({ response: { status: 503 } });
+      }
+      return Promise.resolve({ success: true, data: { stdout: ["recovered line"], stderr: [] }, error: null });
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/dashboard/logs"]}>
+        <Routes>
+          <Route path="/dashboard/logs" element={<Logs />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+
+    expect(await screen.findByText("recovered line")).toBeInTheDocument();
+    expect(attempts).toBeGreaterThan(1);
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+  });
 });

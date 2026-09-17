@@ -1,3 +1,4 @@
+import DataLoadError from "../DataLoadError";
 import Select from "../ui/Select";
 import { PanelHeader } from "../ui/PageLayout";
 
@@ -33,7 +34,14 @@ function SparkLine({ points, accessor, stroke }) {
   );
 }
 
-export default function MetricsHistoryPanel({ chartProcess, onChartProcessChange, processes = [], historyPoints = [] }) {
+export default function MetricsHistoryPanel({
+  chartProcess,
+  onChartProcessChange,
+  processes = [],
+  historyPoints = [],
+  metricsError = "",
+  onRetry = null
+}) {
   return (
     <section className="page-panel compact-page-stack p-3">
       <PanelHeader
@@ -46,18 +54,24 @@ export default function MetricsHistoryPanel({ chartProcess, onChartProcessChange
           </option>
         ))}
       </Select>
-      <div>
-        <p className="mb-1 text-xs text-text-3">CPU %</p>
-        <SparkLine points={historyPoints} accessor={(point) => Number(point.cpu || 0)} stroke="rgb(var(--color-brand-500))" />
-      </div>
-      <div>
-        <p className="mb-1 text-xs text-text-3">Memory MB</p>
-        <SparkLine
-          points={historyPoints}
-          accessor={(point) => Number(point.memory || 0) / 1024 / 1024}
-          stroke="rgb(var(--color-info-500))"
-        />
-      </div>
+      {metricsError ? (
+        <DataLoadError message={metricsError} onRetry={onRetry} />
+      ) : (
+        <>
+          <div>
+            <p className="mb-1 text-xs text-text-3">CPU %</p>
+            <SparkLine points={historyPoints} accessor={(point) => Number(point.cpu || 0)} stroke="rgb(var(--color-brand-500))" />
+          </div>
+          <div>
+            <p className="mb-1 text-xs text-text-3">Memory MB</p>
+            <SparkLine
+              points={historyPoints}
+              accessor={(point) => Number(point.memory || 0) / 1024 / 1024}
+              stroke="rgb(var(--color-info-500))"
+            />
+          </div>
+        </>
+      )}
     </section>
   );
 }

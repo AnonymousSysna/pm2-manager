@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, RefreshCw, XCircle } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { processes as processApi } from "../api";
+import DataLoadError from "../components/DataLoadError";
+import { describeApiError } from "../lib/apiError";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
 import InsetPanel from "../components/ui/InsetPanel";
@@ -15,6 +17,7 @@ export default function History() {
 
   const [deploymentHistory, setDeploymentHistory] = useState([]);
   const [deploymentHistoryLoading, setDeploymentHistoryLoading] = useState(false);
+  const [deploymentHistoryError, setDeploymentHistoryError] = useState("");
   const [deploymentPage, setDeploymentPage] = useState(1);
   const [deploymentProcessFilter, setDeploymentProcessFilter] = useState(initialDeploymentProcess);
   const [deploymentPagination, setDeploymentPagination] = useState({
@@ -26,6 +29,7 @@ export default function History() {
 
   const [restartHistory, setRestartHistory] = useState([]);
   const [restartHistoryLoading, setRestartHistoryLoading] = useState(false);
+  const [restartHistoryError, setRestartHistoryError] = useState("");
   const [restartPage, setRestartPage] = useState(1);
   const [restartPagination, setRestartPagination] = useState({
     page: 1,
@@ -36,6 +40,7 @@ export default function History() {
 
   const [auditHistory, setAuditHistory] = useState([]);
   const [auditHistoryLoading, setAuditHistoryLoading] = useState(false);
+  const [auditHistoryError, setAuditHistoryError] = useState("");
   const [auditPage, setAuditPage] = useState(1);
   const [auditActionPreset, setAuditActionPreset] = useState("");
   const [auditActionCustom, setAuditActionCustom] = useState("");
@@ -76,8 +81,14 @@ export default function History() {
         setDeploymentHistory(result.data.items);
         setDeploymentPagination(result.data.pagination);
         setDeploymentPage(result.data.pagination.page);
+        setDeploymentHistoryError("");
+      } else {
+        // A rejected read must not fall through to "No deployments.".
+        setDeploymentHistoryError(result.error || "Could not load deployment history.");
       }
-    } catch {} finally {
+    } catch (error) {
+      setDeploymentHistoryError(describeApiError(error));
+    } finally {
       if (!silent) {
         setDeploymentHistoryLoading(false);
       }
@@ -94,8 +105,13 @@ export default function History() {
         setRestartHistory(result.data.items);
         setRestartPagination(result.data.pagination);
         setRestartPage(result.data.pagination.page);
+        setRestartHistoryError("");
+      } else {
+        setRestartHistoryError(result.error || "Could not load restart history.");
       }
-    } catch {} finally {
+    } catch (error) {
+      setRestartHistoryError(describeApiError(error));
+    } finally {
       if (!silent) {
         setRestartHistoryLoading(false);
       }
@@ -119,8 +135,13 @@ export default function History() {
         setAuditHistory(result.data.items);
         setAuditPagination(result.data.pagination);
         setAuditPage(result.data.pagination.page);
+        setAuditHistoryError("");
+      } else {
+        setAuditHistoryError(result.error || "Could not load audit history.");
       }
-    } catch {} finally {
+    } catch (error) {
+      setAuditHistoryError(describeApiError(error));
+    } finally {
       if (!silent) {
         setAuditHistoryLoading(false);
       }
@@ -181,7 +202,12 @@ export default function History() {
         </p>
         <div className="max-h-60 space-y-2 overflow-y-auto text-base">
           {deploymentHistoryLoading && <HistoryListSkeleton showSteps />}
-          {!deploymentHistoryLoading && deploymentHistory.length === 0 && <p className="text-text-3">No deployments.</p>}
+          {!deploymentHistoryLoading && deploymentHistoryError && (
+            <DataLoadError message={deploymentHistoryError} onRetry={() => loadDeploymentHistory(deploymentPage)} />
+          )}
+          {!deploymentHistoryLoading && !deploymentHistoryError && deploymentHistory.length === 0 && (
+            <p className="text-text-3">No deployments.</p>
+          )}
           {deploymentHistory.map((item, idx) => (
             <InsetPanel key={`${item.ts}-${idx}`} padding="sm">
               <p className="text-text-1">
@@ -252,7 +278,12 @@ export default function History() {
         </p>
         <div className="max-h-60 space-y-2 overflow-y-auto text-base">
           {restartHistoryLoading && <HistoryListSkeleton />}
-          {!restartHistoryLoading && restartHistory.length === 0 && <p className="text-text-3">No restarts.</p>}
+          {!restartHistoryLoading && restartHistoryError && (
+            <DataLoadError message={restartHistoryError} onRetry={() => loadRestartHistory(restartPage)} />
+          )}
+          {!restartHistoryLoading && !restartHistoryError && restartHistory.length === 0 && (
+            <p className="text-text-3">No restarts.</p>
+          )}
           {restartHistory.map((item, idx) => (
             <InsetPanel key={`${item.ts}-${idx}`} padding="sm">
               <p className="text-text-1">
@@ -333,7 +364,12 @@ export default function History() {
         </p>
         <div className="max-h-72 space-y-2 overflow-y-auto text-base">
           {auditHistoryLoading && <HistoryListSkeleton />}
-          {!auditHistoryLoading && auditHistory.length === 0 && <p className="text-text-3">No audit entries.</p>}
+          {!auditHistoryLoading && auditHistoryError && (
+            <DataLoadError message={auditHistoryError} onRetry={() => loadAuditHistory(auditPage)} />
+          )}
+          {!auditHistoryLoading && !auditHistoryError && auditHistory.length === 0 && (
+            <p className="text-text-3">No audit entries.</p>
+          )}
           {auditHistory.map((item, idx) => (
             <InsetPanel key={`${item.ts}-${idx}`} padding="sm">
               <p className="text-text-1">

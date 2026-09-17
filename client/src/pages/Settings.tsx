@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import toast, { getErrorMessage } from "../lib/toast";
 import { auth, pm2Admin, alerts as alertsApi, processes as processApi, system as systemApi } from "../api";
+import DataLoadError from "../components/DataLoadError";
+import { describeApiError } from "../lib/apiError";
 import Banner from "../components/ui/Banner";
 import Button from "../components/ui/Button";
 import Checkbox from "../components/ui/Checkbox";
@@ -23,6 +25,7 @@ export default function Settings() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [channels, setChannels] = useState([]);
+  const [channelsError, setChannelsError] = useState("");
   const [channelName, setChannelName] = useState("");
   const [channelType, setChannelType] = useState("webhook");
   const [channelUrl, setChannelUrl] = useState("");
@@ -46,16 +49,7 @@ export default function Settings() {
         toast.error("Unable to fetch PM2 info");
       });
 
-    alertsApi
-      .listChannels()
-      .then((result) => {
-        if (result.success && Array.isArray(result.data)) {
-          setChannels(result.data);
-        }
-      })
-      .catch(() => {
-        // Keep settings usable without channel list.
-      });
+    loadChannels();
 
     systemApi
       .readiness()
@@ -71,6 +65,22 @@ export default function Settings() {
       })
       .finally(() => setReadinessLoading(false));
   }, []);
+
+  const loadChannels = async () => {
+    try {
+      const result = await alertsApi.listChannels();
+      if (result.success && Array.isArray(result.data)) {
+        setChannels(result.data);
+        setChannelsError("");
+        return;
+      }
+      setChannelsError(result.error || "Could not load alert channels.");
+    } catch (error) {
+      // An empty channel list tells the operator "no alerts are configured".
+      // Reporting a failed read that way would hide a real monitoring gap.
+      setChannelsError(describeApiError(error));
+    }
+  };
 
   const executeAction = async (label, fn) => {
     try {
@@ -357,6 +367,7 @@ export default function Settings() {
 
         <section className="page-panel settings-card settings-alerts-card">
           <PanelHeader title="Alert Channels" className="mb-2" />
+          {channelsError && <DataLoadError message={channelsError} className="mb-2" onRetry={loadChannels} />}
           {channelsWithFailures.length > 0 && (
             <Banner tone="warning" icon={<AlertTriangle size={14} />} className="mb-2">
               {channelsWithFailures.length} channel(s) have failed deliveries.
@@ -383,7 +394,7 @@ export default function Settings() {
             </Button>
           </div>
           <div className="settings-channel-list">
-            {channels.length === 0 && <p className="quiet-empty-state">No channels configured.</p>}
+            {channels.length === 0 && !channelsError && <p className="quiet-empty-state">No channels configured.</p>}
             {channels.map((channel) => (
               <InsetPanel key={channel.id} padding="sm" className="settings-channel-row">
                 <div className="settings-channel-main">

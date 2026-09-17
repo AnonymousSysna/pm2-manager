@@ -77,6 +77,26 @@ because everything in those files ships to the browser.
   unhealthy, so a healthy session does not re-render for a clock tick.
 - Copy comes from the shared `Banner` and `Badge` primitives, so the shell and
   any page surface cannot disagree about what a status means.
+## Failed reads versus empty data
+
+- A read that fails never renders as empty data. `client/src/components/DataLoadError.tsx`
+  shows the failure where the data should have been, with the retry action next
+  to it, and hides the surface's empty-state copy.
+- Messages come from `client/src/lib/apiError.ts`, the same source the request
+  layer uses, so an offline browser, a timeout, a 503, and an expired session read
+  the same way in a toast and on a panel.
+- Covered surfaces: the three History sections, the alert channel list in
+  Settings, the dashboard Resource Trends chart, process-detail telemetry, and
+  the log stream. A rejected response envelope (`success: false`) is treated as a
+  failure too, not just a thrown request error.
+- The log stream no longer uses "Waiting." for both "nothing written yet" and
+  "the read failed", and it keeps the last rendered lines when a poll fails. The
+  process detail modal also keeps its last sample and reports the failed refresh,
+  because it polls every 10s and one dropped poll should not blank the panel.
+- Background polling that is genuinely best-effort (system resources, onboarding
+  checklist, process list for filters) still fails quietly, and says so in a
+  comment, so a silent catch is a decision rather than an oversight.
+
 
 ## Recommended
 

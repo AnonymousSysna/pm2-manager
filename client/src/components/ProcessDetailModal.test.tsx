@@ -1,12 +1,14 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ProcessDetailModal from "./ProcessDetailModal";
 
 const metricsMock = vi.fn();
+const healthMock = vi.fn();
 
 vi.mock("../api", () => ({
   processes: {
-    metrics: (...args: unknown[]) => metricsMock(...args)
+    metrics: (...args: unknown[]) => metricsMock(...args),
+    health: (...args: unknown[]) => healthMock(...args)
   }
 }));
 
@@ -24,7 +26,9 @@ vi.mock("../lib/toast", () => ({
 describe("ProcessDetailModal", () => {
   beforeEach(() => {
     metricsMock.mockReset();
+    healthMock.mockReset();
     metricsMock.mockResolvedValue({ success: true, data: [], error: null });
+    healthMock.mockResolvedValue({ success: true, data: { points: [], summary: null }, error: null });
   });
 
   it("does not render a duplicate ppid field from pid data", async () => {
@@ -103,5 +107,44 @@ describe("ProcessDetailModal", () => {
 
     expect(screen.getByRole("button", { name: "Stop" })).toHaveClass("min-h-9");
     expect(screen.getByRole("button", { name: /Delete process/ })).toHaveClass("min-h-9");
+  });
+
+  it("says the metrics read failed instead of showing an empty panel", async () => {
+    metricsMock.mockRejectedValue({ response: { status: 500 } });
+
+    render(<ProcessDetailModal process={{ name: "api", status: "online" }} onClose={vi.fn()} onAction={vi.fn()} />);
+
+    expect(
+      await screen.findByText("The server hit a problem. Retry, and check the server log if it repeats.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("No metrics.")).not.toBeInTheDocument();
+  });
+
+  it("keeps the empty copy when the process simply has no samples", async () => {
+    render(<ProcessDetailModal process={{ name: "api", status: "online" }} onClose={vi.fn()} onAction={vi.fn()} />);
+
+    expect(await screen.findByText("No metrics.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+  });
+
+  it("re-reads telemetry when the operator retries", async () => {
+    let attempts = 0;
+    metricsMock.mockImplementation(() => {
+      attempts += 1;
+      if (attempts === 1) {
+        return Promise.reject({ response: { status: 503 } });
+      }
+      return Promise.resolve({ success: true, data: [{ ts: 1, cpu: 12, memory: 1024 }], error: null });
+    });
+
+    render(<ProcessDetailModal process={{ name: "api", status: "online" }} onClose={vi.fn()} onAction={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+    });
+    expect(attempts).toBe(2);
+    expect(screen.getByText(/CPU 12%/)).toBeInTheDocument();
   });
 });
