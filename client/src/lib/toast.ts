@@ -1,15 +1,26 @@
 import { gooeyToast } from "goey-toast";
+import { normalizeApiError } from "./apiError";
 
 export function getErrorMessage(error, fallback = "Operation failed") {
-  return error?.response?.data?.error || error?.message || fallback;
+  const failure = normalizeApiError(error);
+  // Prefer a specific server explanation, then our own phrasing for transport
+  // failures ("Network Error", "timeout of 20000ms exceeded" mean nothing to users).
+  if (failure.serverMessage) {
+    return failure.serverMessage;
+  }
+  if (failure.kind === "unknown" && error?.message) {
+    return String(error.message);
+  }
+  return failure.message || fallback;
 }
 
 const toast = {
-  success: (title, options) => gooeyToast.success(String(title), options),
-  error: (title, options) => gooeyToast.error(String(title), options),
-  info: (title, options) => gooeyToast.info(String(title), options),
-  warning: (title, options) => gooeyToast.warning(String(title), options),
-  show: (title, options) => gooeyToast(String(title), options),
+  // options stay optional so callers can pass just a message.
+  success: (title, options = undefined) => gooeyToast.success(String(title), options),
+  error: (title, options = undefined) => gooeyToast.error(String(title), options),
+  info: (title, options = undefined) => gooeyToast.info(String(title), options),
+  warning: (title, options = undefined) => gooeyToast.warning(String(title), options),
+  show: (title, options = undefined) => gooeyToast(String(title), options),
   dismiss: (idOrFilter) => gooeyToast.dismiss(idOrFilter),
   update: (id, options) => gooeyToast.update(id, options),
   promise: (promiseOrFactory, messages, options) => {
@@ -36,4 +47,3 @@ const toast = {
 };
 
 export default toast;
-

@@ -1,4 +1,6 @@
 import axios, { AxiosError, AxiosResponse, InternalAxiosRequestConfig } from "axios";
+import { normalizeApiError, retryDelayMs, shouldRetryRequest } from "../lib/apiError";
+import toast from "../lib/toast";
 import type {
   ApiResult,
   AuditHistoryItem,
@@ -13,8 +15,35 @@ type AnyHeaders = Record<string, any>;
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "",
-  withCredentials: true
+  withCredentials: true,
+  // Without a timeout a stalled request leaves the UI loading forever. Long
+  // server-side operations opt into more time via withLongTimeout().
+  timeout: Number(import.meta.env.VITE_API_TIMEOUT_MS || 20_000)
 });
+
+const LONG_TIMEOUT_MS = 300_000;
+
+// Server-side operations that run npm/caddy/git/pm2 commands and legitimately
+// take minutes (COMMAND_TIMEOUT_MS defaults to 300s server-side).
+function withLongTimeout(config: any = {}) {
+  return { ...config, timeout: LONG_TIMEOUT_MS };
+}
+
+const RETRYABLE_MAX_ATTEMPTS = 2;
+let offlineToastShownAt = 0;
+
+function announceOfflineOnce() {
+  const now = Date.now();
+  if (now - offlineToastShownAt < 15_000) {
+    return;
+  }
+  offlineToastShownAt = now;
+  try {
+    toast.error("No connection to the server. Retrying when the network returns.");
+  } catch (_error) {
+    // Never let a notification failure mask the original request error.
+  }
+}
 
 function isAuthEndpoint(url: string | undefined): boolean {
   const value = String(url || "");
@@ -76,11 +105,28 @@ async function refreshSession(): Promise<ApiResult<{ refreshed: boolean }>> {
 
 api.interceptors.response.use(
   (response) => response,
-  (error: AxiosError) => {
+  async (error: AxiosError) => {
     const status = error?.response?.status;
     const requestUrl = error?.config?.url;
     const onLoginRoute = window.location.pathname.startsWith("/login");
-    const originalConfig = (error?.config || {}) as InternalAxiosRequestConfig & { _retry?: boolean };
+    const originalConfig = (error?.config || {}) as InternalAxiosRequestConfig & {
+      _retry?: boolean;
+      _retryCount?: number;
+    };
+
+    const failure = normalizeApiError(error);
+    if (failure.kind === "offline" || failure.kind === "network") {
+      announceOfflineOnce();
+    }
+
+    // Retry transient transport and server failures for read-only requests only.
+    // Writes are never retried: replaying a start/stop/delete is not safe.
+    const retryCount = Number(originalConfig._retryCount || 0);
+    if (shouldRetryRequest(error, retryCount, originalConfig, { maxAttempts: RETRYABLE_MAX_ATTEMPTS })) {
+      originalConfig._retryCount = retryCount + 1;
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs(error, retryCount)));
+      return api.request(originalConfig);
+    }
 
     if (status === 401 && (!isAuthEndpoint(requestUrl) || isAuthMeEndpoint(requestUrl))) {
       if (originalConfig._retry) {
@@ -123,10 +169,10 @@ export const processes = {
   catalog: () => api.get<ApiResult<any>>("/api/v1/processes/catalog").then(unwrap),
   interpreters: () => api.get<ApiResult<any>>("/api/v1/processes/interpreters").then(unwrap),
   installInterpreter: (key: string) =>
-    api.post<ApiResult<any>>("/api/v1/processes/interpreters/install", { key }).then(unwrap),
+    api.post<ApiResult<any>>("/api/v1/processes/interpreters/install", { key }, withLongTimeout()).then(unwrap),
   nodeRuntimeStatus: () => api.get<ApiResult<any>>("/api/v1/processes/runtimes/node").then(unwrap),
   installNodeRuntime: (version: string, manager = "") =>
-    api.post<ApiResult<any>>("/api/v1/processes/runtimes/node/install", { version, manager }).then(unwrap),
+    api.post<ApiResult<any>>("/api/v1/processes/runtimes/node/install", { version, manager }, withLongTimeout()).then(unwrap),
   monitoringSummary: () => api.get<ApiResult<any[]>>("/api/v1/processes/monitoring/summary").then(unwrap),
   systemResources: () => api.get<ApiResult<any>>("/api/v1/processes/system/resources").then(unwrap),
   setMeta: (name: string, payload: Record<string, unknown>) =>
@@ -179,11 +225,13 @@ export const processes = {
   gitPull: (name: string, payload: Record<string, unknown> = {}) =>
     api
       .post<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/git/pull`, payload, {
-        validateStatus: (status) => (status >= 200 && status < 300) || status === 409
+        validateStatus: (status) => (status >= 200 && status < 300) || status === 409,
+        timeout: LONG_TIMEOUT_MS
       })
       .then(unwrap),
   get: (name: string) => api.get<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}`).then(unwrap),
-  create: (config: Record<string, unknown>) => api.post<ApiResult<any>>("/api/v1/processes/create", config).then(unwrap),
+  create: (config: Record<string, unknown>) =>
+    api.post<ApiResult<any>>("/api/v1/processes/create", config, withLongTimeout()).then(unwrap),
   bulkAction: (action: string, names: string[] = []) => api.post<ApiResult<any>>("/api/v1/processes/bulk-action", { action, names }).then(unwrap),
   start: (name: string) => api.post<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/start`).then(unwrap),
   stop: (name: string) => api.post<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/stop`).then(unwrap),
@@ -196,10 +244,14 @@ export const processes = {
   getDotEnv: (name: string) => api.get<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/dotenv`).then(unwrap),
   updateDotEnv: (name: string, values: Record<string, string> = {}) =>
     api.patch<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/dotenv`, { values }).then(unwrap),
-  npmInstall: (name: string) => api.post<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/npm-install`).then(unwrap),
-  npmBuild: (name: string) => api.post<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/npm-build`).then(unwrap),
-  deploy: (name: string, payload: Record<string, unknown> = {}) => api.post<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/deploy`, payload).then(unwrap),
-  rollback: (name: string, payload: Record<string, unknown> = {}) => api.post<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/rollback`, payload).then(unwrap),
+  npmInstall: (name: string) =>
+    api.post<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/npm-install`, undefined, withLongTimeout()).then(unwrap),
+  npmBuild: (name: string) =>
+    api.post<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/npm-build`, undefined, withLongTimeout()).then(unwrap),
+  deploy: (name: string, payload: Record<string, unknown> = {}) =>
+    api.post<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/deploy`, payload, withLongTimeout()).then(unwrap),
+  rollback: (name: string, payload: Record<string, unknown> = {}) =>
+    api.post<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/rollback`, payload, withLongTimeout()).then(unwrap),
   delete: (name: string) => api.delete<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}`).then(unwrap),
   logs: (name: string, lines = 100) => api.get<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/logs?lines=${lines}`).then(unwrap),
   flush: (name: string) => api.post<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/flush`).then(unwrap)
@@ -212,11 +264,11 @@ export const system = {
 export const pm2Admin = {
   features: () => api.get<ApiResult<any>>("/api/v1/pm2/features").then(unwrap),
   runFeature: (actionId: string, payload: Record<string, unknown> = {}, acknowledge = "") =>
-    api.post<ApiResult<any>>("/api/v1/pm2/features/run", { actionId, payload, acknowledge }).then(unwrap),
-  save: () => api.post<ApiResult<any>>("/api/v1/pm2/save").then(unwrap),
-  startup: () => api.post<ApiResult<any>>("/api/v1/pm2/startup").then(unwrap),
-  resurrect: () => api.post<ApiResult<any>>("/api/v1/pm2/resurrect").then(unwrap),
-  kill: () => api.post<ApiResult<any>>("/api/v1/pm2/kill").then(unwrap),
+    api.post<ApiResult<any>>("/api/v1/pm2/features/run", { actionId, payload, acknowledge }, withLongTimeout()).then(unwrap),
+  save: () => api.post<ApiResult<any>>("/api/v1/pm2/save", undefined, withLongTimeout()).then(unwrap),
+  startup: () => api.post<ApiResult<any>>("/api/v1/pm2/startup", undefined, withLongTimeout()).then(unwrap),
+  resurrect: () => api.post<ApiResult<any>>("/api/v1/pm2/resurrect", undefined, withLongTimeout()).then(unwrap),
+  kill: () => api.post<ApiResult<any>>("/api/v1/pm2/kill", undefined, withLongTimeout()).then(unwrap),
   info: () => api.get<ApiResult<any>>("/api/v1/pm2/info").then(unwrap)
 };
 
@@ -233,20 +285,21 @@ export const alerts = {
 
 export const jcode = {
   status: () => api.get<ApiResult<any>>("/api/v1/jcode/status").then(unwrap),
-  install: () => api.post<ApiResult<any>>("/api/v1/jcode/install", { confirmation: "INSTALL_JCODE" }).then(unwrap),
+  install: () =>
+    api.post<ApiResult<any>>("/api/v1/jcode/install", { confirmation: "INSTALL_JCODE" }, withLongTimeout()).then(unwrap),
   startGateway: (payload: Record<string, unknown> = {}) =>
-    api.post<ApiResult<any>>("/api/v1/jcode/gateway/start", payload).then(unwrap),
-  stopGateway: () => api.post<ApiResult<any>>("/api/v1/jcode/gateway/stop").then(unwrap),
+    api.post<ApiResult<any>>("/api/v1/jcode/gateway/start", payload, withLongTimeout()).then(unwrap),
+  stopGateway: () => api.post<ApiResult<any>>("/api/v1/jcode/gateway/stop", undefined, withLongTimeout()).then(unwrap),
   runAction: (action: string, payload: Record<string, unknown> = {}) =>
     api.post<ApiResult<any>>("/api/v1/jcode/actions", { action, ...payload }).then(unwrap)
 };
 
 export const caddy = {
   status: () => api.get<ApiResult<any>>("/api/v1/caddy/status").then(unwrap),
-  install: () => api.post<ApiResult<any>>("/api/v1/caddy/install").then(unwrap),
+  install: () => api.post<ApiResult<any>>("/api/v1/caddy/install", undefined, withLongTimeout()).then(unwrap),
   addProxy: (payload: Record<string, unknown>) => api.post<ApiResult<any>>("/api/v1/caddy/proxies", payload).then(unwrap),
   deleteProxy: (domain: string) => api.delete<ApiResult<any>>(`/api/v1/caddy/proxies/${encodeURIComponent(domain)}`).then(unwrap),
-  restart: () => api.post<ApiResult<any>>("/api/v1/caddy/restart").then(unwrap)
+  restart: () => api.post<ApiResult<any>>("/api/v1/caddy/restart", undefined, withLongTimeout()).then(unwrap)
 };
 
 export default api;
