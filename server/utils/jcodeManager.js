@@ -69,18 +69,63 @@ function directoryExists(directoryPath) {
   }
 }
 
-function getJcodeRuntimeDir(baseEnv = process.env) {
-  const explicit = String(baseEnv.JCODE_RUNTIME_DIR || "").trim();
-  if (explicit) {
-    return path.resolve(explicit.replace(/^~/, getHomeDir()));
+function isWritableDirectory(directoryPath) {
+  if (!directoryExists(directoryPath)) {
+    return false;
   }
 
-  const runtimeDir = String(baseEnv.XDG_RUNTIME_DIR || "").trim();
-  if (runtimeDir && directoryExists(runtimeDir)) {
-    return runtimeDir;
+  const probePath = path.join(directoryPath, `.pm2-manager-jcode-write-${process.pid}-${Date.now()}`);
+  try {
+    fs.writeFileSync(probePath, "ok", { mode: 0o600 });
+    fs.unlinkSync(probePath);
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
+function resolveRuntimePath(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return "";
   }
 
+  if (raw === "~") {
+    return getHomeDir();
+  }
+
+  if (raw.startsWith("~/")) {
+    return path.join(getHomeDir(), raw.slice(2));
+  }
+
+  return path.resolve(raw);
+}
+
+function getDefaultJcodeRuntimeDir() {
   return path.join(os.tmpdir(), `pm2-manager-jcode-runtime-${getCurrentUid()}`);
+}
+
+function shouldUseSystemRuntimeDir(baseEnv = process.env) {
+  return ["1", "true", "yes", "on"].includes(
+    String(baseEnv.JCODE_USE_XDG_RUNTIME_DIR || "").trim().toLowerCase()
+  );
+}
+
+function getJcodeRuntimeDir(baseEnv = process.env) {
+  const explicit = resolveRuntimePath(baseEnv.JCODE_RUNTIME_DIR);
+  if (explicit) {
+    return explicit;
+  }
+
+  // PM2/root services often inherit /run/user/0, but that runtime socket can be
+  // stale or unusable after process restarts. Prefer a PM2 Manager-owned runtime
+  // directory unless the operator explicitly opts into the system XDG runtime dir.
+  const xdgRuntimeDir = resolveRuntimePath(baseEnv.XDG_RUNTIME_DIR);
+  if (shouldUseSystemRuntimeDir(baseEnv) && xdgRuntimeDir && isWritableDirectory(xdgRuntimeDir)) {
+    return xdgRuntimeDir;
+  }
+
+  return getDefaultJcodeRuntimeDir();
 }
 
 function ensureJcodeRuntimeDir(baseEnv = process.env) {
@@ -95,12 +140,30 @@ function ensureJcodeRuntimeDir(baseEnv = process.env) {
   } catch (_error) {
     // chmod is best-effort; some mounted filesystems do not support it.
   }
+
+  if (!isWritableDirectory(runtimeDir)) {
+    throw new Error(`JCode runtime directory is not writable: ${runtimeDir}`);
+  }
+
   return runtimeDir;
 }
 
 function getJcodeSocketPath(env = process.env) {
   const runtimeDir = ensureJcodeRuntimeDir(env);
   return runtimeDir ? path.join(runtimeDir, "jcode.sock") : null;
+}
+
+function getJcodeRuntimeArtifactPaths(socketPath) {
+  if (!socketPath) {
+    return [];
+  }
+
+  const runtimeDir = path.dirname(socketPath);
+  return [
+    socketPath,
+    path.join(runtimeDir, "jcode-debug.sock"),
+    path.join(runtimeDir, "jcode-daemon.lock")
+  ];
 }
 
 function getSocketState(socketPath) {
@@ -168,26 +231,47 @@ function probeUnixSocket(socketPath, timeoutMs = 1000) {
   });
 }
 
-async function removeStaleJcodeSocket(socketPath, reason = "stale") {
-  const state = getSocketState(socketPath);
-  if (!state.socket) {
-    return false;
+async function removeStaleJcodeRuntimeArtifacts(socketPath, reason = "stale") {
+  const artifactPaths = getJcodeRuntimeArtifactPaths(socketPath);
+  if (!artifactPaths.length) {
+    return { removed: false, paths: [] };
   }
 
-  try {
-    await fs.promises.unlink(socketPath);
+  const removedPaths = [];
+  for (const artifactPath of artifactPaths) {
+    try {
+      const stat = await fs.promises.lstat(artifactPath);
+      const basename = path.basename(artifactPath);
+      const safeName = ["jcode.sock", "jcode-debug.sock", "jcode-daemon.lock"].includes(basename);
+      if (!safeName || stat.isDirectory()) {
+        continue;
+      }
+      await fs.promises.unlink(artifactPath);
+      removedPaths.push(artifactPath);
+    } catch (error) {
+      if (error?.code !== "ENOENT") {
+        // Keep trying the remaining runtime artifacts.
+      }
+    }
+  }
+
+  if (removedPaths.length) {
     const nextState = await readState();
     nextState.lastAction = {
-      action: "remove-stale-terminal-socket",
+      action: "remove-stale-terminal-runtime",
       ok: true,
       at: Date.now()
     };
-    nextState.lastOutput = `Removed stale JCode socket ${socketPath} (${reason})`;
+    nextState.lastOutput = `Removed stale JCode runtime artifacts (${reason}): ${removedPaths.join(", ")}`;
     await writeState(nextState);
-    return true;
-  } catch (_error) {
-    return false;
   }
+
+  return { removed: Boolean(removedPaths.length), paths: removedPaths };
+}
+
+async function removeStaleJcodeSocket(socketPath, reason = "stale") {
+  const result = await removeStaleJcodeRuntimeArtifacts(socketPath, reason);
+  return result.removed;
 }
 
 async function waitForJcodeSocket(socketPath, timeoutMs = 12_000) {
@@ -231,7 +315,10 @@ function withJcodePathEnv(baseEnv = process.env) {
   env[pathKey] = uniqueValues([...getJcodeCandidateDirs(), ...currentPath.split(pathDelimiter())]).join(pathDelimiter());
 
   if (process.platform !== "win32") {
-    env.XDG_RUNTIME_DIR = ensureJcodeRuntimeDir(env);
+    const runtimeDir = ensureJcodeRuntimeDir(env);
+    env.JCODE_RUNTIME_DIR = runtimeDir;
+    env.XDG_RUNTIME_DIR = runtimeDir;
+    env.JCODE_SOCKET = path.join(runtimeDir, "jcode.sock");
   }
 
   return env;
@@ -440,9 +527,14 @@ async function getJcodeStatus() {
         url: getGatewayUrl(gatewayPort)
       },
       runtime: {
-        dir: process.platform === "win32" ? null : getJcodeRuntimeDir(),
+        dir: process.platform === "win32" ? null : getJcodeRuntimeDir(withJcodePathEnv()),
         socketPath: process.platform === "win32" ? null : getJcodeSocketPath(withJcodePathEnv()),
-        serverPid: state.jcodeServerPid && isPidRunning(state.jcodeServerPid) ? state.jcodeServerPid : null
+        serverPid: state.jcodeServerPid && isPidRunning(state.jcodeServerPid) ? state.jcodeServerPid : null,
+        source: process.env.JCODE_RUNTIME_DIR
+          ? "JCODE_RUNTIME_DIR"
+          : shouldUseSystemRuntimeDir(process.env)
+            ? "XDG_RUNTIME_DIR"
+            : "pm2-manager-default"
       },
       lastAction: state.lastAction || null,
       lastOutput: state.lastOutput || ""
@@ -750,12 +842,21 @@ async function ensureJcodeServer(binaryPath, cwd, env) {
     };
   }
 
-  if (getSocketState(socketPath).socket) {
-    const removed = await removeStaleJcodeSocket(socketPath, existingProbe.errorCode || "connection-refused");
-    staleSocketMessage = removed
-      ? `Removed stale JCode socket ${socketPath} (${existingProbe.errorCode || "not accepting connections"}).`
-      : `JCode socket ${socketPath} was not accepting connections, but PM2 Manager could not remove it.`;
-    if (!removed) {
+  const artifactPaths = getJcodeRuntimeArtifactPaths(socketPath);
+  const hasRuntimeArtifacts = artifactPaths.some((artifactPath) => {
+    try {
+      return fs.existsSync(artifactPath);
+    } catch (_error) {
+      return false;
+    }
+  });
+
+  if (hasRuntimeArtifacts) {
+    const cleanup = await removeStaleJcodeRuntimeArtifacts(socketPath, existingProbe.errorCode || "not accepting connections");
+    staleSocketMessage = cleanup.removed
+      ? `Removed stale JCode runtime files (${existingProbe.errorCode || "not accepting connections"}): ${cleanup.paths.join(", ")}.`
+      : `JCode runtime files near ${socketPath} were not accepting connections, but PM2 Manager could not remove them.`;
+    if (!cleanup.removed && getSocketState(socketPath).socket) {
       return {
         success: false,
         started: false,
@@ -801,7 +902,7 @@ async function ensureJcodeServer(binaryPath, cwd, env) {
       started: true,
       socketPath,
       message: staleSocketMessage,
-      error: `JCode server did not accept connections. Expected socket: ${socketPath}`
+      error: `JCode server did not accept connections. Expected socket: ${socketPath}. PM2 Manager now uses its own runtime directory by default; check that the folder is writable or set JCODE_RUNTIME_DIR to another writable path.`
     };
   }
 
@@ -880,10 +981,13 @@ async function createJcodeTerminalProcess(payload = {}) {
       return {
         success: false,
         child: null,
-        error: `${server.error || "JCode server failed to start"}. Try setting JCODE_RUNTIME_DIR to a writable folder and restart PM2 Manager.`
+        error: server.error || "JCode server failed to start"
       };
     }
     prelude = server.message || "";
+    if (server.socketPath) {
+      args.push("--socket", server.socketPath);
+    }
     args.push("connect");
   } else if (mode === "resume" && resumeName) {
     const server = await ensureJcodeServer(binaryPath, cwd, env);
@@ -891,10 +995,13 @@ async function createJcodeTerminalProcess(payload = {}) {
       return {
         success: false,
         child: null,
-        error: `${server.error || "JCode server failed to start"}. Try setting JCODE_RUNTIME_DIR to a writable folder and restart PM2 Manager.`
+        error: server.error || "JCode server failed to start"
       };
     }
     prelude = server.message || "";
+    if (server.socketPath) {
+      args.push("--socket", server.socketPath);
+    }
     args.push("--resume", resumeName.slice(0, 80));
   }
 

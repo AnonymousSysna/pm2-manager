@@ -549,7 +549,7 @@ export default function JCode() {
             </div>
           )}
         />
-        <div className="grid gap-2 md:grid-cols-3">
+        <div className="grid gap-2 md:grid-cols-4">
           <InsetPanel padding="sm">
             <Eyebrow>Status</Eyebrow>
             <p className="mt-1 text-sm text-text-2">
@@ -559,6 +559,12 @@ export default function JCode() {
           <InsetPanel padding="sm">
             <Eyebrow>Binary</Eyebrow>
             <p className="mt-1 truncate text-sm text-text-2">{status?.binaryPath || "-"}</p>
+          </InsetPanel>
+          <InsetPanel padding="sm">
+            <Eyebrow>Runtime socket</Eyebrow>
+            <p className="mt-1 truncate text-sm text-text-2" title={status?.runtime?.socketPath || ""}>
+              {status?.runtime?.socketPath || "-"}
+            </p>
           </InsetPanel>
           <InsetPanel padding="sm">
             <Eyebrow>Gateway PID</Eyebrow>

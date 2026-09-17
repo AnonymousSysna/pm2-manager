@@ -174,6 +174,23 @@ You do not need Caddy for the base app to run.
 
 ## JCode Extension
 
+### JCode runtime socket
+
+PM2 Manager runs JCode with its own writable runtime folder by default:
+
+```bash
+/tmp/pm2-manager-jcode-runtime-<uid>/jcode.sock
+```
+
+That folder is passed to JCode as `XDG_RUNTIME_DIR`, so the web terminal does not depend on `/run/user/<uid>`, which can leave stale sockets when running under PM2 or root. Override it only when needed:
+
+```bash
+JCODE_RUNTIME_DIR=/tmp/pm2-manager-jcode-runtime-0
+# Optional: use the host XDG runtime dir intentionally
+JCODE_USE_XDG_RUNTIME_DIR=1
+```
+
+
 Coding-agent workflows now run through **JCode**. The dashboard no longer ships a separate assistant page or internal chat endpoint.
 
 Use `Extensions` to install JCode. After installation, open the `JCode` tab to start a live browser terminal session, control status, gateway start/stop, pairing, provider command building, and basic checks. PM2 Manager does not store provider API keys; JCode manages provider access through its own login, provider profiles, or environment variables. If a stale Unix socket exists but refuses connections, PM2 Manager removes that stale `jcode.sock`, starts a fresh JCode server, and then attaches the terminal.
