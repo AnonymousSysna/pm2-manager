@@ -30,7 +30,10 @@ function createMockSpawn(behavior, calls) {
       };
 
       if (command === "where" || command === "which") {
-        finish(args[0] === "caddy" ? 0 : 1, "", args[0] === "caddy" ? "caddy\n" : "");
+        // Most tests assume caddy is on PATH; the unavailable case turns it off.
+        const caddyInPath = behavior.caddyAvailable !== false;
+        const found = args[0] === "caddy" && caddyInPath;
+        finish(found ? 0 : 1, "", found ? "caddy\n" : "");
         return;
       }
 
@@ -65,7 +68,14 @@ function loadControllerWithMockedSpawn(behavior, envOverrides) {
   process.env.CADDYFILE_PATH = envOverrides.caddyfilePath;
 
   const controllerPath = require.resolve("../controllers/caddyController");
+  // The controller only re-exports utils/caddyManager, which caches the managed
+  // sites path and captures `spawn` when it is first loaded. Clearing the
+  // controller's cache entry alone left the earlier test's paths and mock in
+  // place, so every test after the first read a temp directory that had already
+  // been deleted.
+  const managerPath = require.resolve("../utils/caddyManager");
   delete require.cache[controllerPath];
+  delete require.cache[managerPath];
   const controller = require("../controllers/caddyController");
 
   return {
@@ -84,6 +94,7 @@ function loadControllerWithMockedSpawn(behavior, envOverrides) {
         process.env.CADDYFILE_PATH = previousEnv.CADDYFILE_PATH;
       }
       delete require.cache[controllerPath];
+      delete require.cache[managerPath];
     }
   };
 }
@@ -270,7 +281,7 @@ test("getCaddyStatus skips HTTPS probes when caddy is unavailable", async () => 
   );
 
   const harness = loadControllerWithMockedSpawn(
-    {},
+    { caddyAvailable: false },
     {
       managedSitesPath,
       caddyfilePath
