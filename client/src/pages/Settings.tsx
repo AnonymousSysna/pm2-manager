@@ -16,6 +16,7 @@ import RangeInput from "../components/ui/RangeInput";
 import Select from "../components/ui/Select";
 import { Skeleton } from "../components/ui/Skeleton";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
+import { Eyebrow } from "../components/ui/Typography";
 
 export default function Settings() {
   const [info, setInfo] = useState({ pm2Version: "-", nodeVersion: "-", pm2Home: "-" });
@@ -463,19 +464,19 @@ function ProductionReadinessPanel({ readiness, loading }) {
         <>
           <div className="settings-readiness-grid">
             <InsetPanel padding="sm">
-              <p className="text-xs uppercase tracking-[0.16em] text-text-3">Config</p>
+              <Eyebrow>Config</Eyebrow>
               <p className={`mt-1 text-sm font-semibold ${ok ? "text-success-300" : "text-danger-300"}`}>
                 {ok ? "Ready" : "Needs attention"}
               </p>
             </InsetPanel>
             <InsetPanel padding="sm">
-              <p className="text-xs uppercase tracking-[0.16em] text-text-3">Mode</p>
+              <Eyebrow>Mode</Eyebrow>
               <p className="mt-1 text-sm font-semibold text-text-1">
                 {readiness?.production ? "Production" : "Development"}
               </p>
             </InsetPanel>
             <InsetPanel padding="sm">
-              <p className="text-xs uppercase tracking-[0.16em] text-text-3">PM2 Queue</p>
+              <Eyebrow>PM2 Queue</Eyebrow>
               <p className="mt-1 text-sm font-semibold text-text-1">
                 {Number(readiness?.pm2Queue?.queuedOperations || 0)} queued
               </p>

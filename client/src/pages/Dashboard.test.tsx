@@ -91,8 +91,8 @@ describe("Dashboard", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText("Operations Overview")).toBeInTheDocument();
-    expect(screen.getByText("Process Control")).toBeInTheDocument();
+    expect(screen.getByText("Triage")).toBeInTheDocument();
+    expect(screen.getByText("Processes")).toBeInTheDocument();
     expect(screen.getByText("Dependencies")).toBeInTheDocument();
     await waitFor(() => {
       const relation = screen.getAllByText(/depends on/i)[0];
@@ -123,10 +123,11 @@ describe("Dashboard", () => {
       </MemoryRouter>
     );
 
-    await screen.findByText("Operations Overview");
+    await screen.findByText("Triage");
 
     expect(screen.getAllByText("1 process needs attention").length).toBeGreaterThan(0);
-    expect(screen.getByText("2 recent alerts")).toBeInTheDocument();
+    expect(screen.getByText("Alerts")).toBeInTheDocument();
+    expect(screen.getByText("2 recent")).toBeInTheDocument();
     expect(screen.getAllByText("api").length).toBeGreaterThan(0);
   });
 });

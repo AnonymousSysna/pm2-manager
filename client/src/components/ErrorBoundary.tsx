@@ -92,7 +92,7 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
         </div>
         <details className="text-xs text-text-3">
           <summary className="cursor-pointer select-none">Technical details</summary>
-          <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border/70 bg-surface-2/60 p-2 text-[11px] leading-relaxed">
+          <pre className="stack-trace">
             {error.message}
             {error.stack ? `\n\n${error.stack}` : ""}
           </pre>

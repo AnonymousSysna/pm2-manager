@@ -3,7 +3,7 @@ import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 import { PanelHeader } from "../ui/PageLayout";
 import { InsetCard } from "../ui/Surface";
-import { SubsectionTitle, SupportingCopy } from "../ui/Typography";
+import { Eyebrow, SubsectionTitle, SupportingCopy } from "../ui/Typography";
 
 function buildAttentionItems({ alerts = [], processes = [], monitoringSummary = [] }) {
   const items = [];
@@ -246,7 +246,7 @@ function ActionBlock({ label, title, detail, tone, actionLabel, onAction }) {
     <InsetCard className="triage-card" padding="sm">
       <div className="flex h-full flex-col gap-2">
         <div className="triage-card-topline">
-          <SupportingCopy size="xs" className="uppercase tracking-[0.16em]">{label}</SupportingCopy>
+          <Eyebrow>{label}</Eyebrow>
           <Badge tone={tone}>{title}</Badge>
         </div>
         <SupportingCopy size="xs" className="min-h-8">{detail}</SupportingCopy>

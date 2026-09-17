@@ -98,6 +98,20 @@ because everything in those files ships to the browser.
   comment, so a silent catch is a decision rather than an oversight.
 
 
+## Design system contracts
+
+- Meta labels (the small uppercase label above a value) come from `Eyebrow` /
+  `.meta-label`. The raw `text-[11px]` and `tracking-[0.16em]` utilities are
+  defined once in `client/src/index.css`; `client/src/design-system.test.tsx`
+  fails if they reappear in a component. Long machine text, such as a stack
+  trace, uses `.stack-trace`.
+- Shared primitives carry a stable class hook (`banner`, `page-heading`,
+  `panel-heading`, `meta-label`) so a contract test can assert the component's
+  role instead of an incidental utility such as a corner radius.
+- Tests assert the copy users actually see. When a label changes on purpose the
+  assertion moves with it in the same change, so the suite keeps catching
+  regressions instead of drifting out of date.
+
 ## Recommended
 
 - Put the dashboard behind HTTPS.

@@ -73,7 +73,7 @@ vi.mock("../components/ProcessDetailModal", () => ({
 
 vi.mock("../components/dashboard/OperationsOverviewPanel", () => ({
   __esModule: true,
-  default: () => <div>Operations Overview</div>
+  default: () => <div>Triage</div>
 }));
 
 vi.mock("../components/dashboard/SetupChecklistPanel", () => ({
@@ -98,7 +98,7 @@ vi.mock("../components/dashboard/ThresholdAlertsPanel", () => ({
 
 vi.mock("../components/dashboard/ProcessListPanel", () => ({
   __esModule: true,
-  default: () => <div>Process Control</div>
+  default: () => <div>Processes</div>
 }));
 
 vi.mock("../components/dashboard/MetricsHistoryPanel", () => ({

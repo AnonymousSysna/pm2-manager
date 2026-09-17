@@ -133,6 +133,10 @@
     @apply text-base font-semibold text-text-1;
   }
 
+  .stack-trace {
+    @apply mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border/70 bg-surface-2/60 p-2 font-mono text-[11px] leading-relaxed;
+  }
+
   .page-intro {
     @apply border-border/80 bg-surface/90;
   }

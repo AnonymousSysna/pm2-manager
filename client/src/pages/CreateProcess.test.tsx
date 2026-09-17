@@ -50,7 +50,7 @@ describe("CreateProcess", () => {
       expect(nodeRuntimeStatusMock).toHaveBeenCalled();
     });
 
-    await user.click(screen.getByRole("button", { name: "Git Clone" }));
+    await user.click(screen.getByRole("button", { name: "Git" }));
     await user.type(screen.getByLabelText("Git Clone URL *"), "https://github.com/acme/sample-app.git");
 
     expect(screen.getByLabelText("Process Name *")).toHaveValue("sample-app");
@@ -70,7 +70,7 @@ describe("CreateProcess", () => {
       expect(nodeRuntimeStatusMock).toHaveBeenCalled();
     });
 
-    await user.click(screen.getByRole("button", { name: "Git Clone" }));
+    await user.click(screen.getByRole("button", { name: "Git" }));
     await user.type(screen.getByLabelText("Process Name *"), "sample-app");
     await user.type(screen.getByLabelText("Git Clone URL *"), "dasdas");
     await user.type(screen.getByLabelText("Project Directory *"), "sample-app");

@@ -36,7 +36,7 @@ describe("design system contracts", () => {
     );
 
     expect(screen.getByText("Warning badge")).toHaveClass(semanticToneClasses.warning.badge);
-    expect(screen.getByText("Danger banner").closest(".rounded-md")).toHaveClass(semanticToneClasses.danger.banner);
+    expect(screen.getByText("Danger banner").closest(".banner")).toHaveClass(semanticToneClasses.danger.banner);
     expect(screen.getByText("Info text")).toHaveClass(semanticToneClasses.info.text);
     expect(screen.getByRole("button", { name: "Outline success" })).toHaveClass(semanticToneClasses.success.outlineButton);
   });
