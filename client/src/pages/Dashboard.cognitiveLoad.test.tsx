@@ -10,9 +10,9 @@ import Dashboard from "./Dashboard";
 const BUDGET = {
   panels: 6,
   sections: 7,
-  buttons: 36,
+  buttons: 30,
   inputs: 6,
-  textChars: 1100
+  textChars: 982
 };
 
 const catalogMock = vi.fn();

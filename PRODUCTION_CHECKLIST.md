@@ -127,15 +127,18 @@ because everything in those files ships to the browser.
   `client/src/pages/Dashboard.cognitiveLoad.test.tsx` renders it against a
   fixed three-process, six-alert fixture and fails when the panel, section,
   control, or text counts climb past it. The budget is the reduced state
-  (6 panels, 7 sections, 36 controls, 1100 characters), not an aspiration, so
+  (6 panels, 7 sections, 30 controls, 982 characters), not an aspiration, so
   page growth is a deliberate edit to the numbers.
 - One dataset gets one surface. Alerts used to render twice on the overview:
   once in the triage attention queue and again in a separate 20-row alert feed
   with the same process, metric, threshold, timestamp and open-logs button.
   The queue absorbed the feed's `message` text and the feed panel is gone.
-- A repeated control label is a finding. The same destination appeared under
-  the same word several times on one screen; the control count in that test is
-  what keeps the total honest.
+- A repeated control label is a finding. The triage panel used to show
+  "History" eight times on one screen: in the page header, in the panel
+  header, on two of the four status cards, and on every queue row. All eight
+  went to the same unfiltered view. Global destinations now have one entry
+  point per screen, the status cards are read-only, and the row links are
+  scoped to the process the row is about.
 
 ## Type checking
 

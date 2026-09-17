@@ -1446,7 +1446,7 @@ export default function Dashboard() {
         processes={processes}
         monitoringSummary={monitoringSummary}
         onOpenLogs={openLogsForProcess}
-        onOpenHistory={() => openDeploymentHistory()}
+        onOpenHistory={openDeploymentHistory}
       />
 
       <div className="dashboard-primary-flow">
