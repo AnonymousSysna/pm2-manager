@@ -31,7 +31,7 @@ curl -i http://localhost:8000/ready
 - Alert channel management and notification history
 - Process metadata and `.env` editing
 - PM2 daemon actions
-- AI Operator for provider-backed PM2 guidance and guarded execution
+- JCode extension guidance for coding-agent workflows outside the dashboard shell
 - Optional Caddy install / status / reverse proxy management
 - Interpreter detection
 
@@ -172,31 +172,33 @@ You do not need Caddy for the base app to run.
 - Install Caddy manually and configure reverse proxy later
 
 
-## AI Operator
+## JCode Extension
 
-The dashboard includes an **AI Operator** page at `/dashboard/ai`. It lets an authenticated operator paste an AI provider URL, API key, and model, then chat about PM2 operations in a Codex-like terminal flow.
+Coding-agent workflows now run through **JCode** from the `Extensions` page. The dashboard no longer ships a separate assistant page or internal chat endpoint.
 
-Supported request formats:
+The `Extensions` page includes JCode install commands, provider login commands, a web-gateway shortcut, and a command builder for OpenAI-compatible endpoints. PM2 Manager does not store provider API keys; JCode should manage them through OAuth, `jcode login`, `jcode provider add`, or environment variables.
 
-- OpenAI-compatible `/chat/completions` APIs
-- Anthropic Claude `/v1/messages` APIs
+Common JCode commands:
 
-The AI Operator is deliberately not a raw shell. It maps AI suggestions to the guarded PM2 feature catalog, validates every action, redacts output, and keeps critical actions behind confirmation. Use these modes depending on trust level:
+```bash
+curl -fsSL https://jcode.sh/install | bash
+jcode login --provider openai
+jcode login --provider claude
+jcode login --provider openai-compatible
+jcode serve
+# then open http://<server-ip>:7643 from the JCode card
+```
 
-- **Plan only** for normal review
-- **Auto-run checks only** for diagnostics
-- **Auto-run checks + safe writes** when you want the AI to run non-critical PM2 actions
+For a custom OpenAI-compatible endpoint, prefer a secret-safe env-variable setup:
 
-Provider API keys are not stored on the backend. The browser can optionally remember a key in local storage, but this should only be used on a trusted machine. See `AI_OPERATOR_SECURITY.md` before exposing this dashboard publicly.
-
-Optional AI environment controls:
-
-```env
-AI_RATE_LIMIT_MAX=20
-AI_TIMEOUT_MS=90000
-AI_MAX_ACTIONS=4
-AI_ACTION_OUTPUT_LIMIT=6000
-AI_ALLOW_HTTP=0
+```bash
+export JCODE_API_KEY="paste-key-here"
+jcode provider add pm2-web \
+  --base-url https://provider.example/v1 \
+  --model your-model-id \
+  --api-key-env JCODE_API_KEY \
+  --set-default
+jcode --provider-profile pm2-web auth-test
 ```
 
 ## Updating an Existing Install

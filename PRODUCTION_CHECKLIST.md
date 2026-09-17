@@ -37,14 +37,11 @@ Use this before exposing PM2 Manager outside localhost.
 - Use `pm2 save` after intentional process changes that should survive reboot.
 - Prefer the Overview page for daily operations; use PM2 Features for advanced recovery/configuration work.
 
-## AI Operator
+## JCode extension
 
-- [ ] Keep provider URLs on HTTPS in production.
-- [ ] Leave `AI_ALLOW_HTTP=0` unless using a trusted local AI gateway.
-- [ ] Use provider API keys with spending limits or short-lived access where possible.
-- [ ] Do not use browser key memory on shared machines.
-- [ ] Test Plan-only mode before enabling auto-run checks or safe writes.
-- [ ] Confirm that critical PM2 actions still require manual confirmation.
+- Keep provider API keys out of PM2 Manager and configure them in JCode directly.
+- Use `jcode login` or `jcode provider add --api-key-env` instead of browser-stored secrets.
+- Run JCode agent sessions in SSH, tmux, or `jcode serve` so the dashboard remains an operations surface, not a shell.
 
 ## Installer readiness
 

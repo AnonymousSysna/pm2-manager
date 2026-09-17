@@ -467,6 +467,40 @@
     @apply truncate text-xs text-text-3;
   }
 
+
+  .jcode-extension-grid {
+    @apply grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)];
+  }
+
+  .jcode-extension-summary {
+    @apply flex min-w-0 items-start gap-3;
+  }
+
+  .jcode-icon-badge {
+    @apply flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-brand-500/30 bg-brand-500/10 text-brand-300;
+  }
+
+  .jcode-command-row {
+    @apply grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-border/70 bg-surface-2/50 px-2.5 py-2;
+  }
+
+  .jcode-provider-grid {
+    @apply grid gap-2 lg:grid-cols-4;
+  }
+
+  .jcode-compact-field {
+    @apply grid gap-1 text-xs font-semibold text-text-2;
+  }
+
+  .jcode-compact-field input,
+  .jcode-compact-field select {
+    @apply min-h-10 rounded-lg px-2.5 py-1.5 text-xs;
+  }
+
+  .jcode-command-preview {
+    @apply max-h-56 overflow-auto whitespace-pre-wrap rounded-xl border border-border/70 bg-bg/60 p-3 font-mono text-xs leading-5 text-text-2;
+  }
+
   .pm2-workspace-grid {
     @apply grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px];
   }
@@ -881,249 +915,6 @@
 }
 
 @layer components {
-  .ai-page {
-    @apply w-full min-w-0;
-  }
-
-
-  .ai-connection-summary-card {
-    @apply page-panel grid gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center;
-  }
-
-  .ai-connection-summary-main {
-    @apply flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between;
-  }
-
-  .ai-connection-pills {
-    @apply flex min-w-0 flex-wrap items-center gap-1.5;
-  }
-
-  .ai-connection-summary-actions {
-    @apply flex shrink-0 items-center justify-start lg:justify-end;
-  }
-
-  .ai-connection-modal-body {
-    @apply py-3;
-  }
-
-  .ai-setup-card {
-    @apply page-panel p-3;
-  }
-
-  .ai-setup-head {
-    @apply flex flex-col gap-2 border-b border-border/70 pb-3 md:flex-row md:items-center md:justify-between;
-  }
-
-  .ai-setup-actions {
-    @apply flex shrink-0 items-center gap-2;
-  }
-
-  .ai-setup-grid {
-    @apply mt-3 grid gap-2 lg:grid-cols-12;
-  }
-
-  .ai-provider-field {
-    @apply lg:col-span-3;
-  }
-
-  .ai-url-field {
-    @apply lg:col-span-4;
-  }
-
-  .ai-model-field {
-    @apply lg:col-span-5 xl:col-span-3;
-  }
-
-  .ai-key-field {
-    @apply lg:col-span-5 xl:col-span-4;
-  }
-
-  .ai-mode-field {
-    @apply lg:col-span-4 xl:col-span-3;
-  }
-
-  .ai-remember-key {
-    @apply flex min-h-11 items-center gap-2 rounded-xl border border-border/70 bg-surface-2/50 px-3 py-2 text-sm font-medium text-text-2 lg:col-span-3 xl:col-span-2;
-  }
-
-  .ai-remember-key input {
-    @apply shrink-0;
-  }
-
-
-  .ai-setup-card-modal {
-    @apply border-border/70 bg-surface-2/40 shadow-none;
-  }
-
-  .ai-setup-grid-modal {
-    @apply mt-0 md:grid-cols-6 lg:grid-cols-6;
-  }
-
-  .ai-setup-grid-modal .ai-provider-field,
-  .ai-setup-grid-modal .ai-url-field,
-  .ai-setup-grid-modal .ai-mode-field {
-    @apply md:col-span-6 lg:col-span-6 xl:col-span-6;
-  }
-
-  .ai-setup-grid-modal .ai-model-field,
-  .ai-setup-grid-modal .ai-key-field {
-    @apply md:col-span-3 lg:col-span-3 xl:col-span-3;
-  }
-
-  .ai-setup-grid-modal .ai-remember-key {
-    @apply md:col-span-6 lg:col-span-6 xl:col-span-6;
-  }
-
-  .ai-segmented-control {
-    @apply grid gap-1 rounded-xl border border-border/70 bg-bg/60 p-1 sm:grid-cols-2;
-  }
-
-  .ai-segmented-control-three {
-    @apply sm:grid-cols-3;
-  }
-
-  .ai-segmented-control button {
-    @apply min-h-9 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold text-text-3 transition hover:bg-surface/70 hover:text-text-1;
-  }
-
-  .ai-segmented-control button[aria-pressed="true"] {
-    @apply bg-surface text-text-1 shadow-sm ring-1 ring-brand-500/20;
-  }
-
-  .ai-connection-dialog {
-    @apply max-w-xl rounded-2xl p-3;
-  }
-
-  .ai-connection-dialog .panel-heading {
-    @apply text-base;
-  }
-
-  .ai-connection-dialog .panel-muted {
-    @apply text-xs;
-  }
-
-  .ai-connection-modal-body {
-    @apply py-2;
-  }
-
-  .ai-connection-modal-card {
-    @apply rounded-xl border border-border/70 bg-surface-2/50 p-2.5 shadow-none;
-  }
-
-  .ai-connection-modal-status {
-    @apply mb-2 flex min-w-0 flex-wrap items-center gap-1.5;
-  }
-
-  .ai-connection-compact-stack {
-    @apply grid gap-2;
-  }
-
-  .ai-connection-two-col {
-    @apply grid gap-2 md:grid-cols-2;
-  }
-
-  .ai-key-row {
-    @apply grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end;
-  }
-
-  .ai-key-row-input {
-    @apply min-w-0;
-  }
-
-  .ai-compact-field {
-    @apply space-y-1;
-  }
-
-  .ai-compact-field label,
-  .ai-compact-field > label,
-  .ai-compact-field > label > span {
-    @apply text-xs;
-  }
-
-  .ai-compact-input {
-    @apply min-h-9 rounded-lg px-2.5 py-1.5 text-xs;
-  }
-
-  .ai-segmented-control-tight {
-    @apply gap-1 rounded-lg p-1;
-  }
-
-  .ai-segmented-control-tight button {
-    @apply min-h-8 rounded-md px-2 py-1 text-[11px];
-  }
-
-  .ai-remember-key-compact {
-    @apply min-h-9 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs md:min-w-[136px];
-  }
-
-  .ai-workspace {
-    display: grid;
-    gap: 0.75rem;
-    align-items: start;
-  }
-
-  @media (min-width: 1280px) {
-    .ai-workspace {
-      grid-template-columns: minmax(0, 1.45fr) minmax(360px, 0.9fr);
-    }
-  }
-
-  .ai-terminal-panel {
-    @apply page-panel flex min-h-[520px] min-w-0 flex-col gap-3 p-3;
-  }
-
-  .ai-message-window {
-    @apply min-h-[300px] flex-1;
-  }
-
-  .ai-prompt-strip {
-    @apply flex gap-1.5 overflow-x-auto pb-1;
-  }
-
-  .ai-prompt-strip .prompt-chip {
-    @apply shrink-0;
-  }
-
-  .ai-prompt-form {
-    @apply grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end;
-  }
-
-  .ai-prompt-input {
-    @apply min-h-[72px];
-  }
-
-  .ai-send-button {
-    @apply w-full lg:w-auto;
-  }
-
-  .ai-right-rail {
-    @apply grid min-w-0 gap-3;
-  }
-
-  .ai-side-card {
-    @apply page-panel min-w-0 space-y-2 p-3;
-  }
-
-  .ai-context-grid {
-    @apply grid grid-cols-2 gap-2 sm:grid-cols-4;
-  }
-
-  .ai-card-list {
-    @apply grid gap-2;
-  }
-
-  .ai-action-row {
-    @apply grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center;
-  }
-
-  .ai-execution-card {
-    @apply grid min-w-0 gap-2;
-  }
-
-  .ai-queue-card {
-    @apply max-h-[290px] overflow-y-auto;
-  }
-
   .pm2-tools-control-panel {
     @apply space-y-2 p-3;
   }
@@ -1525,42 +1316,7 @@
   }
 }
 
-@layer components {
-  .ai-connection-dialog {
-    width: min(100%, 34rem);
-  }
 
-  .ai-connection-dialog > div:first-child {
-    padding-bottom: 0.5rem;
-    gap: 0.5rem;
-  }
-
-  .ai-connection-dialog > div:last-child {
-    padding-top: 0.5rem;
-  }
-
-  .ai-connection-action-row {
-    @apply flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between;
-  }
-
-  .ai-connection-action-row .ai-remember-key-compact {
-    @apply flex-1 sm:flex-none;
-  }
-
-  .ai-connection-action-row button {
-    @apply shrink-0;
-  }
-}
-
-@layer components {
-  .ai-evidence-list {
-    @apply mt-2 grid gap-1.5;
-  }
-
-  .ai-evidence-row {
-    @apply flex min-w-0 items-center gap-2;
-  }
-}
 
 @layer components {
   .confirm-dialog-body {
@@ -1572,47 +1328,6 @@
   }
 }
 
-@layer components {
-  .ai-agent-workspace {
-    align-items: start;
-  }
-
-  @media (min-width: 1280px) {
-    .ai-agent-workspace {
-      grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.85fr);
-    }
-  }
-
-  .ai-agent-terminal-panel {
-    min-height: 500px;
-  }
-
-  .ai-agent-prompt-form {
-    align-items: stretch;
-  }
-
-  .ai-agent-rail .ai-side-card {
-    padding: 0.75rem;
-  }
-
-  .ai-agent-stack {
-    display: grid;
-    gap: 0.375rem;
-  }
-
-  .ai-agent-thought-row {
-    display: flex;
-    min-width: 0;
-    align-items: flex-start;
-    gap: 0.5rem;
-  }
-
-  .ai-agent-log-row {
-    display: grid;
-    min-width: 0;
-    gap: 0.375rem;
-  }
-}
 
 @layer components {
   .logs-toolbar-card {

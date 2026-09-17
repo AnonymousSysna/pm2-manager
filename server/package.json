@@ -1,6 +1,6 @@
 {
   "name": "pm2-dashboard-server",
-  "version": "1.0.47",
+  "version": "1.0.48",
   "main": "index.ts",
   "type": "commonjs",
   "scripts": {

@@ -27,7 +27,6 @@ if (environmentReport.warnings.length > 0) {
 const processRoutes = require("./routes/processes");
 const authRoutes = require("./routes/auth");
 const pm2Routes = require("./routes/pm2");
-const aiRoutes = require("./routes/ai");
 const alertRoutes = require("./routes/alerts");
 const caddyRoutes = require("./routes/caddy");
 const systemRoutes = require("./routes/system");
@@ -255,7 +254,6 @@ v1.use(verifyCsrf);
 v1.use("/auth", authRoutes);
 v1.use("/processes", processRoutes);
 v1.use("/pm2", pm2Routes);
-v1.use("/ai", aiRoutes);
 v1.use("/alerts", alertRoutes);
 v1.use("/caddy", caddyRoutes);
 v1.use("/system", systemRoutes);

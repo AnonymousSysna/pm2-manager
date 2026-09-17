@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Bell, Bot, Globe, History, Menu, Plus, Puzzle, ScrollText, Settings, LogOut, Moon, Sun, X, TerminalSquare } from "lucide-react";
+import { Activity, Bell, Globe, History, Menu, Plus, Puzzle, ScrollText, Settings, LogOut, Moon, Sun, X, TerminalSquare } from "lucide-react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useSocket } from "../hooks/useSocket";
 import { auth } from "../api";
@@ -29,7 +29,6 @@ const navGroups = [
   {
     label: "Advanced",
     links: [
-      { to: "/dashboard/ai", label: "AI", icon: Bot },
       { to: "/dashboard/pm2-features", label: "PM2 Tools", icon: TerminalSquare },
       { to: "/dashboard/extensions", label: "Extensions", icon: Puzzle }
     ]
@@ -43,7 +42,6 @@ const pageTitleMap = {
   "/dashboard/logs": "Logs",
   "/dashboard/history": "History",
   "/dashboard/settings": "Settings",
-  "/dashboard/ai": "AI Operator",
   "/dashboard/pm2-features": "PM2 Tools",
   "/dashboard/extensions": "Extensions",
   "/dashboard/caddy": "Caddy Proxy"
