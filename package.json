@@ -1,6 +1,6 @@
 {
   "name": "pm2-dashboard",
-  "version": "1.0.5",
+  "version": "1.0.7",
   "private": true,
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
@@ -10,17 +10,18 @@
     "start": "npm --prefix server run start",
     "onetap": "node ./scripts/onetap.js",
     "typecheck": "npm --prefix client run typecheck && npm --prefix server run typecheck",
-    "pm2:start": "npm --prefix server exec pm2 -- start ./ecosystem.config.js",
-    "pm2:stop": "npm --prefix server exec pm2 -- stop pm2-dashboard",
-    "pm2:restart": "npm --prefix server exec pm2 -- restart pm2-dashboard",
-    "pm2:logs": "npm --prefix server exec pm2 -- logs pm2-dashboard",
-    "pm2:save": "npm --prefix server exec pm2 -- save",
+    "pm2:start": "node ./scripts/pm2-local.js start",
+    "pm2:stop": "node ./scripts/pm2-local.js stop",
+    "pm2:restart": "node ./scripts/pm2-local.js restart",
+    "pm2:logs": "node ./scripts/pm2-local.js logs",
+    "pm2:save": "node ./scripts/pm2-local.js save",
     "deploy": "npm run build && npm run pm2:start",
     "onetap:linux": "node ./scripts/onetap.js",
     "onetap:windows": "node ./scripts/onetap.js",
     "test:installer": "node scripts/onetap.test.js",
     "preflight": "npm --prefix server run preflight",
-    "verify": "npm run typecheck && npm --prefix server test && npm --prefix client test"
+    "verify": "npm run typecheck && npm --prefix server test && npm --prefix client test",
+    "pm2:status": "node ./scripts/pm2-local.js status"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

@@ -7,6 +7,22 @@ Web app for operating PM2-managed services with real-time monitoring, deployment
 - Auth: JWT cookies plus CSRF protection
 - Default app URL: `http://<host>:8000`
 
+### v1.0.7 clean reinstall note
+
+The one-tap installer is safe to run after removing the old PM2 process or old project folder. It now prints progress for dependency install, build, PM2 start, backend readiness, HTTPS setup, and final URLs. If a target folder exists but is broken/non-empty, run with `--force-clean` to move the old folder aside before cloning again.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AnonymousSysna/pm2-manager/main/scripts/onetap.sh | bash -s -- --force-clean
+```
+
+After install, these commands work from the project root:
+
+```bash
+npm run pm2:status
+npm run pm2:logs -- --lines 120
+curl -i http://localhost:8000/ready
+```
+
 ## What It Includes
 
 - Process lifecycle controls: start, stop, restart, reload, delete

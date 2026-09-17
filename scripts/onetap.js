@@ -6,6 +6,7 @@ const path = require("path");
 const crypto = require("crypto");
 const dns = require("dns").promises;
 const net = require("net");
+const http = require("http");
 const readline = require("readline");
 const { spawn, spawnSync } = require("child_process");
 
@@ -329,6 +330,27 @@ function randomBase64Url(bytes) {
   return crypto.randomBytes(bytes).toString("base64url");
 }
 
+function createPasswordHash(appDir, password) {
+  const candidates = [
+    path.join(appDir, "server", "node_modules", "bcryptjs"),
+    "bcryptjs"
+  ];
+
+  let lastError = null;
+  for (const candidate of candidates) {
+    try {
+      const bcrypt = require(candidate);
+      return bcrypt.hashSync(password, 10);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw new Error(
+    `Unable to generate PM2_PASS_HASH. Run npm --prefix server install first. ${lastError?.message || ""}`
+  );
+}
+
 function runCommand(command, args, options = {}) {
   const {
     cwd = process.cwd(),
@@ -605,11 +627,15 @@ function prepareEnvFile(appDir, options) {
   }
 
   const hasUsableHash = !needsGeneratedValue(getEnvValue(currentValues, "PM2_PASS_HASH"));
-  const hasUsablePass = !needsGeneratedValue(getEnvValue(currentValues, "PM2_PASS"));
-  if (!hasUsableHash && !hasUsablePass) {
-    generatedCredentials.PM2_PASS = randomBase64Url(12);
-    updates.PM2_PASS = generatedCredentials.PM2_PASS;
-    removals.push("PM2_PASS_HASH");
+  const existingPlainPass = getEnvValue(currentValues, "PM2_PASS");
+  const hasUsablePass = !needsGeneratedValue(existingPlainPass);
+  if (!hasUsableHash) {
+    const plainPassword = hasUsablePass ? existingPlainPass : randomBase64Url(12);
+    if (!hasUsablePass) {
+      generatedCredentials.PM2_PASS = plainPassword;
+    }
+    updates.PM2_PASS_HASH = createPasswordHash(appDir, plainPassword);
+    removals.push("PM2_PASS");
   }
 
   if (needsGeneratedValue(getEnvValue(currentValues, "JWT_SECRET"))) {
@@ -664,34 +690,101 @@ function applyProxyEnvOverrides(appDir, options) {
   return true;
 }
 
-async function ensureBaseInstall(appDir) {
+async function installDependencies(appDir) {
   const npmCommand = getNpmCommand();
-  console.log("Installing dependencies...");
+  console.log("[1/6] Installing root dependencies...");
   await runCommand(npmCommand, ["install"], { cwd: appDir });
+  console.log("[2/6] Installing backend dependencies, including local PM2...");
   await runCommand(npmCommand, ["--prefix", "server", "install"], { cwd: appDir });
+  console.log("[3/6] Installing frontend dependencies...");
   await runCommand(npmCommand, ["--prefix", "client", "install"], { cwd: appDir });
+}
 
-  console.log("Building client...");
+async function buildClient(appDir) {
+  const npmCommand = getNpmCommand();
+  console.log("[4/6] Building dashboard UI...");
   await runCommand(npmCommand, ["run", "build"], { cwd: appDir });
 }
 
-async function ensurePm2Process(appDir) {
-  const npmCommand = getNpmCommand();
-  const probe = await runCommand(npmCommand, ["--prefix", "server", "exec", "pm2", "--", "describe", APP_PROCESS_NAME], {
+async function ensureBaseInstall(appDir) {
+  await installDependencies(appDir);
+  await buildClient(appDir);
+}
+
+async function runPm2Local(appDir, args, options = {}) {
+  return runCommand(process.execPath, [path.join(appDir, "scripts", "pm2-local.js"), ...args], {
     cwd: appDir,
+    ...options
+  });
+}
+
+async function ensurePm2Process(appDir) {
+  const probe = await runPm2Local(appDir, ["describe"], {
     allowNonZero: true,
     quiet: true
   });
 
   if (probe.code === 0) {
-    console.log(`Restarting existing ${APP_PROCESS_NAME}...`);
-    await runCommand(npmCommand, ["run", "pm2:restart"], { cwd: appDir });
+    console.log("[5/6] Restarting existing PM2 dashboard process...");
+    await runPm2Local(appDir, ["restart"]);
     return "restarted";
   }
 
-  console.log(`Starting ${APP_PROCESS_NAME}...`);
-  await runCommand(npmCommand, ["run", "pm2:start"], { cwd: appDir });
+  console.log("[5/6] Starting PM2 dashboard process...");
+  await runPm2Local(appDir, ["start"]);
   return "started";
+}
+
+function requestHttpReady(port, timeoutMs = 2500) {
+  return new Promise((resolve) => {
+    const req = http.get(
+      {
+        hostname: "127.0.0.1",
+        port,
+        path: "/ready",
+        timeout: timeoutMs
+      },
+      (res) => {
+        res.resume();
+        resolve(res.statusCode && res.statusCode >= 200 && res.statusCode < 500);
+      }
+    );
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(false);
+    });
+    req.on("error", () => resolve(false));
+  });
+}
+
+async function waitForBackendReady(appDir, port) {
+  console.log("[6/6] Waiting for backend readiness...");
+  for (let attempt = 1; attempt <= 30; attempt += 1) {
+    if (await requestHttpReady(port)) {
+      console.log("Backend readiness check passed.");
+      return true;
+    }
+    if (attempt === 1 || attempt % 5 === 0) {
+      console.log(`Still waiting for http://127.0.0.1:${port}/ready ...`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
+  console.log("Backend readiness check failed. Recent PM2 logs:");
+  await runPm2Local(appDir, ["logs", "--lines", "120", "--nostream"], {
+    allowNonZero: true
+  });
+  throw new Error(`Backend did not become ready on http://127.0.0.1:${port}/ready`);
+}
+
+async function savePm2ProcessList(appDir) {
+  const result = await runPm2Local(appDir, ["save"], {
+    allowNonZero: true,
+    quiet: true
+  });
+  if (result.code !== 0) {
+    console.log("PM2 save skipped or failed; the dashboard is still running, but startup persistence may need manual setup.");
+  }
 }
 
 function waitForSocket(host, port, timeoutMs = 3000) {
@@ -879,6 +972,7 @@ function printSummary({
   console.log(`- Platform: ${installContext.platform}`);
   console.log(`- Privileges: ${installContext.privilegeContext.mode}`);
   console.log(`- PM2 app: ${APP_PROCESS_NAME} (${pm2Action})`);
+  console.log(`- Local health: http://localhost:${options.port}/ready`);
   console.log(`- Local HTTP: http://localhost:${options.port}`);
   console.log(`- Public URL: ${getPublicUrl(options)}`);
 
@@ -925,7 +1019,11 @@ function printSummary({
   }
 
   console.log("");
-  console.log(`PM2 logs: npm --prefix server exec pm2 -- logs ${APP_PROCESS_NAME}`);
+  console.log("Useful commands");
+  console.log("- Status: npm run pm2:status");
+  console.log(`- Logs: npm run pm2:logs -- --lines 120`);
+  console.log("- Restart: npm run pm2:restart");
+  console.log(`- Health: curl -i http://localhost:${options.port}/ready`);
 }
 
 async function main() {
@@ -955,10 +1053,13 @@ async function main() {
   options = await maybePromptForSsl(options, privilegeContext);
 
   ensureDirExists(path.join(appDir, "logs"));
+  await installDependencies(appDir);
   const envResult = prepareEnvFile(appDir, options);
 
-  await ensureBaseInstall(appDir);
+  await buildClient(appDir);
   const pm2Action = await ensurePm2Process(appDir);
+  await waitForBackendReady(appDir, options.port);
+  await savePm2ProcessList(appDir);
   const sslResult = await maybeConfigureSsl(appDir, options, installContext);
   if (sslResult.proxyConfigured && applyProxyEnvOverrides(appDir, options)) {
     await runCommand(getNpmCommand(), ["run", "pm2:restart"], { cwd: appDir });
@@ -976,7 +1077,14 @@ async function main() {
 
 if (require.main === module) {
   main().catch((error) => {
+    console.error("");
+    console.error("Install failed");
     console.error(error?.message || error);
+    console.error("");
+    console.error("Recovery commands");
+    console.error("- Check PM2: npm run pm2:status");
+    console.error("- Read logs: npm run pm2:logs -- --lines 120");
+    console.error("- Restart after fixing env: npm run pm2:restart");
     process.exitCode = 1;
   });
 }
@@ -992,5 +1100,11 @@ module.exports = {
   getPublicOrigins,
   mergeOrigins,
   upsertEnvContent,
+  createPasswordHash,
+  installDependencies,
+  buildClient,
+  ensureBaseInstall,
+  requestHttpReady,
+  waitForBackendReady,
   buildAdminNextSteps
 };

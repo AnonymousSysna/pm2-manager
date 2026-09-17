@@ -44,3 +44,10 @@ Use this before exposing PM2 Manager outside localhost.
 - [ ] Do not use browser key memory on shared machines.
 - [ ] Test Plan-only mode before enabling auto-run checks or safe writes.
 - [ ] Confirm that critical PM2 actions still require manual confirmation.
+
+## Installer readiness
+
+- Confirm `npm run pm2:status` shows `pm2-dashboard` online.
+- Confirm `curl -i http://localhost:8000/ready` returns a non-5xx response.
+- Confirm final installer summary prints the local URL, public URL, HTTPS status, generated credentials, and log commands.
+- Rotate generated credentials after pasting them into chat, tickets, logs, or screenshots.

@@ -6,6 +6,7 @@ REPO_URL="${REPO_URL:-$DEFAULT_REPO_URL}"
 TARGET_DIR="${PM2_MANAGER_DIR:-$HOME/pm2-manager}"
 FORWARD_ARGS=()
 POSITIONAL_TARGET=""
+FORCE_CLEAN="${PM2_MANAGER_FORCE_CLEAN:-0}"
 
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -36,6 +37,11 @@ while [ "$#" -gt 0 ]; do
       FORWARD_ARGS+=("$1")
       shift
       ;;
+    --force-clean)
+      FORCE_CLEAN="1"
+      FORWARD_ARGS+=("$1")
+      shift
+      ;;
     *)
       if [ -z "$POSITIONAL_TARGET" ] && [[ "$1" != -* ]]; then
         POSITIONAL_TARGET="$1"
@@ -56,11 +62,21 @@ if [ -f "package.json" ] && grep -q '"name": "pm2-dashboard"' package.json 2>/de
 else
   APP_DIR="$TARGET_DIR"
   if [ -d "$APP_DIR/.git" ]; then
+    echo "Updating existing pm2-manager checkout: $APP_DIR"
     git -C "$APP_DIR" pull --ff-only
   elif [ -e "$APP_DIR" ] && [ "$(ls -A "$APP_DIR" 2>/dev/null || true)" != "" ]; then
-    echo "Target directory exists and is not empty: $APP_DIR" >&2
-    exit 1
+    if [ "$FORCE_CLEAN" = "1" ]; then
+      BACKUP_DIR="${APP_DIR}.backup.$(date +%Y%m%d%H%M%S)"
+      echo "Target directory is not empty. Moving it to: $BACKUP_DIR"
+      mv "$APP_DIR" "$BACKUP_DIR"
+      git clone "$REPO_URL" "$APP_DIR"
+    else
+      echo "Target directory exists and is not empty: $APP_DIR" >&2
+      echo "Use --force-clean to move it aside and reinstall cleanly." >&2
+      exit 1
+    fi
   else
+    echo "Cloning pm2-manager into: $APP_DIR"
     git clone "$REPO_URL" "$APP_DIR"
   fi
   cd "$APP_DIR"
