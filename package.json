@@ -1,6 +1,6 @@
 {
   "name": "pm2-dashboard",
-  "version": "1.0.23",
+  "version": "1.0.24",
   "private": true,
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
@@ -23,14 +23,13 @@
     "verify": "npm run typecheck && npm --prefix server test && npm --prefix client test",
     "pm2:status": "node ./scripts/pm2-local.js status",
     "env:bootstrap": "node ./scripts/env-bootstrap.js",
-    "setup": "npm install --workspaces --include-workspace-root",
-    "repair:env": "node ./scripts/env-bootstrap.js"
+    "setup": "node ./scripts/npm-safe-install.js all",
+    "repair:env": "node ./scripts/env-bootstrap.js",
+    "setup:dev": "node ./scripts/npm-safe-install.js all --include-root",
+    "setup:clean": "node ./scripts/npm-safe-install.js all --clean",
+    "repair:npm": "node ./scripts/npm-safe-install.js all --clean --verify-cache"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
-  },
-  "workspaces": [
-    "client",
-    "server"
-  ]
+  }
 }

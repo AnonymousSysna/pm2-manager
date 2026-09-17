@@ -12,6 +12,7 @@ const { spawn, spawnSync } = require("child_process");
 
 const DEFAULT_REPO_URL = "https://github.com/AnonymousSysna/pm2-manager.git";
 const APP_PACKAGE_NAME = "pm2-dashboard";
+const NPM_SAFE_INSTALL_SCRIPT = path.join("scripts", "npm-safe-install.js");
 const APP_PROCESS_NAME = "pm2-dashboard";
 const DEFAULT_PORT = 8000;
 const DEFAULT_PUBLIC_PORT = 8000;
@@ -772,13 +773,15 @@ function applyProxyEnvOverrides(appDir, options) {
 }
 
 async function installDependencies(appDir) {
-  const npmCommand = getNpmCommand();
-  console.log("[1/6] Installing root dependencies...");
-  await runCommand(npmCommand, ["install"], { cwd: appDir });
+  console.log("[1/6] Preparing dependency install...");
+  console.log("Root npm install is skipped for one-tap production setup to avoid npm workspace tree corruption.");
+  console.log("Use `npm run setup:dev` later if you need root dev-only tools.");
+
   console.log("[2/6] Installing backend dependencies, including local PM2...");
-  await runCommand(npmCommand, ["--prefix", "server", "install"], { cwd: appDir });
+  await runCommand(process.execPath, [path.join(appDir, NPM_SAFE_INSTALL_SCRIPT), "server"], { cwd: appDir });
+
   console.log("[3/6] Installing frontend dependencies...");
-  await runCommand(npmCommand, ["--prefix", "client", "install"], { cwd: appDir });
+  await runCommand(process.execPath, [path.join(appDir, NPM_SAFE_INSTALL_SCRIPT), "client"], { cwd: appDir });
 }
 
 async function buildClient(appDir) {

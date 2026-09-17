@@ -112,9 +112,7 @@ cd pm2-manager
 ### 2. Install dependencies
 
 ```bash
-npm install
-npm --prefix server install
-npm --prefix client install
+npm run setup
 ```
 
 ### 3. Create the environment file
@@ -215,9 +213,7 @@ git pull
 ### 2. Install dependencies if package files changed
 
 ```bash
-npm install
-npm --prefix server install
-npm --prefix client install
+npm run setup
 ```
 
 ### 3. Rebuild the client
@@ -277,9 +273,7 @@ Security hardening included by default:
 ### 1. Install dependencies
 
 ```bash
-npm install
-npm --prefix server install
-npm --prefix client install
+npm run setup:dev
 ```
 
 ### 2. Create `.env`
@@ -631,4 +625,4 @@ The server serves the built React app for `/`, `/dashboard`, and nested dashboar
 
 ### Local TypeScript setup
 
-Run `npm run setup` from the repository root after cloning. This installs the root, client, and server dependencies so VS Code can resolve `vite/client`, Vitest, Testing Library, and Node type definitions.
+Run `npm run setup` from the repository root after cloning. This installs client and server dependencies without rewriting package-lock files. Use `npm run setup:dev` when you also want root dev-only tools. If npm shows an Arborist/`edgesOut` error, run `npm run repair:npm`.
