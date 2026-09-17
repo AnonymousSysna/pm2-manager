@@ -1,3 +1,4 @@
+import Badge from "../ui/Badge";
 import Banner from "../ui/Banner";
 import Button from "../ui/Button";
 import Checkbox from "../ui/Checkbox";

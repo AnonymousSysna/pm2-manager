@@ -647,11 +647,18 @@
   }
 
   .dashboard-support-grid {
-    @apply grid gap-3 xl:grid-cols-3;
+    @apply grid w-full min-w-0 gap-3 lg:grid-cols-2;
+    align-items: stretch;
   }
 
   .dashboard-support-grid > .page-panel {
     @apply h-full min-w-0 p-3;
+  }
+
+  @media (min-width: 1024px) {
+    .dashboard-support-grid > .page-panel:nth-child(3):last-child {
+      grid-column: 1 / -1;
+    }
   }
 
   .dashboard-insight-grid {
@@ -698,4 +705,67 @@
     opacity: 1;
     transform: translateY(0) scale(1);
   }
+}
+
+.git-pull-toast-body {
+  display: grid;
+  gap: 8px;
+  min-width: 260px;
+  max-width: 360px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.git-pull-toast-body p {
+  margin: 0;
+  color: rgb(var(--color-text-2));
+}
+
+.git-pull-toast-cwd {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 10px;
+  border: 1px solid rgb(var(--color-border) / 0.8);
+  background: rgb(var(--color-surface-2) / 0.78);
+  padding: 7px 9px;
+  color: rgb(var(--color-text-1));
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.git-pull-toast-files {
+  display: grid;
+  gap: 4px;
+  max-height: 112px;
+  overflow: auto;
+  border-radius: 10px;
+  border: 1px solid rgb(var(--color-warning-500) / 0.24);
+  background: rgb(var(--color-warning-500) / 0.12);
+  padding: 7px 9px;
+  color: rgb(var(--color-text-2));
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.git-pull-toast-files span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-pull-toast-cancel {
+  justify-self: start;
+  min-height: 30px;
+  border: 1px solid rgb(var(--color-border));
+  border-radius: 999px;
+  background: rgb(var(--color-surface-2) / 0.72);
+  color: rgb(var(--color-text-1));
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.git-pull-toast-cancel:hover {
+  background: rgb(var(--color-surface-3) / 0.9);
 }

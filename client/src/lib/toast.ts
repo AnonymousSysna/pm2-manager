@@ -10,6 +10,8 @@ const toast = {
   info: (title, options) => gooeyToast.info(String(title), options),
   warning: (title, options) => gooeyToast.warning(String(title), options),
   show: (title, options) => gooeyToast(String(title), options),
+  dismiss: (idOrFilter) => gooeyToast.dismiss(idOrFilter),
+  update: (id, options) => gooeyToast.update(id, options),
   promise: (promiseOrFactory, messages, options) => {
     const promise =
       typeof promiseOrFactory === "function"

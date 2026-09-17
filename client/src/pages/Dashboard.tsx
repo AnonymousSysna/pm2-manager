@@ -420,17 +420,52 @@ export default function Dashboard() {
 
   const openGitPullConfirmation = (name, data = {}) => {
     const dirtyFiles = Array.isArray(data.changedFiles) ? data.changedFiles : [];
-    setActionDialog({
-      mode: "confirm",
-      action: "gitPull",
-      name,
-      title: `Local changes in ${name}`,
-      description: "Accept saves local changes to a Git stash first, then pulls latest code.",
-      confirmLabel: "Accept and pull",
-      confirmVariant: "warning",
-      dirtyFiles,
-      totalChanged: Number(data.totalChanged || dirtyFiles.length || 0),
-      cwd: data.cwd || ""
+    const totalChanged = Number(data.totalChanged || dirtyFiles.length || 0);
+    const visibleFiles = dirtyFiles.slice(0, 5);
+    const hiddenCount = Math.max(0, totalChanged - visibleFiles.length);
+    let toastId = null;
+
+    const cancelPull = () => {
+      if (toastId !== null && toastId !== undefined) {
+        toast.dismiss(toastId);
+      }
+      toast.info(`Git pull cancelled for ${name}`);
+    };
+
+    const acceptPull = () => {
+      if (toastId !== null && toastId !== undefined) {
+        toast.dismiss(toastId);
+      }
+      void executeAction("gitPull", name, { dirtyMode: "stash", confirmed: true, source: "toast-action" });
+    };
+
+    toastId = toast.warning(`Local changes in ${name}`, {
+      duration: 60000,
+      showProgress: true,
+      description: (
+        <div className="git-pull-toast-body">
+          <p>Stash local changes before pulling latest code.</p>
+          {data.cwd ? <span className="git-pull-toast-cwd">{data.cwd}</span> : null}
+          {visibleFiles.length > 0 ? (
+            <div className="git-pull-toast-files">
+              {visibleFiles.map((item, index) => (
+                <span key={`${item.path || item}-${index}`}>
+                  {item.status ? `${item.status} · ` : ""}{item.path || String(item)}
+                </span>
+              ))}
+              {hiddenCount > 0 ? <span>+{hiddenCount} more</span> : null}
+            </div>
+          ) : null}
+          <button type="button" className="git-pull-toast-cancel" onClick={cancelPull}>
+            Cancel
+          </button>
+        </div>
+      ),
+      action: {
+        label: "Accept pull",
+        onClick: acceptPull,
+        successLabel: "Accepted"
+      }
     });
   };
 
@@ -468,13 +503,13 @@ export default function Dashboard() {
 
       if (action === "gitPull") {
         const result = await handlers[action](name);
-        if (!result.success) {
-          toast.error(result.error || "Failed to git pull");
+        if (result?.data?.requiresConfirmation) {
+          openGitPullConfirmation(name, result.data);
           return false;
         }
 
-        if (result?.data?.requiresConfirmation) {
-          openGitPullConfirmation(name, result.data);
+        if (!result.success) {
+          toast.error(result.error || "Failed to git pull");
           return false;
         }
 
