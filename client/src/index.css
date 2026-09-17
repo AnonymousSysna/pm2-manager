@@ -82,7 +82,7 @@
   }
 
   .app-header {
-    @apply sticky top-0 z-30 border-b border-border/75 bg-surface/92 backdrop-blur-xl;
+    @apply sticky top-0 z-30 border-b border-border/75 bg-surface/95 backdrop-blur-xl;
   }
 
   .app-header-inner {
@@ -94,7 +94,7 @@
   }
 
   .app-sidebar {
-    @apply sticky top-header hidden h-[calc(100vh-theme(spacing.header)-theme(spacing.5))] w-60 shrink-0 rounded-2xl border border-border/75 bg-surface/92 p-3 shadow-[0_24px_80px_-64px_rgba(0,0,0,0.95)] md:flex md:flex-col;
+    @apply sticky top-header hidden h-[calc(100vh-theme(spacing.header)-theme(spacing.5))] w-60 shrink-0 rounded-2xl border border-border/75 bg-surface/95 p-3 shadow-[0_24px_80px_-64px_rgba(0,0,0,0.95)] md:flex md:flex-col;
   }
 
   .nav-section-label {
@@ -102,7 +102,7 @@
   }
 
   .page-panel {
-    @apply rounded-2xl border border-border/75 bg-surface/92 p-4 shadow-[0_24px_80px_-64px_rgba(0,0,0,0.95)];
+    @apply rounded-2xl border border-border/75 bg-surface/95 p-4 shadow-[0_24px_80px_-64px_rgba(0,0,0,0.95)];
   }
 
   .page-title {
@@ -154,7 +154,7 @@
   }
 
   .inset-card {
-    @apply rounded-xl border border-border/65;
+    @apply rounded-xl border border-border/70;
   }
 
   .compact-stat-grid {
@@ -162,7 +162,7 @@
   }
 
   .flow-strip {
-    @apply rounded-xl border border-border/65 bg-surface-2/45 p-3;
+    @apply rounded-xl border border-border/70 bg-surface-2/50 p-3;
   }
 
   .ops-section-grid {
@@ -199,7 +199,7 @@
   }
 
   .compact-process-card {
-    @apply rounded-2xl border border-border/70 bg-surface-2/45 p-3 transition duration-150 ease-out hover:border-brand-500/40 hover:bg-surface-2/60;
+    @apply rounded-2xl border border-border/70 bg-surface-2/50 p-3 transition duration-150 ease-out hover:border-brand-500/40 hover:bg-surface-2/60;
   }
 
   .metric-thread {
@@ -207,7 +207,7 @@
   }
 
   .metric-thread-item {
-    @apply rounded-xl border border-border/55 bg-surface/55 px-2.5 py-2;
+    @apply rounded-xl border border-border/50 bg-surface/50 px-2.5 py-2;
   }
 
   .action-menu-anchor {
@@ -227,7 +227,7 @@
   }
 
   .triage-card {
-    @apply rounded-2xl border border-border/65 bg-surface-2/45 p-3;
+    @apply rounded-2xl border border-border/70 bg-surface-2/50 p-3;
   }
 
   .triage-card-topline {
@@ -239,7 +239,7 @@
   }
 
   .toolbar-strip {
-    @apply rounded-2xl border border-border/65 bg-surface-2/40 p-2.5;
+    @apply rounded-2xl border border-border/70 bg-surface-2/40 p-2.5;
   }
 
   .create-form-grid {
@@ -251,7 +251,7 @@
   }
 
   .step-row {
-    @apply mb-4 grid grid-cols-3 overflow-hidden rounded-xl border border-border/70 bg-surface-2/45 p-1;
+    @apply mb-4 grid grid-cols-3 overflow-hidden rounded-xl border border-border/70 bg-surface-2/50 p-1;
   }
 
   .step-pill {
@@ -267,7 +267,7 @@
   }
 
   .operator-messages {
-    @apply flex-1 space-y-3 overflow-y-auto rounded-2xl border border-border/70 bg-bg/45 p-3;
+    @apply flex-1 space-y-3 overflow-y-auto rounded-2xl border border-border/70 bg-bg/50 p-3;
   }
 
   .prompt-chip-row {
@@ -283,7 +283,7 @@
   }
 
   .message-bubble-user {
-    @apply border-brand-500/35 bg-brand-500/15 text-text-1;
+    @apply border-brand-500/40 bg-brand-500/10 text-text-1;
   }
 
   .message-bubble-ai {
@@ -299,7 +299,7 @@
   }
 
   .pm2-feature-card {
-    @apply rounded-2xl border border-border/70 bg-surface/92 p-3 transition duration-150 hover:border-brand-500/35 hover:bg-surface-2/45;
+    @apply rounded-2xl border border-border/70 bg-surface/95 p-3 transition duration-150 hover:border-brand-500/40 hover:bg-surface-2/50;
   }
 
   .command-chip {

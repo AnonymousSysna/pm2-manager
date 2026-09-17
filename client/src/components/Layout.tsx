@@ -104,7 +104,7 @@ export default function Layout() {
   return (
     <div className="app-shell">
       {reconnecting && (
-        <div className="sticky top-0 z-40 border-b border-warning-500/40 bg-warning-500/15 px-4 py-2 text-center text-sm text-warning-300">
+        <div className="sticky top-0 z-40 border-b border-warning-500/40 bg-warning-500/10 px-4 py-2 text-center text-sm text-warning-300">
           Reconnecting. Live updates paused.
         </div>
       )}
