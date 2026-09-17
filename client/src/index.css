@@ -17,7 +17,7 @@
   --color-brand-600: 42 74 60;
   --color-success-300: 134 239 172;
   --color-success-500: 34 197 94;
-  --color-success-600: 22 163 74;
+  --color-success-600: 18 136 62;
   --color-danger-300: 252 165 165;
   --color-danger-500: 239 68 68;
   --color-danger-600: 185 28 28;
@@ -37,20 +37,20 @@
   --color-border: 222 216 204;
   --color-text-1: 32 32 30;
   --color-text-2: 78 82 75;
-  --color-text-3: 119 115 107;
+  --color-text-3: 103 99 91;
   --color-brand-400: 54 91 74;
   --color-brand-500: 54 91 74;
   --color-brand-600: 43 74 60;
-  --color-success-300: 21 128 61;
+  --color-success-300: 21 115 55;
   --color-success-500: 22 163 74;
   --color-success-600: 20 83 45;
-  --color-danger-300: 220 38 38;
+  --color-danger-300: 185 28 28;
   --color-danger-500: 185 28 28;
   --color-danger-600: 127 29 29;
-  --color-warning-300: 217 119 6;
+  --color-warning-300: 161 87 5;
   --color-warning-500: 180 83 9;
   --color-warning-600: 146 64 14;
-  --color-info-300: 37 99 235;
+  --color-info-300: 29 78 216;
   --color-info-500: 30 64 175;
   --color-info-600: 30 58 138;
 }
@@ -945,7 +945,7 @@
   }
 
   .pm2-inline-warning {
-    @apply text-[11px] font-medium text-warning-500;
+    @apply text-[11px] font-medium text-warning-300;
   }
 
   .pm2-feature-fields {

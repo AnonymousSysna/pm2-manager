@@ -42,6 +42,16 @@ because everything in those files ships to the browser.
 - Configure at least one alert channel before relying on the dashboard for production monitoring.
 - Run `npm run verify` before deploying changes when dependencies are installed.
 
+## Accessibility
+
+- `npm run check:contrast` audits every text/background pair from the design
+  tokens in `client/src/index.css` for both themes. It is part of `npm run
+  verify`, so a token change that lowers small-text contrast below WCAG AA
+  fails the check instead of shipping.
+- Tokens ending in `-300` are the only sanctioned text colors for status
+  messages; `-500` and `-600` are for borders, fills, and solid button
+  backgrounds. Mixing them up is what makes status text unreadable in one theme.
+
 ## Operational safety
 
 - Use the dashboard triage order: attention first, then logs, then action.
