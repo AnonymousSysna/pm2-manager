@@ -3,7 +3,7 @@ import { PanelHeader } from "../ui/PageLayout";
 
 export default function DependencyGraphPanel({ dependencyEdges = [] }) {
   return (
-    <section className="page-panel space-y-3">
+    <section className="page-panel compact-page-stack p-3">
       <PanelHeader
         title="Dependencies"
         description="Saved startup dependencies from process metadata."

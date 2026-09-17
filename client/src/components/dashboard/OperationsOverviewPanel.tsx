@@ -123,7 +123,7 @@ export default function OperationsOverviewPanel({
   const firstAttentionProcess = attentionItems[0]?.processName || "";
 
   return (
-    <section className="page-panel space-y-3">
+    <section className="page-panel dashboard-triage-panel">
       <PanelHeader
         title="Triage"
         description="Fix the riskiest service first. Stable systems stay quiet."

@@ -29,6 +29,7 @@ const {
   deployProcess,
   getDeploymentHistory,
   getGitCommitsForProcess,
+  getGitStatusForProcess,
   gitPullProcess,
   rollbackProcess,
   readProcessDotEnv,
@@ -380,6 +381,17 @@ router.post("/:name/deploy", criticalWriteLimiter, validateProcessParam, asyncHa
   res.status(result.success ? 200 : 500).json(result);
 }));
 
+
+router.get("/:name/git/status", readLimiter, validateProcessParam, asyncHandler(async (req, res) => {
+  const result = await getGitStatusForProcess(req.params.name);
+  const status = result.success
+    ? 200
+    : /not in a git repository|not found|working directory/i.test(result.error || "")
+      ? 400
+      : 500;
+  res.status(status).json(result);
+}));
+
 router.get("/:name/git/commits", readLimiter, validateProcessParam, asyncHandler(async (req, res) => {
   const requested = Number(req.query.limit || 20);
   const limit = Number.isFinite(requested)
@@ -390,12 +402,14 @@ router.get("/:name/git/commits", readLimiter, validateProcessParam, asyncHandler
 }));
 
 router.post("/:name/git/pull", criticalWriteLimiter, validateProcessParam, asyncHandler(async (req, res) => {
-  const result = await gitPullProcess(req.params.name);
-  const status = result.success
-    ? 200
-    : /not in a git repository|not found|working directory/i.test(result.error || "")
-      ? 400
-      : 500;
+  const result = await gitPullProcess(req.params.name, req.body || {});
+  const status = result.success && result.data?.requiresConfirmation
+    ? 409
+    : result.success
+      ? 200
+      : /not in a git repository|not found|working directory/i.test(result.error || "")
+        ? 400
+        : 500;
   res.status(status).json(result);
 }));
 

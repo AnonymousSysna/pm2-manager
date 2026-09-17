@@ -6,7 +6,7 @@ import { SubsectionTitle, SupportingCopy } from "../ui/Typography";
 
 export default function ThresholdAlertsPanel({ alerts = [], onOpenLogs }) {
   return (
-    <section className="page-panel space-y-3">
+    <section className="page-panel compact-page-stack p-3">
       <PanelHeader
         title="Alert Feed"
         description="Recent threshold and health incidents worth investigating before they turn into noisy restarts."

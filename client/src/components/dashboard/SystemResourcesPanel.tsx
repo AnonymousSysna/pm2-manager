@@ -4,7 +4,7 @@ import { InsetCard, StatCard } from "../ui/Surface";
 
 export default function SystemResourcesPanel({ systemResources, bytesToGB }) {
   return (
-    <section className="page-panel space-y-3">
+    <section className="page-panel compact-page-stack p-3">
       <PanelHeader
         title="Host Capacity"
         description="CPU, memory, disk, and mount usage on the machine running PM2."

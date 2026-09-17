@@ -300,10 +300,9 @@ export default function AIOperator() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="compact-page-stack">
       <PageIntro
         title="AI Operator"
-        description="Chat with your preferred AI provider, let it inspect PM2 context, and run only guarded dashboard actions."
         actions={(
           <>
             <Badge tone="success">Guarded</Badge>
@@ -315,10 +314,9 @@ export default function AIOperator() {
         )}
       />
 
-
       <section className="operator-layout">
-        <aside className="space-y-3">
-          <section className="page-panel space-y-3">
+        <aside className="operator-side-stack">
+          <section className="operator-compact-panel">
             <PanelHeader title="AI connection" />
             <Field label="Provider">
               <Select value={settings.provider} onChange={(event) => changeProvider(event.target.value)}>
@@ -352,7 +350,7 @@ export default function AIOperator() {
             </Button>
           </section>
 
-          <section className="page-panel space-y-3">
+          <section className="operator-compact-panel">
             <PanelHeader title="Execution mode" />
             <Field label="Mode">
               <Select value={settings.executeMode} onChange={(event) => updateSetting("executeMode", event.target.value)}>
@@ -363,9 +361,9 @@ export default function AIOperator() {
             </Field>
           </section>
 
-          <section className="page-panel space-y-3">
+          <section className="operator-compact-panel">
             <PanelHeader title="Live context" />
-            <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className="operator-summary-grid">
               <InsetPanel padding="sm">
                 <Eyebrow>Processes</Eyebrow>
                 <p className="mt-1 text-xl font-semibold text-text-1">{processes.length}</p>
@@ -374,14 +372,18 @@ export default function AIOperator() {
                 <Eyebrow>Provider</Eyebrow>
                 <p className="mt-1 truncate text-sm font-semibold text-text-1">{settings.provider}</p>
               </InsetPanel>
+              <InsetPanel padding="sm">
+                <Eyebrow>Mode</Eyebrow>
+                <p className="mt-1 truncate text-sm font-semibold text-text-1">{settings.executeMode}</p>
+              </InsetPanel>
             </div>
             {lastUsage ? (
-              <Textarea readOnly value={stringifyOutput(lastUsage)} className="min-h-[90px] font-mono text-xs" />
+              <Textarea readOnly value={stringifyOutput(lastUsage)} className="min-h-[72px] font-mono text-xs" />
             ) : null}
           </section>
         </aside>
 
-        <section className="space-y-4">
+        <section className="compact-page-stack">
           <section className="operator-console">
             <PanelHeader
               title="Operator terminal"
@@ -416,7 +418,7 @@ export default function AIOperator() {
                 value={prompt}
                 onChange={(event) => setPrompt(event.target.value)}
                 placeholder="Ask what to check or run"
-                className="min-h-[110px] resize-y"
+                className="min-h-[86px] resize-y"
               />
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <Button type="submit" disabled={!canSend}>
@@ -428,15 +430,15 @@ export default function AIOperator() {
           </section>
 
           {(lastActions.length > 0 || lastExecutions.length > 0) && (
-            <section className="grid gap-4 lg:grid-cols-2">
-              <div className="page-panel space-y-3">
+            <section className="grid gap-3 lg:grid-cols-2">
+              <div className="page-panel space-y-2 p-3">
                 <PanelHeader title="Prepared actions" />
                 {lastActions.length > 0 ? lastActions.map((action, index) => (
                   <PlannedActionCard key={`${action.actionId}-${index}`} action={action} onRun={runAction} running={runningActionId === action.actionId} />
                 )) : <InsetPanel padding="sm" className="text-sm text-text-3">No PM2 actions prepared.</InsetPanel>}
               </div>
 
-              <div className="page-panel space-y-3">
+              <div className="page-panel space-y-2 p-3">
                 <PanelHeader title="Execution log" />
                 {lastExecutions.length > 0 ? lastExecutions.map((execution, index) => (
                   <ExecutionCard key={`${execution.actionId}-${index}`} execution={execution} />

@@ -386,11 +386,66 @@ export function ProcessActionDialog({ actionDialog, loadingAction, onClose, onSu
   }
 
   if (actionDialog.mode === "confirm") {
+    if (actionDialog.action === "gitPull") {
+      const dirtyFiles = Array.isArray(actionDialog.dirtyFiles) ? actionDialog.dirtyFiles : [];
+      const remainingCount = Math.max(0, Number(actionDialog.totalChanged || 0) - dirtyFiles.length);
+
+      return (
+        <Modal
+          title={actionDialog.title}
+          description={actionDialog.description}
+          onClose={onClose}
+          size="md"
+          actions={(
+            <>
+              <Button type="button" variant="secondary" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant={actionDialog.confirmVariant || "warning"}
+                onClick={onSubmit}
+                disabled={Boolean(loadingAction[`${actionDialog.name}:${actionDialog.action}`])}
+              >
+                {actionDialog.confirmLabel || "Accept and pull"}
+              </Button>
+            </>
+          )}
+        >
+          <div className="space-y-3">
+            {actionDialog.cwd ? (
+              <InsetCard className="text-xs text-text-2">
+                <span className="block text-text-3">Working directory</span>
+                <span className="break-all text-text-1">{actionDialog.cwd}</span>
+              </InsetCard>
+            ) : null}
+
+            <InsetCard>
+              <div className="mb-2 flex items-center justify-between gap-2 text-sm">
+                <span className="font-semibold text-text-1">Files that changed locally</span>
+                <Badge tone="warning">{Number(actionDialog.totalChanged || dirtyFiles.length)} files</Badge>
+              </div>
+              <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
+                {dirtyFiles.map((file, index) => (
+                  <div key={`${file.path}-${index}`} className="grid grid-cols-[44px_minmax(0,1fr)] gap-2 rounded-lg border border-border/60 px-2 py-1.5 text-xs">
+                    <span className="font-mono text-text-3">{file.status || "M"}</span>
+                    <span className="min-w-0 truncate text-text-1" title={file.path}>{file.path}</span>
+                  </div>
+                ))}
+                {remainingCount > 0 ? <p className="pt-1 text-xs text-text-3">+{remainingCount} more</p> : null}
+              </div>
+            </InsetCard>
+          </div>
+        </Modal>
+      );
+    }
+
     return (
       <ConfirmDialog
         title={actionDialog.title}
         description={actionDialog.description}
-        confirmLabel={actionDialog.action === "delete" ? "Delete process" : "Confirm"}
+        confirmLabel={actionDialog.confirmLabel || (actionDialog.action === "delete" ? "Delete process" : "Confirm")}
+        confirmVariant={actionDialog.confirmVariant || "danger"}
         onClose={onClose}
         onConfirm={onSubmit}
         confirmDisabled={Boolean(loadingAction[`${actionDialog.name}:${actionDialog.action}`])}

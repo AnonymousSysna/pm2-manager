@@ -46,7 +46,7 @@ export default function Modal({
 
   if (position === "right") {
     return (
-      <div className="fixed inset-0 z-50">
+      <div className="fixed inset-0 z-[1000]">
         <button
           type="button"
           className="surface-overlay absolute inset-0"
@@ -83,7 +83,7 @@ export default function Modal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
       <button
         type="button"
         className="surface-overlay absolute inset-0"

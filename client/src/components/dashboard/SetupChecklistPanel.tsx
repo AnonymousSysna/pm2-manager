@@ -4,7 +4,7 @@ import { PanelHeader } from "../ui/PageLayout";
 
 export default function SetupChecklistPanel({ checklistItems, checklistDoneCount, onDismiss, onNavigate }) {
   return (
-    <section className="page-panel space-y-3">
+    <section className="page-panel compact-page-stack p-3">
       <PanelHeader
         title="Initial setup"
         description={`${checklistDoneCount} of ${checklistItems.length} tasks complete. Add a process, alerts, startup recovery, and a domain before you depend on this host.`}

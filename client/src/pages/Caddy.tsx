@@ -128,7 +128,7 @@ export default function Caddy() {
         description="Check Caddy service status, restart it, and map domains to upstream ports."
       />
 
-      <section className="page-panel space-y-3">
+      <section className="page-panel compact-page-stack p-3">
         <PanelHeader title="Caddy Service" />
         {loading ? (
           <div className="space-y-3">

@@ -159,15 +159,12 @@ export default function Extensions() {
   };
 
   return (
-    <div className="space-y-4">
-      <PageIntro
-        title="Extensions"
-        description="Check what this host can install, add Caddy, and rescan the interpreters PM2 can run."
-      />
+    <div className="compact-page-stack">
+      <PageIntro title="Extensions" />
 
-      <section className="page-panel">
+      <section className="extension-status-card">
         <PanelHeader title="Available Extensions" className="mb-3" />
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <InsetPanel padding="sm">
             <PackageCheck className="text-brand-400" size={22} />
           </InsetPanel>
@@ -218,10 +215,10 @@ export default function Extensions() {
         )}
       </section>
 
-      <section className="page-panel">
+      <section className="page-panel p-3">
         <PanelHeader title="Runtime Interpreters" className="mb-3" />
 
-        <div className="mb-3 flex items-center gap-3">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
           <InsetPanel padding="sm">
             <TerminalSquare className="text-brand-400" size={22} />
           </InsetPanel>
@@ -235,12 +232,12 @@ export default function Extensions() {
           </div>
         </div>
 
-        <div className="space-y-2">
+        <div className="grid gap-2 xl:grid-cols-2">
           {interpreterState.loading && interpreterState.interpreters.length === 0 && (
             <InterpreterListSkeleton />
           )}
           {interpreterState.interpreters.map((item) => (
-            <InsetPanel key={item.key}>
+            <InsetPanel key={item.key} padding="sm" className="space-y-1">
               <div className="flex flex-wrap items-center gap-2">
                 <SubsectionTitle className="text-sm">{item.displayName}</SubsectionTitle>
                 <Badge tone={item.installed ? "success" : "warning"}>{item.installed ? "Installed" : "Not found"}</Badge>
@@ -262,10 +259,7 @@ export default function Extensions() {
                   </div>
                 )}
               </div>
-              <p className="mt-1 text-xs text-text-3">Version: <span className="text-text-2">{item.version || "-"}</span></p>
-              <p className="mt-1 text-xs text-text-3">
-                Checked commands: <span className="text-text-2">{Array.isArray(item.supportedCommands) ? item.supportedCommands.join(", ") : "-"}</span>
-              </p>
+              <p className="extension-muted-line">Version: <span className="text-text-2">{item.version || "-"}</span> · Interpreter: <span className="text-text-2">{item.interpreter || "-"}</span></p>
               {!item.installed && item.installer?.supported && (
                 <div className="mt-1 text-xs text-text-3">
                   <p>
@@ -294,7 +288,7 @@ export default function Extensions() {
           ) : null}
         </div>
 
-        <InsetPanel className="mt-4">
+        <InsetPanel className="mt-3">
           <div className="mb-2 flex items-center justify-between gap-2">
             <SubsectionTitle className="text-sm">Node Runtime Manager</SubsectionTitle>
             <Button
@@ -332,7 +326,7 @@ export default function Extensions() {
             </Button>
           </div>
 
-          <div className="mt-3 space-y-2">
+          <div className="mt-3 grid gap-2 xl:grid-cols-2">
             {nodeRuntimeState.loading ? (
               <NodeRuntimeSkeleton />
             ) : (

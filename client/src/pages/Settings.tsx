@@ -438,7 +438,7 @@ function ProductionReadinessPanel({ readiness, loading }) {
   const ok = Boolean(readiness?.ok) && issues.length === 0;
 
   return (
-    <section className="page-panel space-y-3">
+    <section className="page-panel compact-page-stack p-3">
       <PanelHeader
         title="Production Readiness"
         description="Configuration, secret, cookie, and runtime checks before exposing this dashboard."

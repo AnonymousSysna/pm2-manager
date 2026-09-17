@@ -401,7 +401,7 @@ export default function Dashboard() {
         reload: processApi.reload,
         npmInstall: processApi.npmInstall,
         npmBuild: processApi.npmBuild,
-        gitPull: processApi.gitPull,
+        gitPull: (processName) => processApi.gitPull(processName, actionPayload || {}),
         schedule: (processName) => processApi.updateSchedule(processName, actionPayload?.cron_restart ?? null),
         duplicate: (processName) => processApi.duplicate(processName, actionPayload?.targetName || ""),
         deploy: (processName) => processApi.deploy(processName, actionPayload || {}),
@@ -451,6 +451,35 @@ export default function Dashboard() {
 
   const callAction = async (action, name, overridePayload) => {
     if (action === "deploy") {
+      return executeAction(action, name, overridePayload || {});
+    }
+
+    if (action === "gitPull") {
+      try {
+        setLoadingAction((prev) => ({ ...prev, [`${name}:gitPullCheck`]: true }));
+        const statusResult = await processApi.gitStatus(name);
+        if (statusResult?.success && statusResult.data?.dirty) {
+          setActionDialog({
+            mode: "confirm",
+            action,
+            name,
+            title: `Local changes in ${name}`,
+            description: "Accept will save local changes to a Git stash first, then pull latest code.",
+            confirmLabel: "Accept and pull",
+            confirmVariant: "warning",
+            dirtyFiles: statusResult.data.changedFiles || [],
+            totalChanged: statusResult.data.totalChanged || 0,
+            cwd: statusResult.data.cwd || ""
+          });
+          return false;
+        }
+      } catch (error) {
+        toast.error(getErrorMessage(error, "Unable to check Git changes"));
+        return false;
+      } finally {
+        setLoadingAction((prev) => ({ ...prev, [`${name}:gitPullCheck`]: false }));
+      }
+
       return executeAction(action, name, overridePayload || {});
     }
 
@@ -932,6 +961,10 @@ export default function Dashboard() {
       actionPayload = { targetCommit: String(actionDialog.value || "").trim(), restartMode: "restart" };
     }
 
+    if (action === "gitPull") {
+      actionPayload = { dirtyMode: "stash", confirmed: true };
+    }
+
     const success = await executeAction(action, name, actionPayload);
     if (success) {
       setActionDialog(null);
@@ -942,7 +975,6 @@ export default function Dashboard() {
     <div className="space-y-4">
       <PageIntro
         title="Overview"
-        description="Start with what needs attention, then act on the exact process."
         actions={(
           <>
             <Button type="button" variant="secondary" onClick={() => openDeploymentHistory()}>
@@ -992,6 +1024,22 @@ export default function Dashboard() {
             formatters={{ bytesToMB, durationLabel }}
           />
 
+          <div className="dashboard-side-stack">
+            <ThresholdAlertsPanel alerts={alerts} onOpenLogs={openLogsForProcess} />
+            <SystemResourcesPanel systemResources={systemResources} bytesToGB={bytesToGB} />
+            {!checklist.dismissed && (
+              <SetupChecklistPanel
+                checklistItems={checklistItems}
+                checklistDoneCount={checklistDoneCount}
+                onDismiss={() => {
+                  localStorage.setItem("pm2_onboarding_checklist_dismissed", "true");
+                  setChecklist((prev) => ({ ...prev, dismissed: true }));
+                }}
+                onNavigate={(to) => navigate(to)}
+              />
+            )}
+          </div>
+
           <div className="dashboard-insight-grid">
             <MetricsHistoryPanel
               chartProcess={chartProcess}
@@ -1002,22 +1050,6 @@ export default function Dashboard() {
             <DependencyGraphPanel dependencyEdges={dependencyEdges} />
           </div>
         </div>
-
-        <aside className="dashboard-side-stack">
-          <ThresholdAlertsPanel alerts={alerts} onOpenLogs={openLogsForProcess} />
-          <SystemResourcesPanel systemResources={systemResources} bytesToGB={bytesToGB} />
-          {!checklist.dismissed && (
-            <SetupChecklistPanel
-              checklistItems={checklistItems}
-              checklistDoneCount={checklistDoneCount}
-              onDismiss={() => {
-                localStorage.setItem("pm2_onboarding_checklist_dismissed", "true");
-                setChecklist((prev) => ({ ...prev, dismissed: true }));
-              }}
-              onNavigate={(to) => navigate(to)}
-            />
-          )}
-        </aside>
       </div>
 
       <ProcessDetailModal

@@ -148,10 +148,10 @@ export default function PM2Features() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="compact-page-stack">
       <PageIntro title="PM2 Tools" />
 
-      <section className="page-panel space-y-3">
+      <section className="flow-strip space-y-2">
         <PanelHeader title="Feature map" />
         {loading ? (
           <div className="grid gap-2 md:grid-cols-4">
@@ -159,7 +159,7 @@ export default function PM2Features() {
           </div>
         ) : (
           <>
-            <div className="flex flex-wrap gap-2">
+            <div className="pm2-category-strip">
               {(catalog.categories || []).map((category) => (
                 <TabButton
                   key={category.id}
@@ -205,8 +205,8 @@ export default function PM2Features() {
           )}
         </div>
 
-        <aside className="space-y-3">
-          <section className="result-panel space-y-3">
+        <aside className="compact-page-stack">
+          <section className="result-panel space-y-2">
             <PanelHeader title="Last result" />
             {lastResult ? (
               <>
@@ -221,7 +221,7 @@ export default function PM2Features() {
                 <Textarea
                   readOnly
                   value={stringifyOutput(lastResult)}
-                  className="min-h-[280px] resize-y font-mono text-xs"
+                  className="min-h-[220px] resize-y font-mono text-xs"
                 />
                 <Button type="button" variant="secondary" onClick={copyOutput} className="w-full">
                   <Copy size={14} />
@@ -258,8 +258,8 @@ export default function PM2Features() {
 
 function FeatureCard({ feature, form, processes, running, onChange, onRun }) {
   return (
-    <article className="pm2-feature-card space-y-3">
-      <div className="flex items-start justify-between gap-3">
+    <article className="pm2-feature-card space-y-2">
+      <div className="pm2-feature-topline">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="panel-heading">{feature.label}</h2>
@@ -282,7 +282,7 @@ function FeatureCard({ feature, form, processes, running, onChange, onRun }) {
       )}
 
       {(feature.fields || []).length > 0 ? (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="pm2-feature-fields">
           {feature.fields.map((field) => (
             <FeatureField
               key={field.name}

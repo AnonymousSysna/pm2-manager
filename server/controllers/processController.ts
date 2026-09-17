@@ -2601,20 +2601,99 @@ async function getGitCommitsForProcess(name, limit = 20) {
   return result;
 }
 
-async function gitPullProcess(name) {
+function parseGitStatusLines(output = "") {
+  return String(output || "")
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter(Boolean)
+    .map((line) => {
+      const code = line.slice(0, 2).trim() || line.slice(0, 2);
+      const filePath = line.slice(3).trim();
+      return { status: code, path: filePath };
+    })
+    .filter((item) => item.path);
+}
+
+async function readGitStatus(cwd) {
+  await runCommand("git", ["rev-parse", "--is-inside-work-tree"], cwd);
+
+  const [branchResult, headResult, statusResult] = await Promise.all([
+    runCommand("git", ["branch", "--show-current"], cwd).catch(() => ({ stdout: "" })),
+    runCommand("git", ["rev-parse", "--short", "HEAD"], cwd).catch(() => ({ stdout: "" })),
+    runCommand("git", ["status", "--porcelain"], cwd)
+  ]);
+
+  const files = parseGitStatusLines(statusResult.stdout || "");
+  return {
+    cwd,
+    branch: String(branchResult.stdout || "").trim() || null,
+    currentCommit: String(headResult.stdout || "").trim() || null,
+    dirty: files.length > 0,
+    changedFiles: files.slice(0, 50),
+    totalChanged: files.length
+  };
+}
+
+async function getGitStatusForProcess(name) {
   const processName = sanitizeProcessName(name, "process name");
   const result = await withPM2(async () => {
     const { cwd } = await resolveProcessWorkingDirectory(processName);
+    const status = await readGitStatus(cwd);
+    return { processName, ...status };
+  });
 
-    await runCommand("git", ["rev-parse", "--is-inside-work-tree"], cwd);
+  trackPm2Operation("processes.git.status", result.success);
+  return result;
+}
+
+async function gitPullProcess(name, options = {}) {
+  const processName = sanitizeProcessName(name, "process name");
+  const dirtyMode = String(options?.dirtyMode || options?.allowDirty || "").trim().toLowerCase();
+  const confirmed = options?.confirmed === true || options?.accept === true || dirtyMode === "stash";
+
+  const result = await withPM2(async () => {
+    const { cwd } = await resolveProcessWorkingDirectory(processName);
+    const beforeStatus = await readGitStatus(cwd);
+
+    if (beforeStatus.dirty && !confirmed) {
+      return {
+        processName,
+        cwd,
+        requiresConfirmation: true,
+        confirmationType: "local_changes",
+        message: "Local changes detected before pull.",
+        ...beforeStatus
+      };
+    }
+
+    let stashOutput = "";
+    let stashed = false;
+    if (beforeStatus.dirty) {
+      const stamp = new Date().toISOString().replace(/[.:]/g, "-");
+      const stash = await runCommand(
+        "git",
+        ["stash", "push", "-u", "-m", `pm2-dashboard auto-stash before pull ${stamp}`],
+        cwd
+      );
+      stashOutput = compactOutput(`${stash.stdout || ""}\n${stash.stderr || ""}`);
+      stashed = !/No local changes/i.test(stashOutput);
+    }
+
     const beforeHead = await runCommand("git", ["rev-parse", "--short", "HEAD"], cwd);
-    const pull = await runCommand("git", ["pull"], cwd);
+    const pull = await runCommand("git", ["pull", "--ff-only"], cwd);
     const afterHead = await runCommand("git", ["rev-parse", "--short", "HEAD"], cwd);
+    const afterStatus = await readGitStatus(cwd);
     return {
       processName,
       cwd,
       beforeCommit: String(beforeHead.stdout || "").trim(),
       afterCommit: String(afterHead.stdout || "").trim(),
+      dirtyBeforePull: beforeStatus.dirty,
+      stashedLocalChanges: stashed,
+      stashOutput,
+      changedFiles: beforeStatus.changedFiles,
+      totalChanged: beforeStatus.totalChanged,
+      dirtyAfterPull: afterStatus.dirty,
       output: compactOutput(`${pull.stdout || ""}\n${pull.stderr || ""}`)
     };
   });
@@ -3028,6 +3107,7 @@ module.exports = {
   deployProcess,
   getDeploymentHistory,
   getGitCommitsForProcess,
+  getGitStatusForProcess,
   gitPullProcess,
   rollbackProcess,
   getInterpreterCatalog,

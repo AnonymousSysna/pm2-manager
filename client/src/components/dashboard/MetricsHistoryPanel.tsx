@@ -35,7 +35,7 @@ function SparkLine({ points, accessor, stroke }) {
 
 export default function MetricsHistoryPanel({ chartProcess, onChartProcessChange, processes = [], historyPoints = [] }) {
   return (
-    <section className="page-panel space-y-3">
+    <section className="page-panel compact-page-stack p-3">
       <PanelHeader
         title="Resource Trends"
         description="Compare CPU and memory movement for one process without opening the detail drawer."
