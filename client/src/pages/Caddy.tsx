@@ -3,12 +3,15 @@ import { caddy as caddyApi } from "../api";
 import toast, { getErrorMessage } from "../lib/toast";
 import Banner from "../components/ui/Banner";
 import Button from "../components/ui/Button";
+import Field from "../components/ui/Field";
 import Input from "../components/ui/Input";
 import InsetPanel from "../components/ui/InsetPanel";
-import { ConfirmDialog } from "../components/ui/Modal";
+import Modal, { ConfirmDialog } from "../components/ui/Modal";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 import { Skeleton } from "../components/ui/Skeleton";
 import StatusText from "../components/ui/StatusText";
+
+const emptyProxyForm = { domain: "", upstream: "localhost:3000" };
 
 export default function Caddy() {
   const [loading, setLoading] = useState(true);
@@ -22,10 +25,10 @@ export default function Caddy() {
     caddyfilePath: "",
     managedSites: []
   });
-  const [form, setForm] = useState({
-    domain: "",
-    upstream: "localhost:3000"
-  });
+  const [form, setForm] = useState(emptyProxyForm);
+  const [proxyModalOpen, setProxyModalOpen] = useState(false);
+  const [editingDomain, setEditingDomain] = useState("");
+  const canSaveProxy = Boolean(form.domain.trim() && form.upstream.trim());
 
   const loadStatus = async () => {
     try {
@@ -66,7 +69,7 @@ export default function Caddy() {
       if (Array.isArray(result?.data?.warnings) && result.data.warnings.length > 0) {
         toast.warning(`Saved, but Caddy reload warning: ${result.data.warnings[0]}`);
       }
-      setForm((prev) => ({ ...prev, domain: "" }));
+      resetProxyForm();
       await loadStatus();
     } catch (error) {
       toast.error(getErrorMessage(error, "Failed to save reverse proxy"));
@@ -91,11 +94,32 @@ export default function Caddy() {
     }
   };
 
-  const editProxy = (item) => {
+  const openCreateProxy = () => {
+    setForm(emptyProxyForm);
+    setEditingDomain("");
+    setProxyModalOpen(true);
+  };
+
+  const openEditProxy = (item) => {
     setForm({
       domain: item.siteAddress || item.domain || "",
       upstream: item.upstream || "localhost:3000"
     });
+    setEditingDomain(item.domain || item.siteAddress || "");
+    setProxyModalOpen(true);
+  };
+
+  const resetProxyForm = () => {
+    setProxyModalOpen(false);
+    setEditingDomain("");
+    setForm(emptyProxyForm);
+  };
+
+  const closeProxyModal = () => {
+    if (saving) {
+      return;
+    }
+    resetProxyForm();
   };
 
   const deleteProxy = async (domain) => {
@@ -109,8 +133,9 @@ export default function Caddy() {
       if (Array.isArray(result?.data?.warnings) && result.data.warnings.length > 0) {
         toast.warning(`Deleted, but Caddy reload warning: ${result.data.warnings[0]}`);
       }
-      if (form.domain === domain) {
-        setForm((prev) => ({ ...prev, domain: "" }));
+      if (editingDomain === domain) {
+        setProxyModalOpen(false);
+        setEditingDomain("");
       }
       await loadStatus();
     } catch (error) {
@@ -128,19 +153,35 @@ export default function Caddy() {
       />
 
       <section className="page-panel compact-page-stack p-3">
-        <PanelHeader title="Caddy Service" />
+        <PanelHeader
+          title="Caddy Service"
+          actions={loading ? null : (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={!status.installed || restarting}
+                onClick={restartCaddy}
+              >
+                {restarting ? "Restarting..." : "Restart Caddy"}
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                disabled={!status.installed}
+                onClick={openCreateProxy}
+              >
+                Add reverse proxy
+              </Button>
+            </div>
+          )}
+        />
         {loading ? (
-          <div className="space-y-3">
-            <div className="text-sm text-text-2">
-              <Skeleton className="mb-2 h-4 w-36" />
-              <Skeleton className="h-4 w-64 max-w-full" />
-            </div>
-            <Skeleton className="h-10 w-36" />
-            <div className="grid gap-2 md:grid-cols-2">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-            </div>
-            <Skeleton className="h-10 w-56" />
+          <div className="space-y-2 text-sm text-text-2">
+            <Skeleton className="h-4 w-36" />
+            <Skeleton className="h-4 w-64 max-w-full" />
           </div>
         ) : (
           <div className="text-sm text-text-2">
@@ -153,50 +194,11 @@ export default function Caddy() {
             <p className="text-text-3">Caddyfile: {status.caddyfilePath || "-"}</p>
           </div>
         )}
-        {!loading && (
-          <div>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={!status.installed || loading || saving || restarting}
-              onClick={restartCaddy}
-            >
-              {restarting ? "Restarting..." : "Restart Caddy"}
-            </Button>
-          </div>
-        )}
 
         {!loading && !status.installed && (
           <Banner tone="warning">
             Install Caddy first from the Extensions page.
           </Banner>
-        )}
-
-        {!loading && (
-          <>
-            <div className="grid gap-2 md:grid-cols-2">
-              <Input
-                value={form.domain}
-                onChange={(event) => setForm((prev) => ({ ...prev, domain: event.target.value }))}
-                placeholder="example.com or https://example.com:8000"
-                disabled={!status.installed || saving || restarting || loading}
-              />
-              <Input
-                value={form.upstream}
-                onChange={(event) => setForm((prev) => ({ ...prev, upstream: event.target.value }))}
-                placeholder="localhost:3000"
-                disabled={!status.installed || saving || restarting || loading}
-              />
-            </div>
-            <Button
-              type="button"
-              variant="outlineInfo"
-              disabled={!status.installed || saving || restarting || loading}
-              onClick={saveProxy}
-            >
-              {saving ? "Saving..." : "Add / Update Reverse Proxy"}
-            </Button>
-          </>
         )}
       </section>
 
@@ -235,7 +237,7 @@ export default function Caddy() {
                     variant="outlineInfo"
                     size="sm"
                     disabled={saving || restarting || loading || deletingDomain === item.domain}
-                    onClick={() => editProxy(item)}
+                    onClick={() => openEditProxy(item)}
                   >
                     Edit
                   </Button>
@@ -254,6 +256,57 @@ export default function Caddy() {
           </div>
         )}
       </section>
+
+      {proxyModalOpen && (
+        <Modal
+          title={editingDomain ? "Update reverse proxy" : "Add reverse proxy"}
+          size="sm"
+          onClose={closeProxyModal}
+          disableClose={saving}
+          actions={(
+            <>
+              <Button type="button" variant="secondary" onClick={closeProxyModal} disabled={saving}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                form="caddy-proxy-form"
+                variant="primary"
+                disabled={saving || !canSaveProxy}
+              >
+                {saving ? "Saving..." : editingDomain ? "Save changes" : "Add proxy"}
+              </Button>
+            </>
+          )}
+        >
+          <form
+            id="caddy-proxy-form"
+            className="space-y-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              saveProxy();
+            }}
+          >
+            <Field label="Domain" required>
+              <Input
+                autoFocus
+                value={form.domain}
+                onChange={(event) => setForm((prev) => ({ ...prev, domain: event.target.value }))}
+                placeholder="example.com or https://example.com:8000"
+                disabled={saving}
+              />
+            </Field>
+            <Field label="Upstream" required>
+              <Input
+                value={form.upstream}
+                onChange={(event) => setForm((prev) => ({ ...prev, upstream: event.target.value }))}
+                placeholder="localhost:3000"
+                disabled={saving}
+              />
+            </Field>
+          </form>
+        </Modal>
+      )}
 
       {pendingDeleteDomain && (
         <ConfirmDialog
@@ -292,4 +345,3 @@ function ManagedDomainsSkeleton() {
     </div>
   );
 }
-
