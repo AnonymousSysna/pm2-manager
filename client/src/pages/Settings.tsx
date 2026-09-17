@@ -269,154 +269,150 @@ export default function Settings() {
 
   return (
     <div className="space-y-4">
-      <PageIntro
-        title="Settings"
-        description="Persist PM2 state, tune dashboard polling, manage alert webhooks, and change the dashboard password."
-      />
+      <PageIntro title="Settings" />
 
-      <ProductionReadinessPanel readiness={readiness} loading={readinessLoading} />
+      <div className="ops-section-grid">
+        <div className="dashboard-main-stack">
+          <ProductionReadinessPanel readiness={readiness} loading={readinessLoading} />
 
-      <section className="page-panel">
-        <PanelHeader title="PM2 Daemon Controls" className="mb-3" />
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outlineInfo"
-            onClick={openStartupWizard}
-            disabled={startupLoading}
-          >
-            {startupLoading ? "Preparing..." : "Persist on Reboot"}
-          </Button>
-          <Button variant="info" onClick={() => runAction("Resurrect", pm2Admin.resurrect)}>
-            Resurrect Saved Processes
-          </Button>
-          <Button variant="success" onClick={() => runAction("Save", pm2Admin.save)}>
-            Save Current Process List
-          </Button>
-          <Button
-            variant="danger"
-            onClick={() => runAction("Kill PM2", pm2Admin.kill, "Kill PM2 daemon? This can stop all managed processes.")}
-          >
-            Kill PM2 Daemon
-          </Button>
-        </div>
-        <div className="mt-4 grid gap-2 text-sm text-text-2 md:grid-cols-3">
-          <p>PM2 Version: {info.pm2Version || "unknown"}</p>
-          <p>Node Version: {info.nodeVersion || "unknown"}</p>
-          <p>PM2 Home: {info.pm2Home || "unknown"}</p>
-        </div>
-      </section>
-
-
-      <section className="page-panel">
-        <PanelHeader title="Dashboard Settings" className="mb-3" />
-        <div className="space-y-3 text-base text-text-2">
-          <Field label={`Poll interval: ${pollSeconds}s`}>
-            <RangeInput
-              min="1"
-              max="10"
-              value={pollSeconds}
-              onChange={(e) => setPollSeconds(Number(e.target.value))}
-            />
-          </Field>
-          <label className="flex items-center gap-2">
-            <Checkbox checked={autoScroll} onChange={(e) => setAutoScroll(e.target.checked)} />
-            Auto-scroll logs
-          </label>
-          <Button variant="secondary" onClick={saveDashboardSettings}>
-            Save Dashboard Settings
-          </Button>
-        </div>
-      </section>
-
-      <section className="page-panel">
-        <PanelHeader title="Process Config Export / Import" className="mb-3" />
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="secondary" onClick={exportConfig}>
-            Export Config JSON
-          </Button>
-          <FileInput ref={fileRef} accept="application/json" onChange={onImportFile} className="max-w-sm" />
-        </div>
-      </section>
-
-      <section className="page-panel">
-        <PanelHeader title="External Alert Channels" className="mb-3" />
-        {channelsWithFailures.length > 0 && (
-          <Banner tone="warning" icon={<AlertTriangle size={14} />} className="mb-3">
-            {channelsWithFailures.length} channel(s) have failed deliveries.
-          </Banner>
-        )}
-        <div className="grid gap-2 md:grid-cols-2">
-          <Input value={channelName} onChange={(e) => setChannelName(e.target.value)} placeholder="Channel name" />
-          <Input value={channelUrl} onChange={(e) => setChannelUrl(e.target.value)} placeholder="https://..." />
-          <Select value={channelType} onChange={(e) => setChannelType(e.target.value)}>
-            <option value="webhook">Webhook</option>
-            <option value="slack">Slack Webhook</option>
-          </Select>
-          <Select value={channelSeverity} onChange={(e) => setChannelSeverity(e.target.value)}>
-            <option value="info">info</option>
-            <option value="warning">warning</option>
-            <option value="danger">danger</option>
-          </Select>
-          <label className="flex items-center gap-2 text-sm text-text-2">
-            <Checkbox checked={channelEnabled} onChange={(e) => setChannelEnabled(e.target.checked)} />
-            Enabled
-          </label>
-        </div>
-        <div className="mt-2">
-          <Button variant="secondary" onClick={saveChannel}>
-            Save Alert Channel
-          </Button>
-        </div>
-        <div className="mt-3 space-y-2">
-          {channels.length === 0 && <p className="text-sm text-text-3">No channels configured.</p>}
-          {channels.map((channel) => (
-            <InsetPanel key={channel.id} padding="sm" className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="font-medium text-text-1">{channel.name}</span>
-              <span className="text-text-3">{channel.type}</span>
-              <span className="text-text-3">min:{channel.minSeverity}</span>
-              {Number(channel?.deliveryStats?.failedDeliveries || 0) > 0 && (
-                <span className="rounded border border-warning-500/40 bg-warning-500/10 px-1.5 py-0.5 text-xs text-warning-300">
-                  failed: {Number(channel?.deliveryStats?.failedDeliveries || 0)}
-                </span>
-              )}
-              {channel?.deliveryStats?.lastFailureAt && (
-                <span className="text-xs text-warning-300">
-                  last fail: {new Date(channel.deliveryStats.lastFailureAt).toLocaleString()}
-                </span>
-              )}
-              <span className="truncate text-xs text-text-3">{channel.url}</span>
-              <Button variant="secondary" onClick={() => testChannel(channel.id)}>
-                Test
+          <section className="page-panel">
+            <PanelHeader title="PM2 Daemon" className="mb-3" />
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              <Button variant="outlineInfo" onClick={openStartupWizard} disabled={startupLoading}>
+                {startupLoading ? "Preparing..." : "Persist"}
               </Button>
-              <Button variant="danger" onClick={() => removeChannel(channel.id)}>
-                Delete
+              <Button variant="info" onClick={() => runAction("Resurrect", pm2Admin.resurrect)}>
+                Resurrect
               </Button>
-            </InsetPanel>
-          ))}
-        </div>
-      </section>
+              <Button variant="success" onClick={() => runAction("Save", pm2Admin.save)}>
+                Save list
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => runAction("Kill PM2", pm2Admin.kill, "Kill PM2 daemon? This can stop all managed processes.")}
+              >
+                Kill daemon
+              </Button>
+            </div>
+            <div className="mt-3 grid gap-2 text-sm text-text-2 md:grid-cols-3">
+              <InsetPanel padding="sm">PM2: <span className="text-text-1">{info.pm2Version || "unknown"}</span></InsetPanel>
+              <InsetPanel padding="sm">Node: <span className="text-text-1">{info.nodeVersion || "unknown"}</span></InsetPanel>
+              <InsetPanel padding="sm" className="truncate">Home: <span className="text-text-1">{info.pm2Home || "unknown"}</span></InsetPanel>
+            </div>
+          </section>
 
-      <section className="page-panel">
-        <PanelHeader title="Change Password" className="mb-3" />
-        <div className="grid gap-2 md:max-w-md">
-          <Input
-            type="password"
-            value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
-            placeholder="Current password"
-          />
-          <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="New password" />
-          <Input
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            placeholder="Confirm new password"
-          />
-          <Button variant="success" onClick={changePassword}>
-            Update Password
-          </Button>
+          <section className="page-panel">
+            <PanelHeader title="Alert Channels" className="mb-3" />
+            {channelsWithFailures.length > 0 && (
+              <Banner tone="warning" icon={<AlertTriangle size={14} />} className="mb-3">
+                {channelsWithFailures.length} channel(s) have failed deliveries.
+              </Banner>
+            )}
+            <div className="grid gap-2 md:grid-cols-2">
+              <Input value={channelName} onChange={(e) => setChannelName(e.target.value)} placeholder="Channel name" />
+              <Input value={channelUrl} onChange={(e) => setChannelUrl(e.target.value)} placeholder="https://..." />
+              <Select value={channelType} onChange={(e) => setChannelType(e.target.value)}>
+                <option value="webhook">Webhook</option>
+                <option value="slack">Slack Webhook</option>
+              </Select>
+              <Select value={channelSeverity} onChange={(e) => setChannelSeverity(e.target.value)}>
+                <option value="info">info</option>
+                <option value="warning">warning</option>
+                <option value="danger">danger</option>
+              </Select>
+              <label className="flex min-h-11 items-center gap-2 rounded-xl border border-border/70 bg-surface-2/50 px-3 py-2 text-sm text-text-2">
+                <Checkbox checked={channelEnabled} onChange={(e) => setChannelEnabled(e.target.checked)} />
+                Enabled
+              </label>
+              <Button variant="secondary" onClick={saveChannel}>
+                Save channel
+              </Button>
+            </div>
+            <div className="mt-3 space-y-2">
+              {channels.length === 0 && <p className="quiet-empty-state">No channels configured.</p>}
+              {channels.map((channel) => (
+                <InsetPanel key={channel.id} padding="sm" className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="font-medium text-text-1">{channel.name}</span>
+                  <span className="text-text-3">{channel.type}</span>
+                  <span className="text-text-3">min:{channel.minSeverity}</span>
+                  {Number(channel?.deliveryStats?.failedDeliveries || 0) > 0 && (
+                    <span className="rounded border border-warning-500/40 bg-warning-500/10 px-1.5 py-0.5 text-xs text-warning-300">
+                      failed: {Number(channel?.deliveryStats?.failedDeliveries || 0)}
+                    </span>
+                  )}
+                  {channel?.deliveryStats?.lastFailureAt && (
+                    <span className="text-xs text-warning-300">
+                      last fail: {new Date(channel.deliveryStats.lastFailureAt).toLocaleString()}
+                    </span>
+                  )}
+                  <span className="min-w-0 flex-1 truncate text-xs text-text-3">{channel.url}</span>
+                  <Button size="sm" variant="secondary" onClick={() => testChannel(channel.id)}>
+                    Test
+                  </Button>
+                  <Button size="sm" variant="danger" onClick={() => removeChannel(channel.id)}>
+                    Delete
+                  </Button>
+                </InsetPanel>
+              ))}
+            </div>
+          </section>
         </div>
-      </section>
+
+        <aside className="dashboard-side-stack">
+          <section className="page-panel">
+            <PanelHeader title="Dashboard" className="mb-3" />
+            <div className="space-y-3 text-base text-text-2">
+              <Field label={`Poll interval: ${pollSeconds}s`}>
+                <RangeInput
+                  min="1"
+                  max="10"
+                  value={pollSeconds}
+                  onChange={(e) => setPollSeconds(Number(e.target.value))}
+                />
+              </Field>
+              <label className="flex min-h-11 items-center gap-2 rounded-xl border border-border/70 bg-surface-2/50 px-3 py-2 text-sm text-text-2">
+                <Checkbox checked={autoScroll} onChange={(e) => setAutoScroll(e.target.checked)} />
+                Auto-scroll logs
+              </label>
+              <Button variant="secondary" onClick={saveDashboardSettings} className="w-full">
+                Save settings
+              </Button>
+            </div>
+          </section>
+
+          <section className="page-panel">
+            <PanelHeader title="Process Config" className="mb-3" />
+            <div className="space-y-2">
+              <Button variant="secondary" onClick={exportConfig} className="w-full">
+                Export JSON
+              </Button>
+              <FileInput ref={fileRef} accept="application/json" onChange={onImportFile} />
+            </div>
+          </section>
+
+          <section className="page-panel">
+            <PanelHeader title="Password" className="mb-3" />
+            <div className="grid gap-2">
+              <Input
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="Current password"
+              />
+              <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="New password" />
+              <Input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirm new password"
+              />
+              <Button variant="success" onClick={changePassword}>
+                Update password
+              </Button>
+            </div>
+          </section>
+        </aside>
+      </div>
 
       {pendingAction && (
         <ConfirmDialog

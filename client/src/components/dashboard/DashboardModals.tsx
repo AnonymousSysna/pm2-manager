@@ -300,7 +300,7 @@ export function DotEnvEditorModal({
             <p className="text-sm text-text-3">No editable entries were found.</p>
           )}
           {dotEnvFields.map((item, index) => (
-            <div key={`${item.key}-${index}`} className="grid grid-cols-1 gap-2 md:grid-cols-[220px,1fr] md:items-center">
+            <div key={`${item.key}-${index}`} className="grid grid-cols-1 gap-2 md:grid-cols-[220px_1fr] md:items-center">
               <Eyebrow as="label">{item.key}</Eyebrow>
               <DotEnvValueInput
                 valueType={item.valueType}
@@ -488,7 +488,7 @@ function DotEnvEditorSkeleton() {
     <InsetCard aria-hidden="true">
       <div className="space-y-3">
         {Array.from({ length: 5 }).map((_, index) => (
-          <div key={index} className="grid grid-cols-1 gap-2 md:grid-cols-[220px,1fr] md:items-center">
+          <div key={index} className="grid grid-cols-1 gap-2 md:grid-cols-[220px_1fr] md:items-center">
             <Skeleton className="h-3 w-28" />
             <Skeleton className="h-10 w-full" />
           </div>

@@ -49,7 +49,7 @@ export default function ProcessListPanel({
   }, [openActionMenu]);
 
   return (
-    <section ref={panelRef} className="page-panel space-y-3 process-control-panel">
+    <section ref={panelRef} className="page-panel space-y-3">
       <PanelHeader
         title="Processes"
         description="Search, check load, then use the smallest safe action."
@@ -57,37 +57,41 @@ export default function ProcessListPanel({
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Filter by process name or status"
+            placeholder="Search processes"
             className="w-full md:w-80"
           />
         )}
       />
 
-      <InsetCard className="rounded-xl bg-surface-2/45" padding="sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <InsetCard className="toolbar-strip" padding="sm">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-2 text-xs text-text-2">
             <Badge tone={selectedCount > 0 ? "info" : "neutral"}>{selectedCount} selected</Badge>
             <Button type="button" size="sm" variant="secondary" onClick={() => toggleSelectAllFiltered(true)}>
               Select filtered
             </Button>
-            <Button type="button" size="sm" variant="secondary" onClick={() => toggleSelectAllFiltered(false)}>
-              Clear selection
-            </Button>
+            {selectedCount > 0 && (
+              <Button type="button" size="sm" variant="secondary" onClick={() => toggleSelectAllFiltered(false)}>
+                Clear
+              </Button>
+            )}
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" variant="outlineSuccess" onClick={() => runBulkAction("start")} disabled={selectedCount === 0}>
-              <Play size={14} />
-              Start
-            </Button>
-            <Button type="button" size="sm" variant="outlineDanger" onClick={() => runBulkAction("stop")} disabled={selectedCount === 0}>
-              <Square size={14} />
-              Stop
-            </Button>
-            <Button type="button" size="sm" variant="outlineInfo" onClick={() => runBulkAction("restart")} disabled={selectedCount === 0}>
-              <RefreshCw size={14} />
-              Restart
-            </Button>
-          </div>
+          {selectedCount > 0 && (
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="outlineSuccess" onClick={() => runBulkAction("start")}>
+                <Play size={14} />
+                Start
+              </Button>
+              <Button type="button" size="sm" variant="outlineDanger" onClick={() => runBulkAction("stop")}>
+                <Square size={14} />
+                Stop
+              </Button>
+              <Button type="button" size="sm" variant="outlineInfo" onClick={() => runBulkAction("restart")}>
+                <RefreshCw size={14} />
+                Restart
+              </Button>
+            </div>
+          )}
         </div>
       </InsetCard>
 
@@ -125,17 +129,17 @@ export default function ProcessListPanel({
               const health = summary.health || {};
 
               return (
-                <tr key={proc.name} className="border-b border-border/70 align-top last:border-b-0">
-                  <td className="px-3 py-4">
+                <tr key={proc.name} className="border-b border-border/60 align-top last:border-b-0 hover:bg-surface-2/25">
+                  <td className="px-3 py-3">
                     <Checkbox
                       checked={selected}
                       onChange={(event) => controls.toggleSelected(proc.name, event.target.checked)}
                     />
                   </td>
-                  <td className="px-3 py-4">
+                  <td className="px-3 py-3">
                     <ProcessIdentity item={item} controls={controls} />
                   </td>
-                  <td className="px-3 py-4">
+                  <td className="px-3 py-3">
                     <div className="space-y-2">
                       <StatusBadge status={proc.status} />
                       <p className="text-xs text-text-3">
@@ -147,13 +151,13 @@ export default function ProcessListPanel({
                       </p>
                     </div>
                   </td>
-                  <td className="px-3 py-4">
+                  <td className="px-3 py-3">
                     <LoadSummary proc={proc} bytesToMB={bytesToMB} />
                   </td>
-                  <td className="px-3 py-4">
+                  <td className="px-3 py-3">
                     <RuntimeSummary proc={proc} summary={summary} durationLabel={durationLabel} />
                   </td>
-                  <td className="px-3 py-4 min-w-[18rem]">
+                  <td className="px-3 py-3 min-w-[18rem]">
                     <RowActions
                       item={item}
                       layout="table"
@@ -221,7 +225,7 @@ function ProcessIdentity({ item, controls, showSelector = false, showPortButton 
             {proc.name}
           </TextButton>
         </div>
-        <div className="mt-2 flex flex-wrap gap-2">
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
           <StatusBadge status={proc.status} />
           <Badge tone={proc.mode === "cluster" ? "info" : "neutral"}>{proc.mode || "fork"}</Badge>
           {proc.id !== undefined && <Badge tone="neutral">ID {proc.id}</Badge>}
@@ -246,7 +250,7 @@ function ProcessIdentity({ item, controls, showSelector = false, showPortButton 
 
 function LoadSummary({ proc, bytesToMB }) {
   return (
-    <InsetCard tone="surface">
+    <InsetCard tone="surface" padding="sm">
       <Eyebrow>Load</Eyebrow>
       <div className="mt-2 space-y-2">
         <div>
@@ -293,7 +297,7 @@ function MetricThreadItem({ label, value }) {
 
 function RuntimeSummary({ proc, summary, durationLabel }) {
   return (
-    <InsetCard tone="surface">
+    <InsetCard tone="surface" padding="sm">
       <Eyebrow>Runtime</Eyebrow>
       <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-text-2">
         <div>
@@ -431,7 +435,7 @@ function ActionMenuItem({ icon, children, disabled = false, onClick }) {
 }
 
 function EmptyState() {
-  return <p className="text-center text-sm text-text-3">No processes match the current filter.</p>;
+  return <p className="quiet-empty-state">No processes found.</p>;
 }
 
 function StatusBadge({ status }) {

@@ -149,16 +149,10 @@ export default function PM2Features() {
 
   return (
     <div className="space-y-4">
-      <PageIntro
-        title="PM2 Features"
-        description="A guarded workspace for PM2 commands that do not fit the normal dashboard flow. Use Overview for daily triage; use this page for advanced PM2 operations."
-      />
+      <PageIntro title="PM2 Tools" />
 
       <section className="page-panel space-y-3">
-        <PanelHeader
-          title="Feature map"
-          description="Grouped by user goal so the page stays usable even while covering most PM2 commands."
-        />
+        <PanelHeader title="Feature map" />
         {loading ? (
           <div className="grid gap-2 md:grid-cols-4">
             {Array.from({ length: 8 }).map((_, index) => <Skeleton key={index} className="h-20 w-full" />)}
@@ -193,8 +187,8 @@ export default function PM2Features() {
         {(processes || []).map((proc) => <option key={proc.name} value={proc.name} />)}
       </datalist>
 
-      <section className="grid gap-3 xl:grid-cols-[minmax(0,1fr),420px]">
-        <div className="space-y-3">
+      <section className="pm2-workspace-grid">
+        <div className="pm2-feature-list">
           {selectedFeatures.map((feature) => (
             <FeatureCard
               key={feature.id}
@@ -212,7 +206,7 @@ export default function PM2Features() {
         </div>
 
         <aside className="space-y-3">
-          <section className="page-panel sticky top-header space-y-3">
+          <section className="result-panel space-y-3">
             <PanelHeader title="Last result" />
             {lastResult ? (
               <>
@@ -264,18 +258,18 @@ export default function PM2Features() {
 
 function FeatureCard({ feature, form, processes, running, onChange, onRun }) {
   return (
-    <article className="page-panel space-y-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
+    <article className="pm2-feature-card space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="panel-heading">{feature.label}</h2>
             <Badge tone={riskTone[feature.risk] || "neutral"}>{feature.risk}</Badge>
           </div>
-          <p className="mt-1 break-all rounded-md border border-border/70 bg-surface-2/45 px-2 py-1 font-mono text-xs text-text-3">
+          <p className="command-chip mt-2">
             {feature.commandPreview}
           </p>
         </div>
-        <Button type="button" variant={feature.risk === "critical" ? "danger" : "secondary"} disabled={running} onClick={onRun}>
+        <Button type="button" size="sm" variant={feature.risk === "critical" ? "danger" : "secondary"} disabled={running} onClick={onRun}>
           {feature.risk === "critical" ? <AlertTriangle size={14} /> : <Play size={14} />}
           {running ? "Running..." : "Run"}
         </Button>

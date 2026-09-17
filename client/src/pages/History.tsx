@@ -165,7 +165,7 @@ export default function History() {
             </Button>
           }
         />
-        <div className="mb-2 grid gap-2 md:grid-cols-[1fr,auto] md:items-center">
+        <div className="mb-2 grid gap-2 md:grid-cols-[1fr_auto] md:items-center">
           <Input
             value={deploymentProcessFilter}
             onChange={(event) => setDeploymentProcessFilter(event.target.value)}
@@ -311,7 +311,7 @@ export default function History() {
             </Button>
           }
         />
-        <div className="mb-2 grid gap-2 md:grid-cols-[220px,1fr] md:items-center">
+        <div className="mb-2 grid gap-2 md:grid-cols-[220px_1fr] md:items-center">
           <Select value={auditActionPreset} onChange={(event) => setAuditActionPreset(event.target.value)}>
             <option value="">All actions</option>
             <option value="process.deploy">process.deploy</option>

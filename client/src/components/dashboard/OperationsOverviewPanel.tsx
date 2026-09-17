@@ -1,6 +1,5 @@
 import { AlertTriangle, History, ScrollText, ServerCrash, ShieldCheck, ShieldX } from "lucide-react";
 import Badge from "../ui/Badge";
-import Banner from "../ui/Banner";
 import Button from "../ui/Button";
 import { PanelHeader } from "../ui/PageLayout";
 import { InsetCard } from "../ui/Surface";
@@ -196,9 +195,10 @@ export default function OperationsOverviewPanel({
         </div>
 
         {attentionItems.length === 0 ? (
-          <Banner tone="success" icon={<ShieldX size={16} className="rotate-180" />}>
-            No current errors, unhealthy checks, stops, or anomaly spikes.
-          </Banner>
+          <div className="quiet-empty-state">
+            <ShieldX size={16} className="mx-auto mb-2 rotate-180 text-success-300" />
+            No current errors, stops, or unhealthy checks.
+          </div>
         ) : (
           <div className="space-y-2">
             {attentionItems.map((item) => (
@@ -244,13 +244,13 @@ function summarizeNames(names = []) {
 
 function ActionBlock({ label, title, detail, tone, actionLabel, onAction }) {
   return (
-    <InsetCard className="rounded-xl bg-surface-2/50" padding="sm">
+    <InsetCard className="triage-card" padding="sm">
       <div className="flex h-full flex-col gap-2">
-        <div>
+        <div className="triage-card-topline">
           <SupportingCopy size="xs" className="uppercase tracking-[0.16em]">{label}</SupportingCopy>
           <Badge tone={tone}>{title}</Badge>
-          <SupportingCopy size="xs" className="mt-2">{detail}</SupportingCopy>
         </div>
+        <SupportingCopy size="xs" className="min-h-8">{detail}</SupportingCopy>
         {actionLabel && onAction ? (
           <div className="mt-auto">
             <Button type="button" size="sm" variant="secondary" onClick={onAction}>

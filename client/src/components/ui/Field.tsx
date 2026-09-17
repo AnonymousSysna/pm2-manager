@@ -9,9 +9,9 @@ export default function Field({
   children
 }) {
   return (
-    <div className={cn("space-y-1", className)}>
+    <div className={cn("space-y-1.5", className)}>
       {label && !htmlFor ? (
-        <label className="block space-y-1 text-sm text-text-2">
+        <label className="block space-y-1.5 text-sm font-medium text-text-2">
           <span>
             {label}
             {required ? " *" : ""}
@@ -21,7 +21,7 @@ export default function Field({
       ) : (
         <>
           {label ? (
-            <label htmlFor={htmlFor} className="block text-sm text-text-2">
+            <label htmlFor={htmlFor} className="block text-sm font-medium text-text-2">
               {label}
               {required ? " *" : ""}
             </label>

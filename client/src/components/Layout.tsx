@@ -8,17 +8,32 @@ import Button from "./ui/Button";
 import NavItem from "./ui/NavItem";
 import { Eyebrow } from "./ui/Typography";
 
-const staticLinks = [
-  { to: "/dashboard", label: "Overview", icon: Activity },
-  { to: "/dashboard/create", label: "Add", icon: Plus },
-  { to: "/dashboard/notifications", label: "Alerts", icon: Bell },
-  { to: "/dashboard/logs", label: "Logs", icon: ScrollText },
-  { to: "/dashboard/history", label: "History", icon: History },
-  { to: "/dashboard/settings", label: "Settings", icon: Settings },
-  { to: "/dashboard/ai", label: "AI Operator", icon: Bot },
-  { to: "/dashboard/pm2-features", label: "PM2 Features", icon: TerminalSquare },
-  { to: "/dashboard/extensions", label: "Extensions", icon: Puzzle },
-  { to: "/dashboard/caddy", label: "Caddy", icon: Globe }
+const navGroups = [
+  {
+    label: "Operate",
+    links: [
+      { to: "/dashboard", label: "Overview", icon: Activity },
+      { to: "/dashboard/create", label: "Add", icon: Plus },
+      { to: "/dashboard/logs", label: "Logs", icon: ScrollText },
+      { to: "/dashboard/notifications", label: "Alerts", icon: Bell }
+    ]
+  },
+  {
+    label: "Review",
+    links: [
+      { to: "/dashboard/history", label: "History", icon: History },
+      { to: "/dashboard/settings", label: "Settings", icon: Settings },
+      { to: "/dashboard/caddy", label: "Proxy", icon: Globe }
+    ]
+  },
+  {
+    label: "Advanced",
+    links: [
+      { to: "/dashboard/ai", label: "AI", icon: Bot },
+      { to: "/dashboard/pm2-features", label: "PM2 Tools", icon: TerminalSquare },
+      { to: "/dashboard/extensions", label: "Extensions", icon: Puzzle }
+    ]
+  }
 ];
 
 const pageTitleMap = {
@@ -29,29 +44,36 @@ const pageTitleMap = {
   "/dashboard/history": "History",
   "/dashboard/settings": "Settings",
   "/dashboard/ai": "AI Operator",
-  "/dashboard/pm2-features": "PM2 Features",
+  "/dashboard/pm2-features": "PM2 Tools",
   "/dashboard/extensions": "Extensions",
   "/dashboard/caddy": "Caddy Proxy"
 };
 
-function NavLinks({ pathname, links, onNavigate }) {
+function NavLinks({ pathname, groups, onNavigate }) {
   return (
-    <nav className="space-y-1.5">
-      {links.map(({ to, label, icon: Icon }) => {
-        const active = pathname === to;
-        return (
-          <NavItem
-            key={to}
-            as={Link}
-            to={to}
-            onClick={onNavigate}
-            active={active}
-          >
-            <Icon size={16} />
-            {label}
-          </NavItem>
-        );
-      })}
+    <nav className="space-y-3">
+      {groups.map((group) => (
+        <div key={group.label}>
+          <p className="nav-section-label">{group.label}</p>
+          <div className="space-y-1">
+            {group.links.map(({ to, label, icon: Icon }) => {
+              const active = pathname === to;
+              return (
+                <NavItem
+                  key={to}
+                  as={Link}
+                  to={to}
+                  onClick={onNavigate}
+                  active={active}
+                >
+                  <Icon size={16} />
+                  {label}
+                </NavItem>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </nav>
   );
 }
@@ -80,25 +102,25 @@ export default function Layout() {
   };
 
   return (
-    <div className="min-h-screen bg-bg text-text-1">
+    <div className="app-shell">
       {reconnecting && (
         <div className="sticky top-0 z-40 border-b border-warning-500/40 bg-warning-500/15 px-4 py-2 text-center text-sm text-warning-300">
-          Reconnecting... Live process updates are temporarily paused.
+          Reconnecting. Live updates paused.
         </div>
       )}
-      <header className="sticky top-0 z-30 border-b border-border bg-surface/95 backdrop-blur">
-        <div className="mx-auto flex max-w-layout items-center justify-between px-4 py-3 md:px-6">
-          <div className="flex items-center gap-3">
+      <header className="app-header">
+        <div className="app-header-inner">
+          <div className="flex min-w-0 items-center gap-3">
             <Button type="button" variant="secondary" size="icon" onClick={() => setMobileOpen(true)} className="md:hidden" aria-label="Open navigation">
               <Menu size={18} />
             </Button>
-            <div className="hidden h-8 w-8 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-bg md:flex">PM2</div>
-            <div>
+            <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-brand-600 text-xs font-bold text-white md:flex">PM2</div>
+            <div className="min-w-0">
               <Eyebrow>PM2 Manager</Eyebrow>
-              <p className="page-title">{title}</p>
+              <p className="page-title truncate">{title}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <Button
               type="button"
               variant="secondary"
@@ -109,19 +131,15 @@ export default function Layout() {
               {theme === "light" ? <Moon size={16} /> : <Sun size={16} />}
             </Button>
             <Badge tone={connected ? "success" : reconnecting ? "warning" : "danger"}>
-              {connected ? "Connected" : reconnecting ? "Reconnecting" : "Disconnected"}
+              {connected ? "Live" : reconnecting ? "Reconnecting" : "Offline"}
             </Badge>
           </div>
         </div>
       </header>
 
-      <div className="mx-auto flex w-full max-w-layout gap-4 px-4 py-4 md:px-6 md:py-6">
-        <aside className="sticky top-header hidden h-[calc(100vh-theme(spacing.header)-theme(spacing.6))] w-64 shrink-0 rounded-xl border border-border bg-surface p-4 md:flex md:flex-col">
-          <div className="mb-4 flex items-center gap-2 border-b border-border pb-3 text-xs uppercase tracking-[0.16em] text-text-3">
-            <span className="h-2 w-2 rounded-full bg-brand-500" />
-            Workflow
-          </div>
-          <NavLinks pathname={location.pathname} links={staticLinks} />
+      <div className="app-workspace">
+        <aside className="app-sidebar">
+          <NavLinks pathname={location.pathname} groups={navGroups} />
           <Button type="button" variant="secondary" onClick={logout} className="mt-auto w-full justify-start">
             <LogOut size={16} />
             Logout
@@ -143,7 +161,7 @@ export default function Layout() {
                 <X size={16} />
               </Button>
             </div>
-            <NavLinks pathname={location.pathname} links={staticLinks} onNavigate={() => setMobileOpen(false)} />
+            <NavLinks pathname={location.pathname} groups={navGroups} onNavigate={() => setMobileOpen(false)} />
             <Button type="button" variant="secondary" onClick={logout} className="mt-4 w-full justify-start">
               <LogOut size={16} />
               Logout
@@ -154,5 +172,3 @@ export default function Layout() {
     </div>
   );
 }
-
-

@@ -5,9 +5,9 @@ export default function NavItem({ as: Comp = "button", active = false, className
     <Comp
       type={Comp === "button" ? type : undefined}
       className={cn(
-        "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
+        "flex min-h-10 items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
-        active ? "bg-brand-500/20 text-brand-400" : "text-text-2 hover:bg-surface-2",
+        active ? "bg-brand-500/20 text-brand-400 ring-1 ring-brand-500/25" : "text-text-2 hover:bg-surface-2/75 hover:text-text-1",
         className
       )}
       {...props}

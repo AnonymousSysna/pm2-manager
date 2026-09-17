@@ -968,7 +968,7 @@ export default function Dashboard() {
       />
 
       <div className="ops-section-grid">
-        <div className="space-y-4 xl:col-span-2">
+        <div className="dashboard-main-stack">
           <ProcessListPanel
             items={processRows}
             selection={{ allSelected, selectedCount }}
@@ -991,19 +991,19 @@ export default function Dashboard() {
             }}
             formatters={{ bytesToMB, durationLabel }}
           />
+
+          <div className="dashboard-insight-grid">
+            <MetricsHistoryPanel
+              chartProcess={chartProcess}
+              onChartProcessChange={setChartProcess}
+              processes={processes}
+              historyPoints={historyPoints}
+            />
+            <DependencyGraphPanel dependencyEdges={dependencyEdges} />
+          </div>
         </div>
 
-        <div className="space-y-4">
-          <MetricsHistoryPanel
-            chartProcess={chartProcess}
-            onChartProcessChange={setChartProcess}
-            processes={processes}
-            historyPoints={historyPoints}
-          />
-          <DependencyGraphPanel dependencyEdges={dependencyEdges} />
-        </div>
-
-        <div className="space-y-4">
+        <aside className="dashboard-side-stack">
           <ThresholdAlertsPanel alerts={alerts} onOpenLogs={openLogsForProcess} />
           <SystemResourcesPanel systemResources={systemResources} bytesToGB={bytesToGB} />
           {!checklist.dismissed && (
@@ -1017,7 +1017,7 @@ export default function Dashboard() {
               onNavigate={(to) => navigate(to)}
             />
           )}
-        </div>
+        </aside>
       </div>
 
       <ProcessDetailModal

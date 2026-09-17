@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
-import { Bot, Copy, KeyRound, Play, Send, ShieldCheck, Zap } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Bot, Copy, KeyRound, Play, Send, Zap } from "lucide-react";
 import { aiOperator, pm2Admin, processes as processApi } from "../api";
 import toast, { getErrorMessage } from "../lib/toast";
 import Badge from "../components/ui/Badge";
-import Banner from "../components/ui/Banner";
 import Button from "../components/ui/Button";
 import Field from "../components/ui/Field";
 import Input from "../components/ui/Input";
@@ -31,10 +30,10 @@ const providerBaseUrls = {
 };
 
 const suggestedPrompts = [
-  "Check why my apps are unstable and suggest the safest next action.",
-  "Show me the logs for the most suspicious process first.",
-  "Restart the crashed process only if it is clearly stopped.",
-  "Save the current PM2 process list after checking status."
+  "Check unstable apps",
+  "Open suspicious logs",
+  "Restart stopped apps",
+  "Save PM2 list"
 ];
 
 const riskTone = {
@@ -102,7 +101,7 @@ function MessageBubble({ message }) {
   const mine = message.role === "user";
   return (
     <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-      <div className={`max-w-[88%] rounded-xl border px-3 py-2 text-sm ${mine ? "border-brand-500/40 bg-brand-500/15 text-text-1" : "border-border bg-surface-2/70 text-text-2"}`}>
+      <div className={`message-bubble ${mine ? "message-bubble-user" : "message-bubble-ai"}`}>
         <div className="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-[0.14em] text-text-3">
           {mine ? "You" : "AI Operator"}
         </div>
@@ -156,7 +155,7 @@ export default function AIOperator() {
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      content: "Paste your provider URL, API key, and model. Then ask what to check or run."
+      content: "Add your provider details, then ask what to check or run."
     }
   ]);
   const [prompt, setPrompt] = useState("");
@@ -194,11 +193,6 @@ export default function AIOperator() {
       mounted = false;
     };
   }, []);
-
-  const providerHelp = useMemo(() => {
-    const found = providers.find((provider) => provider.id === settings.provider);
-    return found?.notes || "Use any provider that matches the selected protocol.";
-  }, [providers, settings.provider]);
 
   const canSend = settings.baseUrl.trim() && settings.model.trim() && settings.apiKey.trim() && prompt.trim() && !sending;
 
@@ -311,32 +305,32 @@ export default function AIOperator() {
         title="AI Operator"
         description="Chat with your preferred AI provider, let it inspect PM2 context, and run only guarded dashboard actions."
         actions={(
-          <Button type="button" variant="secondary" onClick={copyTranscript}>
-            <Copy size={14} />
-            Copy chat
-          </Button>
+          <>
+            <Badge tone="success">Guarded</Badge>
+            <Button type="button" variant="secondary" onClick={copyTranscript}>
+              <Copy size={14} />
+              Copy chat
+            </Button>
+          </>
         )}
       />
 
-      <Banner tone="warning" icon={<ShieldCheck size={16} />}>
-        <strong className="text-text-1">Guardrails on.</strong> Critical actions need confirmation. No raw shell.
-      </Banner>
 
-      <section className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <aside className="space-y-4">
+      <section className="operator-layout">
+        <aside className="space-y-3">
           <section className="page-panel space-y-3">
-            <PanelHeader title="AI connection" description="Use OpenAI-compatible gateways or Anthropic Claude." />
+            <PanelHeader title="AI connection" />
             <Field label="Provider">
               <Select value={settings.provider} onChange={(event) => changeProvider(event.target.value)}>
                 <option value="openai-compatible">OpenAI compatible</option>
                 <option value="anthropic">Anthropic Claude</option>
               </Select>
             </Field>
-            <Field label="Provider URL" description={providerHelp}>
+            <Field label="Provider URL">
               <Input value={settings.baseUrl} onChange={(event) => updateSetting("baseUrl", event.target.value)} placeholder="https://api.openai.com/v1" />
             </Field>
             <Field label="Model">
-              <Input value={settings.model} onChange={(event) => updateSetting("model", event.target.value)} placeholder="Use the exact model id from your provider" />
+              <Input value={settings.model} onChange={(event) => updateSetting("model", event.target.value)} placeholder="gpt-4o-mini, claude-sonnet-4-5" />
             </Field>
             <Field label="API key">
               <Input type="password" value={settings.apiKey} onChange={(event) => updateSetting("apiKey", event.target.value)} placeholder="sk-..." autoComplete="off" />
@@ -359,7 +353,7 @@ export default function AIOperator() {
           </section>
 
           <section className="page-panel space-y-3">
-            <PanelHeader title="Execution mode" description="Choose how much work the AI can run after it answers." />
+            <PanelHeader title="Execution mode" />
             <Field label="Mode">
               <Select value={settings.executeMode} onChange={(event) => updateSetting("executeMode", event.target.value)}>
                 <option value="plan">Plan only</option>
@@ -388,14 +382,13 @@ export default function AIOperator() {
         </aside>
 
         <section className="space-y-4">
-          <section className="page-panel flex min-h-[560px] flex-col gap-3">
+          <section className="operator-console">
             <PanelHeader
               title="Operator terminal"
-              description="Ask in plain language. The AI answers first, then prepares PM2 actions if useful."
               actions={<Badge tone={settings.executeMode === "plan" ? "neutral" : "warning"}>{settings.executeMode}</Badge>}
             />
 
-            <div className="flex-1 space-y-3 overflow-y-auto rounded-xl border border-border bg-bg/50 p-3">
+            <div className="operator-messages">
               {messages.map((message, index) => <MessageBubble key={`${message.role}-${index}`} message={message} />)}
               {sending ? (
                 <div className="flex items-center gap-2 text-sm text-text-3">
@@ -410,7 +403,7 @@ export default function AIOperator() {
                 <button
                   key={item}
                   type="button"
-                  className="rounded-full border border-border bg-surface-2 px-3 py-1.5 text-xs text-text-2 transition hover:bg-surface-3"
+                  className="prompt-chip"
                   onClick={() => setPrompt(item)}
                 >
                   {item}
@@ -422,7 +415,7 @@ export default function AIOperator() {
               <Textarea
                 value={prompt}
                 onChange={(event) => setPrompt(event.target.value)}
-                placeholder="Example: check logs and restart only the stopped API process"
+                placeholder="Ask what to check or run"
                 className="min-h-[110px] resize-y"
               />
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -437,14 +430,14 @@ export default function AIOperator() {
           {(lastActions.length > 0 || lastExecutions.length > 0) && (
             <section className="grid gap-4 lg:grid-cols-2">
               <div className="page-panel space-y-3">
-                <PanelHeader title="Prepared actions" description="Review what the AI mapped to the PM2 allowlist." />
+                <PanelHeader title="Prepared actions" />
                 {lastActions.length > 0 ? lastActions.map((action, index) => (
                   <PlannedActionCard key={`${action.actionId}-${index}`} action={action} onRun={runAction} running={runningActionId === action.actionId} />
                 )) : <InsetPanel padding="sm" className="text-sm text-text-3">No PM2 actions prepared.</InsetPanel>}
               </div>
 
               <div className="page-panel space-y-3">
-                <PanelHeader title="Execution log" description="Outputs are redacted and truncated before display." />
+                <PanelHeader title="Execution log" />
                 {lastExecutions.length > 0 ? lastExecutions.map((execution, index) => (
                   <ExecutionCard key={`${execution.actionId}-${index}`} execution={execution} />
                 )) : <InsetPanel padding="sm" className="text-sm text-text-3">No actions executed yet.</InsetPanel>}

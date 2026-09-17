@@ -1,6 +1,6 @@
 {
   "name": "pm2-dashboard",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "private": true,
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",

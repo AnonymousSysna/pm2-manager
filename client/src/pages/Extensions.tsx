@@ -308,7 +308,7 @@ export default function Extensions() {
             </Button>
           </div>
 
-          <div className="grid gap-2 md:grid-cols-[1fr,180px,auto]">
+          <div className="grid gap-2 md:grid-cols-[1fr_180px_auto]">
             <Input
               value={nodeInstallVersion}
               onChange={(event) => setNodeInstallVersion(event.target.value)}

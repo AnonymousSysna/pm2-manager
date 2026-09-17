@@ -572,16 +572,16 @@ export default function CreateProcess() {
   };
 
   return (
-    <section className="mx-auto max-w-3xl space-y-4">
+    <section className="mx-auto max-w-4xl space-y-4">
       <PageIntro
         title="Add process"
         description="Choose a source, confirm runtime, then launch."
       />
 
       <div className="page-panel">
-        <PanelHeader title="Launch flow" description="Start simple. Advanced settings stay tucked away until needed." className="mb-3" />
+        <PanelHeader title="Launch flow" className="mb-3" />
 
-        <InsetCard className="flow-strip mb-4 grid gap-2 md:grid-cols-[1fr,auto,auto]">
+        <InsetCard className="flow-strip mb-4 grid gap-2 md:grid-cols-[1fr_auto_auto]">
           <Select value={selectedTemplate} onChange={(e) => {
             const value = e.target.value;
             setSelectedTemplate(value);
@@ -598,7 +598,7 @@ export default function CreateProcess() {
           <Button type="button" variant="danger" onClick={deleteTemplate} disabled={!selectedTemplate}>Delete</Button>
         </InsetCard>
 
-        <div className="mb-4 flex flex-wrap gap-2">
+        <div className="step-row">
           <StepBadge active={step === 1} done={step > 1}>1. Source</StepBadge>
           <StepBadge active={step === 2} done={step > 2}>2. Runtime</StepBadge>
           <StepBadge active={step === 3}>3. Review</StepBadge>
@@ -607,31 +607,31 @@ export default function CreateProcess() {
         <form onSubmit={submit} className="space-y-4">
           {step === 1 && (
             <>
-              <InsetCard>
-                <SubsectionTitle className="mb-2 text-sm">Source</SubsectionTitle>
-                <div className="flex flex-wrap gap-2">
+              <InsetCard className="flow-strip">
+                <SubsectionTitle className="text-sm">Source</SubsectionTitle>
+                <div className="mt-2 grid grid-cols-3 gap-2">
                   <ModeButton active={mode === "script"} onClick={() => setMode("script")}>Script</ModeButton>
                   <ModeButton active={mode === "project"} onClick={() => setMode("project")}>Folder</ModeButton>
                   <ModeButton active={mode === "git"} onClick={() => setMode("git")}>Git</ModeButton>
                 </div>
               </InsetCard>
 
-              <Field label="Process Name" required>
-                <Input value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="my-app" />
-              </Field>
-
-              {mode === "script" && (
-                <Field label="Script Path" required>
-                  <Input
-                    value={form.script}
-                    onChange={(e) => update("script", e.target.value)}
-                    placeholder="app.js, npm, or /absolute/path/to/app.py"
-                  />
+              <div className="create-form-grid">
+                <Field label="Process Name" required>
+                  <Input value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="my-app" />
                 </Field>
-              )}
 
-              {mode === "project" && (
-                <>
+                {mode === "script" && (
+                  <Field label="Script Path" required>
+                    <Input
+                      value={form.script}
+                      onChange={(e) => update("script", e.target.value)}
+                      placeholder="app.js, npm, /path/app.py"
+                    />
+                  </Field>
+                )}
+
+                {mode === "project" && (
                   <Field label="Project Directory" required>
                     <Input
                       value={form.project_path}
@@ -639,160 +639,158 @@ export default function CreateProcess() {
                       placeholder="/root/my-app"
                     />
                   </Field>
-                </>
-              )}
+                )}
 
-              {mode === "git" && (
-                <>
-                  <Field label="Git Clone URL" required>
-                    <Input
-                      value={form.git_clone_url}
-                      onChange={(e) => updateCloneUrl(e.target.value)}
-                      placeholder="https://github.com/org/repo.git"
-                    />
-                  </Field>
+                {mode === "git" && (
+                  <>
+                    <Field label="Git Clone URL" required className="create-form-grid-full">
+                      <Input
+                        value={form.git_clone_url}
+                        onChange={(e) => updateCloneUrl(e.target.value)}
+                        placeholder="https://github.com/org/repo.git"
+                      />
+                    </Field>
 
-                  <Field label="Git Branch (Optional)">
-                    <Input
-                      value={form.git_branch}
-                      onChange={(e) => update("git_branch", e.target.value)}
-                      placeholder="main"
-                    />
-                  </Field>
+                    <Field label="Git Branch">
+                      <Input
+                        value={form.git_branch}
+                        onChange={(e) => update("git_branch", e.target.value)}
+                        placeholder="main"
+                      />
+                    </Field>
 
-                  <Field label="Project Directory" required>
-                    <Input
-                      value={form.project_path}
-                      onChange={(e) => update("project_path", e.target.value)}
-                      placeholder="repo-name or relative/path/inside/allowed/root"
-                    />
-                  </Field>
+                    <Field label="Project Directory" required>
+                      <Input
+                        value={form.project_path}
+                        onChange={(e) => update("project_path", e.target.value)}
+                        placeholder="repo-name"
+                      />
+                    </Field>
 
-                  <Field label=".env File Content (Optional)">
-                    <Textarea
-                      value={form.env_file_content}
-                      onChange={(e) => update("env_file_content", e.target.value)}
-                      placeholder={"NODE_ENV=production\nAPI_KEY=replace_me"}
-                      className="min-h-32"
-                    />
-                    {envFileValidationErrors.length > 0 ? (
-                      <StatusText as="p" tone="danger" className="mt-1 text-xs">
-                        Invalid `.env` syntax on line(s): {envFileValidationErrors.slice(0, 5).map((item) => item.line).join(", ")}.
-                      </StatusText>
-                    ) : null}
-                  </Field>
-                </>
-              )}
+                    <Field label=".env File Content" className="create-form-grid-full">
+                      <Textarea
+                        value={form.env_file_content}
+                        onChange={(e) => update("env_file_content", e.target.value)}
+                        placeholder={"NODE_ENV=production\nAPI_KEY=replace_me"}
+                        className="min-h-28"
+                      />
+                      {envFileValidationErrors.length > 0 ? (
+                        <StatusText as="p" tone="danger" className="mt-1 text-xs">
+                          Invalid `.env` syntax on line(s): {envFileValidationErrors.slice(0, 5).map((item) => item.line).join(", ")}.
+                        </StatusText>
+                      ) : null}
+                    </Field>
+                  </>
+                )}
+              </div>
             </>
           )}
 
           {step === 2 && (
             <>
-              <InsetCard className="flow-strip">
-                <SubsectionTitle className="text-sm">Runtime match</SubsectionTitle>
-                <div className="mt-1 text-sm text-text-2"><code>{runtimeHint.interpreter}</code> / <code>{runtimeHint.execMode}</code></div>
-                <div className="mt-2">
-                  <Button type="button" variant="info" size="sm" onClick={applyRuntimeHint}>
-                    Apply
-                  </Button>
+              <InsetCard className="flow-strip flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <SubsectionTitle className="text-sm">Runtime match</SubsectionTitle>
+                  <div className="mt-1 text-sm text-text-2"><code>{runtimeHint.interpreter}</code> / <code>{runtimeHint.execMode}</code></div>
                 </div>
+                <Button type="button" variant="info" size="sm" onClick={applyRuntimeHint}>
+                  Apply
+                </Button>
               </InsetCard>
 
-              {mode === "script" && (
-                <>
-                  <Field label="Arguments">
-                    <Input value={form.args} onChange={(e) => update("args", e.target.value)} />
-                  </Field>
-                  <Field label="Working Directory">
-                    <Input value={form.cwd} onChange={(e) => update("cwd", e.target.value)} />
-                  </Field>
-                </>
-              )}
+              <div className="create-form-grid">
+                {mode === "script" && (
+                  <>
+                    <Field label="Arguments">
+                      <Input value={form.args} onChange={(e) => update("args", e.target.value)} />
+                    </Field>
+                    <Field label="Working Directory">
+                      <Input value={form.cwd} onChange={(e) => update("cwd", e.target.value)} />
+                    </Field>
+                  </>
+                )}
 
-              {(mode === "project" || mode === "git") && (
-                <>
-                  <Field label="Start Script">
-                    <Input
-                      value={form.start_script}
-                      onChange={(e) => update("start_script", e.target.value)}
-                      placeholder="start"
-                    />
-                  </Field>
-                  <label className="flex items-center gap-3 text-sm text-text-2">
-                    <Checkbox
-                      checked={form.install_dependencies}
-                      onChange={(e) => update("install_dependencies", e.target.checked)}
-                    />
-                    Run npm install before start
-                  </label>
-                  <label className="flex items-center gap-3 text-sm text-text-2">
-                    <Checkbox
-                      checked={form.run_build}
-                      onChange={(e) => update("run_build", e.target.checked)}
-                    />
-                    Run npm run build before start
-                  </label>
-                  <Field label="Node Version (Optional)">
-                    <Input
-                      value={form.node_version}
-                      onChange={(e) => update("node_version", e.target.value)}
-                      placeholder="20, 20.12, or 20.12.2"
-                    />
-                  </Field>
-                  {String(form.node_version || "").trim() && (
-                    <label className="flex items-center gap-3 text-sm text-text-2">
-                      <Checkbox
-                        checked={form.auto_install_node}
-                        onChange={(e) => update("auto_install_node", e.target.checked)}
+                {(mode === "project" || mode === "git") && (
+                  <>
+                    <Field label="Start Script">
+                      <Input
+                        value={form.start_script}
+                        onChange={(e) => update("start_script", e.target.value)}
+                        placeholder="start"
                       />
-                      Auto-install Node version if missing
+                    </Field>
+                    <Field label="Node Version">
+                      <Input
+                        value={form.node_version}
+                        onChange={(e) => update("node_version", e.target.value)}
+                        placeholder="20, 20.12, 20.12.2"
+                      />
+                    </Field>
+                    <label className="flex min-h-11 items-center gap-3 rounded-xl border border-border/70 bg-surface-2/50 px-3 py-2 text-sm text-text-2">
+                      <Checkbox
+                        checked={form.install_dependencies}
+                        onChange={(e) => update("install_dependencies", e.target.checked)}
+                      />
+                      npm install
                     </label>
-                  )}
-                  <InsetCard padding="sm" tone="surface" className="text-xs text-text-3">
-                    {nodeRuntimeState.loading ? (
-                      <div className="space-y-2" aria-hidden="true">
-                        <Skeleton className="h-3 w-32" />
-                        <Skeleton className="h-3 w-5/6" />
-                      </div>
-                    ) : (
-                      <>
-                        <p>
-                          Host Node: <span className="text-text-2">{nodeRuntimeState.data?.systemNode?.version || "-"}</span>
-                        </p>
-                        <p className="mt-1">
-                          Managers: {Array.isArray(nodeRuntimeState.data?.managers)
+                    <label className="flex min-h-11 items-center gap-3 rounded-xl border border-border/70 bg-surface-2/50 px-3 py-2 text-sm text-text-2">
+                      <Checkbox
+                        checked={form.run_build}
+                        onChange={(e) => update("run_build", e.target.checked)}
+                      />
+                      npm run build
+                    </label>
+                    {String(form.node_version || "").trim() && (
+                      <label className="flex min-h-11 items-center gap-3 rounded-xl border border-border/70 bg-surface-2/50 px-3 py-2 text-sm text-text-2">
+                        <Checkbox
+                          checked={form.auto_install_node}
+                          onChange={(e) => update("auto_install_node", e.target.checked)}
+                        />
+                        Auto-install Node
+                      </label>
+                    )}
+                    <InsetCard padding="sm" tone="surface" className="create-form-grid-full text-xs text-text-3">
+                      {nodeRuntimeState.loading ? (
+                        <div className="space-y-2" aria-hidden="true">
+                          <Skeleton className="h-3 w-32" />
+                          <Skeleton className="h-3 w-5/6" />
+                        </div>
+                      ) : (
+                        <div className="grid gap-2 md:grid-cols-2">
+                          <p>Host Node: <span className="text-text-2">{nodeRuntimeState.data?.systemNode?.version || "-"}</span></p>
+                          <p>Managers: {Array.isArray(nodeRuntimeState.data?.managers)
                             ? nodeRuntimeState.data.managers
                               .map((item) => `${item.displayName} (${item.installed ? "installed" : "missing"})`)
                               .join(", ")
-                            : "-"}
-                        </p>
-                      </>
-                    )}
-                  </InsetCard>
-                </>
-              )}
+                            : "-"}</p>
+                        </div>
+                      )}
+                    </InsetCard>
+                  </>
+                )}
 
-              <Field label="Port">
-                <Input type="number" value={form.port} onChange={(e) => update("port", e.target.value)} />
-              </Field>
-
-              <label className="flex items-center gap-3 text-sm text-text-2">
-                <Checkbox checked={form.watch} onChange={(e) => update("watch", e.target.checked)} />
-                Watch Mode
-              </label>
-
-              <Field label="Exec Mode">
-                <Select value={form.exec_mode} onChange={(e) => update("exec_mode", e.target.value)}>
-                  <option value="fork">fork</option>
-                  <option value="cluster">cluster</option>
-                </Select>
-              </Field>
-
-              {form.exec_mode === "cluster" && (
-                <Field label="Instances">
-                  <Input type="number" value={form.instances} onChange={(e) => update("instances", e.target.value)} min={1} />
+                <Field label="Port">
+                  <Input type="number" value={form.port} onChange={(e) => update("port", e.target.value)} />
                 </Field>
-              )}
+
+                <Field label="Exec Mode">
+                  <Select value={form.exec_mode} onChange={(e) => update("exec_mode", e.target.value)}>
+                    <option value="fork">fork</option>
+                    <option value="cluster">cluster</option>
+                  </Select>
+                </Field>
+
+                {form.exec_mode === "cluster" && (
+                  <Field label="Instances">
+                    <Input type="number" value={form.instances} onChange={(e) => update("instances", e.target.value)} min={1} />
+                  </Field>
+                )}
+
+                <label className="flex min-h-11 items-center gap-3 rounded-xl border border-border/70 bg-surface-2/50 px-3 py-2 text-sm text-text-2">
+                  <Checkbox checked={form.watch} onChange={(e) => update("watch", e.target.checked)} />
+                  Watch Mode
+                </label>
+              </div>
 
               <InsetCard>
                 <div className="flex items-center justify-between gap-2">
@@ -803,7 +801,7 @@ export default function CreateProcess() {
                 </div>
 
                 {showAdvanced && (
-                  <div className="mt-3 space-y-3">
+                  <div className="mt-3 create-form-grid">
                     <Field label="Max Memory Restart">
                       <Input
                         value={form.max_memory_restart}
@@ -827,7 +825,7 @@ export default function CreateProcess() {
                       <Input value={form.log_date_format} onChange={(e) => update("log_date_format", e.target.value)} />
                     </Field>
 
-                    <Field label="Cron Restart (optional)">
+                    <Field label="Cron Restart">
                       <Input
                         value={form.cron_restart}
                         onChange={(e) => update("cron_restart", e.target.value)}
@@ -835,7 +833,7 @@ export default function CreateProcess() {
                       />
                     </Field>
 
-                    <div className="space-y-2">
+                    <div className="create-form-grid-full space-y-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <SubsectionTitle className="text-sm">Environment</SubsectionTitle>
                         <Button
@@ -848,7 +846,7 @@ export default function CreateProcess() {
                         </Button>
                       </div>
                       {form.envRows.map((row, index) => (
-                        <div key={`env-${index}`} className="grid grid-cols-[1fr,1fr,auto] gap-2">
+                        <div key={`env-${index}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2">
                           <Input
                             value={row.key}
                             onChange={(e) => updateEnvRow(index, "key", e.target.value)}
@@ -863,6 +861,7 @@ export default function CreateProcess() {
                           <Button
                             type="button"
                             variant="danger"
+                            size="sm"
                             onClick={() => update("envRows", form.envRows.filter((_, i) => i !== index))}
                           >
                             Remove
@@ -1030,12 +1029,12 @@ function StepBadge({ active, done, children }) {
   return (
     <span
       className={[
-        "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
+        "step-pill",
         active
-          ? "bg-brand-500/20 text-brand-400"
+          ? "bg-brand-600 text-white"
           : done
             ? "bg-success-500/20 text-success-300"
-            : "bg-surface-2 text-text-3"
+            : "text-text-3"
       ].join(" ")}
     >
       {children}

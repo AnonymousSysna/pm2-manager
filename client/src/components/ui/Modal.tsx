@@ -10,7 +10,7 @@ const sizeMap = {
   xl: "max-w-3xl"
 };
 
-const dialogPanelClasses = "border border-border bg-surface text-text-1 shadow-xl";
+const dialogPanelClasses = "border border-border/80 bg-surface text-text-1 shadow-2xl shadow-black/25";
 const dialogHeaderClasses = "flex shrink-0 items-start justify-between gap-3 border-b border-border/70 pb-3";
 const dialogBodyClasses = "min-h-0 flex-1 overflow-y-auto py-4";
 const dialogFooterClasses = "flex shrink-0 flex-wrap justify-end gap-2 border-t border-border/70 pt-3";
@@ -99,7 +99,7 @@ export default function Modal({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
-        className={cn("relative z-10 flex max-h-[calc(100vh-2rem)] w-full flex-col rounded-xl p-4", dialogPanelClasses, sizeMap[size] || sizeMap.md, className)}
+        className={cn("relative z-10 flex max-h-[calc(100vh-2rem)] w-full flex-col rounded-2xl p-4", dialogPanelClasses, sizeMap[size] || sizeMap.md, className)}
       >
         <div className={dialogHeaderClasses}>
           <div className="min-w-0 flex-1">

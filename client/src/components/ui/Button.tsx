@@ -2,8 +2,8 @@ import { cn } from "../../lib/cn";
 import { getSemanticOutlineButtonClasses } from "./semanticTones";
 
 const variants = {
-  primary: "bg-brand-600 text-white hover:bg-brand-500 focus-visible:ring-brand-400",
-  secondary: "border border-border/90 bg-surface-2/70 text-text-1 hover:bg-surface-3/70 focus-visible:ring-brand-400",
+  primary: "bg-brand-600 text-white shadow-sm shadow-brand-600/20 hover:bg-brand-500 focus-visible:ring-brand-400",
+  secondary: "border border-border/80 bg-surface-2/60 text-text-1 hover:border-border hover:bg-surface-3/70 focus-visible:ring-brand-400",
   success: "bg-success-600 text-white hover:bg-success-500 focus-visible:ring-success-300",
   danger: "bg-danger-600 text-white hover:bg-danger-500 focus-visible:ring-danger-300",
   warning: "bg-warning-600 text-white hover:bg-warning-500 focus-visible:ring-warning-300",
@@ -21,10 +21,10 @@ const outlineToneByVariant = {
 };
 
 const sizes = {
-  sm: "min-h-8 px-2.5 py-1.5 text-xs",
-  md: "min-h-10 px-3 py-2 text-sm",
-  "sm-icon": "h-8 w-8 rounded p-0",
-  icon: "h-10 w-10 p-0"
+  sm: "min-h-9 px-2.5 py-1.5 text-xs",
+  md: "min-h-11 px-3.5 py-2 text-sm",
+  "sm-icon": "h-9 w-9 rounded-lg p-0",
+  icon: "h-11 w-11 p-0"
 };
 
 export default function Button({
@@ -39,7 +39,7 @@ export default function Button({
     <Comp
       type={Comp === "button" ? type : undefined}
       className={cn(
-        "inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-all active:enabled:translate-y-px",
+        "inline-flex items-center justify-center gap-1.5 rounded-xl font-medium transition-all duration-150 active:enabled:translate-y-px",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
         "disabled:cursor-not-allowed disabled:opacity-50",
         outlineToneByVariant[variant]

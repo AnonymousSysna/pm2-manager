@@ -331,7 +331,7 @@ export default function ProcessDetailModal({ process, onClose, onAction, onViewD
             <SupportingCopy className="p-4">No PM2 environment variables were returned for this process.</SupportingCopy>
           ) : (
             envEntries.map(([key, value]) => (
-              <div key={key} className="grid grid-cols-[minmax(0,1fr),minmax(0,1fr),40px] items-center gap-2 border-b border-border/70 p-2 text-xs last:border-b-0">
+              <div key={key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_40px] items-center gap-2 border-b border-border/70 p-2 text-xs last:border-b-0">
                 <span className="flex min-w-0 items-center gap-1 text-text-2">
                   <span className="truncate">{key}</span>
                   {isSensitiveEnvKey(key) && <Badge tone="warning">Sensitive</Badge>}
