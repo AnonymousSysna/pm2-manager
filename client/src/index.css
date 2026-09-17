@@ -628,3 +628,74 @@
     @apply m-3;
   }
 }
+
+@layer components {
+  .dashboard-page {
+    @apply space-y-3;
+  }
+
+  .dashboard-command-card {
+    @apply p-3;
+  }
+
+  .dashboard-triage-panel {
+    @apply space-y-3 p-3;
+  }
+
+  .dashboard-primary-flow {
+    @apply grid gap-3;
+  }
+
+  .dashboard-support-grid {
+    @apply grid gap-3 xl:grid-cols-3;
+  }
+
+  .dashboard-support-grid > .page-panel {
+    @apply h-full min-w-0 p-3;
+  }
+
+  .dashboard-insight-grid {
+    @apply grid gap-3 xl:grid-cols-2;
+  }
+
+  .process-main-card {
+    @apply relative z-0 overflow-visible rounded-2xl border border-border/80 bg-surface/95 shadow-[0_24px_80px_-64px_rgba(0,0,0,0.95)];
+  }
+
+  .process-main-card-topbar {
+    @apply gap-2 px-3 py-2.5 lg:px-4;
+  }
+
+  .process-table-scroll {
+    @apply overflow-x-auto overflow-y-visible;
+  }
+
+  .process-one-line-row {
+    @apply py-2;
+  }
+
+  .process-row-menu-portal {
+    position: fixed;
+    right: auto;
+    z-index: 900;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    transform-origin: top right;
+    animation: process-menu-pop 120ms ease-out;
+  }
+
+  .process-row-menu-portal .action-menu-item {
+    @apply min-h-8 rounded-lg px-2 py-1.5 text-xs;
+  }
+}
+
+@keyframes process-menu-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

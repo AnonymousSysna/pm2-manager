@@ -72,6 +72,96 @@ const START_HEALTHCHECK_TIMEOUT_MS = Number.isFinite(Number(process.env.START_HE
 const START_HEALTHCHECK_STABILITY_MS = Number.isFinite(Number(process.env.START_HEALTHCHECK_STABILITY_MS))
   ? Math.max(1500, Math.floor(Number(process.env.START_HEALTHCHECK_STABILITY_MS)))
   : 3000;
+
+function getDashboardProcessNames() {
+  return new Set(
+    [
+      process.env.PM2_MANAGER_PROCESS_NAME,
+      process.env.PM2_APP_NAME,
+      process.env.name,
+      "pm2-dashboard"
+    ]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+  );
+}
+
+function isDashboardSelfProcess(processName) {
+  return getDashboardProcessNames().has(String(processName || "").trim());
+}
+
+function runPm2NamedAction(action, processName) {
+  return new Promise((resolve, reject) => {
+    const fn = pm2[action];
+    if (typeof fn !== "function") {
+      reject(new Error(`Unsupported PM2 action: ${action}`));
+      return;
+    }
+
+    fn.call(pm2, processName, (error, proc) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(proc);
+    });
+  });
+}
+
+function scheduleSelfRestart(processName, actorContext = "unknown") {
+  const { actor, ip } = normalizeActorContext(actorContext);
+  const timer = setTimeout(() => {
+    withPM2(() => runPm2NamedAction("restart", processName))
+      .then(async (result) => {
+        trackPm2Operation("processes.restart.self.deferred", result.success);
+        if (result.success) {
+          try {
+            await appendHistoryEntry({
+              processName,
+              event: "restart",
+              source: "api",
+              actor
+            });
+          } catch (_error) {}
+          await recordOperationNotification({
+            category: "operation",
+            title: `${processName} restart accepted`,
+            message: `Restart operation was accepted and then run for ${processName}`,
+            processName
+          });
+        }
+        await writeAudit("process.restart.self.deferred", { actor, ip }, {
+          processName,
+          success: Boolean(result.success),
+          error: result.success ? null : result.error || "self restart failed"
+        });
+      })
+      .catch(async (error) => {
+        trackPm2Operation("processes.restart.self.deferred", false);
+        await writeAudit("process.restart.self.deferred", { actor, ip }, {
+          processName,
+          success: false,
+          error: error?.message || "self restart failed"
+        });
+      });
+  }, 900);
+
+  if (typeof timer.unref === "function") {
+    timer.unref();
+  }
+}
+
+function resolvePackageTaskDirectory(cwd, processName) {
+  const current = path.resolve(String(cwd || ""));
+  if (isDashboardSelfProcess(processName)) {
+    const maybeAppRoot = path.basename(current) === "server" ? path.dirname(current) : current;
+    if (fs.existsSync(path.join(maybeAppRoot, "package.json"))) {
+      return maybeAppRoot;
+    }
+  }
+  return current;
+}
+
 const INTERPRETER_DETECT_TIMEOUT_MS = 4000;
 const INTERPRETER_CATALOG = [
   {
@@ -957,15 +1047,19 @@ async function startProcess(name, actorContext = "unknown") {
     const before = await describeProcess(processName).catch(() => null);
     const baselineRestarts = before ? readRestartCount(before) : 0;
 
-    await new Promise((resolve, reject) => {
-      pm2.start(processName, (error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve();
-      });
-    });
+    if (before && before.pm2_env?.status === "online") {
+      return {
+        processName,
+        alreadyOnline: true,
+        health: { ok: true, reason: "Process is already online" }
+      };
+    }
+
+    if (before) {
+      await runPm2NamedAction("restart", processName);
+    } else {
+      await runPm2NamedAction("start", processName);
+    }
 
     const health = await waitForHealthyStart(processName, baselineRestarts);
     if (!health.ok) {
@@ -1008,18 +1102,23 @@ async function startProcess(name, actorContext = "unknown") {
 async function stopProcess(name, actorContext = "unknown") {
   const processName = sanitizeProcessName(name, "process name");
   const { actor, ip } = normalizeActorContext(actorContext);
-  const result = await withPM2(
-    () =>
-      new Promise((resolve, reject) => {
-        pm2.stop(processName, (error, proc) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          resolve(proc);
-        });
-      })
-  );
+
+  if (isDashboardSelfProcess(processName)) {
+    const result = {
+      success: false,
+      data: null,
+      error: "PM2 Manager cannot stop itself from the dashboard. Use the server terminal if you really need to shut it down."
+    };
+    trackPm2Operation("processes.stop", false);
+    await writeAudit("process.stop", { actor, ip }, {
+      processName,
+      success: false,
+      error: result.error
+    });
+    return result;
+  }
+
+  const result = await withPM2(() => runPm2NamedAction("stop", processName));
   trackPm2Operation("processes.stop", result.success);
   if (result.success) {
     try {
@@ -1050,18 +1149,30 @@ async function stopProcess(name, actorContext = "unknown") {
 async function restartProcess(name, actorContext = "unknown") {
   const processName = sanitizeProcessName(name, "process name");
   const { actor, ip } = normalizeActorContext(actorContext);
-  const result = await withPM2(
-    () =>
-      new Promise((resolve, reject) => {
-        pm2.restart(processName, (error, proc) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          resolve(proc);
-        });
-      })
-  );
+
+  if (isDashboardSelfProcess(processName)) {
+    scheduleSelfRestart(processName, actorContext);
+    const result = {
+      success: true,
+      data: {
+        processName,
+        accepted: true,
+        deferred: true,
+        message: "Restart accepted. The dashboard will reconnect after the PM2 process comes back online."
+      },
+      error: null
+    };
+    trackPm2Operation("processes.restart", true);
+    await writeAudit("process.restart", { actor, ip }, {
+      processName,
+      success: true,
+      details: result.data,
+      error: null
+    });
+    return result;
+  }
+
+  const result = await withPM2(() => runPm2NamedAction("restart", processName));
   trackPm2Operation("processes.restart", result.success);
   if (result.success) {
     try {
@@ -1439,18 +1550,23 @@ async function updateProcessDotEnv(name, payload = {}, actorContext = "unknown")
 async function deleteProcess(name, actorContext = "unknown") {
   const processName = sanitizeProcessName(name, "process name");
   const { actor, ip } = normalizeActorContext(actorContext);
-  const result = await withPM2(
-    () =>
-      new Promise((resolve, reject) => {
-        pm2.delete(processName, (error, proc) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          resolve(proc);
-        });
-      })
-  );
+
+  if (isDashboardSelfProcess(processName)) {
+    const result = {
+      success: false,
+      data: null,
+      error: "PM2 Manager cannot delete itself from the dashboard."
+    };
+    trackPm2Operation("processes.delete", false);
+    await writeAudit("process.delete", { actor, ip }, {
+      processName,
+      success: false,
+      error: result.error
+    });
+    return result;
+  }
+
+  const result = await withPM2(() => runPm2NamedAction("delete", processName));
   trackPm2Operation("processes.delete", result.success);
   if (result.success) {
     await recordOperationNotification({
@@ -2304,7 +2420,8 @@ async function runNpmScriptForProcess(name, scriptName, args = []) {
       throw new Error(`Process not found: ${processName}`);
     }
 
-    const cwd = proc.pm2_env?.pm_cwd;
+    const rawCwd = proc.pm2_env?.pm_cwd;
+    const cwd = resolvePackageTaskDirectory(rawCwd, processName);
     let cwdStat;
     try {
       cwdStat = await fs.promises.stat(cwd);
@@ -2393,7 +2510,8 @@ async function deployProcess(name, options = {}, actorContext = "unknown") {
       throw new Error(`Process not found: ${processName}`);
     }
 
-    const cwd = proc.pm2_env?.pm_cwd;
+    const rawCwd = proc.pm2_env?.pm_cwd;
+    const cwd = resolvePackageTaskDirectory(rawCwd, processName);
     let cwdStat;
     try {
       cwdStat = await fs.promises.stat(cwd);
@@ -2561,7 +2679,8 @@ async function getGitCommitsForProcess(name, limit = 20) {
       throw new Error(`Process not found: ${processName}`);
     }
 
-    const cwd = proc.pm2_env?.pm_cwd;
+    const rawCwd = proc.pm2_env?.pm_cwd;
+    const cwd = resolvePackageTaskDirectory(rawCwd, processName);
     let cwdStat;
     try {
       cwdStat = await fs.promises.stat(cwd);
@@ -2757,7 +2876,8 @@ async function rollbackProcess(name, options = {}, actorContext = "unknown") {
       throw new Error(`Process not found: ${processName}`);
     }
 
-    const cwd = proc.pm2_env?.pm_cwd;
+    const rawCwd = proc.pm2_env?.pm_cwd;
+    const cwd = resolvePackageTaskDirectory(rawCwd, processName);
     let cwdStat;
     try {
       cwdStat = await fs.promises.stat(cwd);

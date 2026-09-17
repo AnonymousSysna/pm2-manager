@@ -372,12 +372,39 @@ export default function Dashboard() {
         proc,
         summary: monitoringSummary[proc.name] || {},
         selected: Boolean(selectedNames[proc.name]),
-        hasDotEnv: Boolean(dotEnvByProcess[proc.name])
+        hasDotEnv: Boolean(dotEnvByProcess[proc.name]),
+        npmCapabilities: npmCapabilitiesByProcess[proc.name] || {}
       })),
-    [filtered, monitoringSummary, selectedNames, dotEnvByProcess]
+    [filtered, monitoringSummary, selectedNames, dotEnvByProcess, npmCapabilitiesByProcess]
   );
 
   const allSelected = processRows.length > 0 && processRows.every((item) => item.selected);
+
+  const openBulkActionConfirmation = (action, scope = "selected") => {
+    const names = scope === "all"
+      ? filtered.map((proc) => proc.name)
+      : filtered.filter((proc) => selectedNames[proc.name]).map((proc) => proc.name);
+    if (names.length === 0) {
+      toast.error(scope === "all" ? "No processes to restart" : "Select at least one process");
+      return;
+    }
+
+    const actionLabel = { start: "Start", stop: "Stop", restart: "Restart" }[action] || action;
+    setActionDialog({
+      mode: "confirm",
+      action: "bulkAction",
+      name: scope === "all" ? "all processes" : `${names.length} selected`,
+      title: scope === "all" ? `${actionLabel} all processes` : `${actionLabel} selected processes`,
+      description: scope === "all"
+        ? `This will ${action} ${names.length} visible process${names.length === 1 ? "" : "es"}.`
+        : `This will ${action} ${names.length} selected process${names.length === 1 ? "" : "es"}.`,
+      confirmLabel: scope === "all" ? `${actionLabel} all` : `${actionLabel} selected`,
+      confirmVariant: action === "stop" ? "danger" : action === "restart" ? "warning" : "success",
+      bulkAction: action,
+      bulkScope: scope,
+      bulkNames: names
+    });
+  };
 
   const openDetails = async (proc) => {
     try {
@@ -650,11 +677,13 @@ export default function Dashboard() {
     setSelectedNames(next);
   };
 
-  const runBulkAction = async (action) => {
-    const names = filtered.filter((proc) => selectedNames[proc.name]).map((proc) => proc.name);
+  const runBulkAction = async (action, explicitNames = null) => {
+    const names = Array.isArray(explicitNames)
+      ? explicitNames
+      : filtered.filter((proc) => selectedNames[proc.name]).map((proc) => proc.name);
     if (names.length === 0) {
       toast.error("Select at least one process");
-      return;
+      return false;
     }
 
     const actionLabel = {
@@ -667,12 +696,12 @@ export default function Dashboard() {
       const result = await toast.promise(
         processApi.bulkAction(action, names).then((response) => {
           if (!response || (!response.success && !response.data)) {
-            throw new Error(response.error || `Failed to ${action} selected processes`);
+            throw new Error(response?.error || `Failed to ${action} selected processes`);
           }
           return response;
         }),
         {
-          loading: `${actionLabel} ${names.length} process(es)...`,
+          loading: `${actionLabel} ${names.length} process${names.length === 1 ? "" : "es"}...`,
           success: `${actionLabel} request finished`,
           error: (error) => getErrorMessage(error, `Failed to ${action} selected processes`)
         }
@@ -681,137 +710,15 @@ export default function Dashboard() {
       const responseData = result?.data || {};
       const allResults = Array.isArray(responseData.results) ? responseData.results : [];
       const failed = allResults.filter((item) => !item.success);
-      const succeeded = allResults.filter((item) => item.success);
-      if (succeeded.length > 0) {
-        toast.success(`${actionLabel}: ${succeeded.length} succeeded`);
-      }
       if (failed.length > 0) {
-        toast.error(`${actionLabel}: ${failed.length} failed (${failed.map((item) => item.name).join(", ")})`);
+        toast.error(`${failed.length} process${failed.length === 1 ? "" : "es"} failed. Open History for details.`);
       }
+
+      setSelectedNames({});
       refreshCatalog();
+      return failed.length === 0;
     } catch (_error) {
-      // Toast handled above.
-    }
-  };
-
-  const openDotEnvModal = async (proc) => {
-    if (!dotEnvByProcess[proc.name]) {
-      toast.error(`No .env file found in ${proc.name} directory`);
-      return;
-    }
-
-    setEditingDotEnvProcess(proc);
-    setDotEnvLoading(true);
-    setDotEnvFields([]);
-    setDotEnvOriginalValues({});
-    setDotEnvRevealValues(false);
-    setDotEnvDiffEntries([]);
-    setDotEnvDiffOpen(false);
-    setDotEnvValidationError("");
-    try {
-      const result = await processApi.getDotEnv(proc.name);
-      if (!result.success) {
-        throw new Error(result.error || "Unable to load .env file");
-      }
-      if (!result.data?.hasEnvFile) {
-        throw new Error(".env file is missing for this process");
-      }
-      const entries = Array.isArray(result.data?.entries) ? result.data.entries : [];
-      const invalidLines = Array.isArray(result.data?.invalidLines) ? result.data.invalidLines : [];
-      if (invalidLines.length > 0) {
-        const lineList = invalidLines.slice(0, 5).map((item) => item.line).join(", ");
-        setDotEnvValidationError(`Invalid .env syntax detected on line(s): ${lineList}`);
-      }
-      const originalByKey = {};
-      entries.forEach((item) => {
-        originalByKey[item.key] = String(item.value ?? "");
-      });
-      setDotEnvOriginalValues(originalByKey);
-      setDotEnvFields(
-        entries.map((item) => ({
-          key: item.key,
-          value: String(item.value ?? ""),
-          valueType: item.valueType || "string",
-          sensitive: isSensitiveEnvKey(item.key)
-        }))
-      );
-    } catch (error) {
-      toast.error(getErrorMessage(error, "Failed to load .env file"));
-      setEditingDotEnvProcess(null);
-    } finally {
-      setDotEnvLoading(false);
-    }
-  };
-
-  const submitDotEnvModal = async () => {
-    if (!editingDotEnvProcess?.name) {
-      return;
-    }
-
-    if (dotEnvValidationError) {
-      toast.error(dotEnvValidationError);
-      return;
-    }
-
-    const diffEntries = dotEnvFields
-      .map((item) => {
-        const before = String(dotEnvOriginalValues[item.key] ?? "");
-        const after = String(item.value ?? "");
-        if (before === after) {
-          return null;
-        }
-        return {
-          key: item.key,
-          before,
-          after,
-          sensitive: Boolean(item.sensitive)
-        };
-      })
-      .filter(Boolean);
-
-    if (diffEntries.length === 0) {
-      toast.info("No .env changes to save");
-      return;
-    }
-
-    setDotEnvDiffEntries(diffEntries);
-    setDotEnvDiffOpen(true);
-  };
-
-  const confirmDotEnvSave = async () => {
-    if (!editingDotEnvProcess?.name) {
-      return;
-    }
-
-    try {
-      setDotEnvSaving(true);
-      const values = {};
-      dotEnvFields.forEach((item) => {
-        values[item.key] = String(item.value ?? "");
-      });
-
-      await toast.promise(
-        processApi.updateDotEnv(editingDotEnvProcess.name, values).then((response) => {
-          if (!response.success) {
-            throw new Error(response.error || "Unable to update .env file");
-          }
-          return response;
-        }),
-        {
-          loading: `Updating .env for ${editingDotEnvProcess.name}...`,
-          success: `.env updated for ${editingDotEnvProcess.name}`,
-          error: (error) => getErrorMessage(error, "Failed to update .env file")
-        }
-      );
-      setDotEnvDiffOpen(false);
-      setEditingDotEnvProcess(null);
-      setDotEnvFields([]);
-      setDotEnvOriginalValues({});
-      refreshCatalog();
-    } catch (error) {
-      toast.error(getErrorMessage(error, "Failed to update .env file"));
-    } finally {
-      setDotEnvSaving(false);
+      return false;
     }
   };
 
@@ -991,6 +898,14 @@ export default function Dashboard() {
       actionPayload = { dirtyMode: "stash", confirmed: true };
     }
 
+    if (action === "bulkAction") {
+      const success = await runBulkAction(actionDialog.bulkAction, actionDialog.bulkNames || []);
+      if (success) {
+        setActionDialog(null);
+      }
+      return;
+    }
+
     const success = await executeAction(action, name, actionPayload);
     if (success) {
       setActionDialog(null);
@@ -998,9 +913,10 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="dashboard-page">
       <PageIntro
         title="Overview"
+        className="dashboard-command-card"
         actions={(
           <>
             <Button type="button" variant="secondary" onClick={() => openDeploymentHistory()}>
@@ -1025,56 +941,55 @@ export default function Dashboard() {
         onOpenHistory={() => openDeploymentHistory()}
       />
 
-      <div className="ops-section-grid">
-        <div className="dashboard-main-stack">
-          <ProcessListPanel
-            items={processRows}
-            selection={{ allSelected, selectedCount }}
-            controls={{
-              query,
-              setQuery,
-              toggleSelected,
-              toggleSelectAllFiltered,
-              runBulkAction,
-              openDetails,
-              openMetaModal,
-              openDotEnvModal,
-              openDeployModal,
-              openDeploymentHistoryForProcess: openDeploymentHistory,
-              loadingAction,
-              callAction,
-              onOpenLogs: openLogsForProcess,
-              onOpenApp: openAppForPort,
-              onOpenPm2Features: openPm2FeaturesForProcess
-            }}
-            formatters={{ bytesToMB, durationLabel }}
-          />
+      <div className="dashboard-primary-flow">
+        <ProcessListPanel
+          items={processRows}
+          selection={{ allSelected, selectedCount }}
+          controls={{
+            query,
+            setQuery,
+            toggleSelected,
+            toggleSelectAllFiltered,
+            runBulkAction,
+            openBulkActionConfirmation,
+            openDetails,
+            openMetaModal,
+            openDotEnvModal,
+            openDeployModal,
+            openDeploymentHistoryForProcess: openDeploymentHistory,
+            loadingAction,
+            callAction,
+            onOpenLogs: openLogsForProcess,
+            onOpenApp: openAppForPort,
+            onOpenPm2Features: openPm2FeaturesForProcess
+          }}
+          formatters={{ bytesToMB, durationLabel }}
+        />
 
-          <div className="dashboard-side-stack">
-            <ThresholdAlertsPanel alerts={alerts} onOpenLogs={openLogsForProcess} />
-            <SystemResourcesPanel systemResources={systemResources} bytesToGB={bytesToGB} />
-            {!checklist.dismissed && (
-              <SetupChecklistPanel
-                checklistItems={checklistItems}
-                checklistDoneCount={checklistDoneCount}
-                onDismiss={() => {
-                  localStorage.setItem("pm2_onboarding_checklist_dismissed", "true");
-                  setChecklist((prev) => ({ ...prev, dismissed: true }));
-                }}
-                onNavigate={(to) => navigate(to)}
-              />
-            )}
-          </div>
-
-          <div className="dashboard-insight-grid">
-            <MetricsHistoryPanel
-              chartProcess={chartProcess}
-              onChartProcessChange={setChartProcess}
-              processes={processes}
-              historyPoints={historyPoints}
+        <div className="dashboard-support-grid">
+          <ThresholdAlertsPanel alerts={alerts} onOpenLogs={openLogsForProcess} />
+          <SystemResourcesPanel systemResources={systemResources} bytesToGB={bytesToGB} />
+          {!checklist.dismissed && (
+            <SetupChecklistPanel
+              checklistItems={checklistItems}
+              checklistDoneCount={checklistDoneCount}
+              onDismiss={() => {
+                localStorage.setItem("pm2_onboarding_checklist_dismissed", "true");
+                setChecklist((prev) => ({ ...prev, dismissed: true }));
+              }}
+              onNavigate={(to) => navigate(to)}
             />
-            <DependencyGraphPanel dependencyEdges={dependencyEdges} />
-          </div>
+          )}
+        </div>
+
+        <div className="dashboard-insight-grid">
+          <MetricsHistoryPanel
+            chartProcess={chartProcess}
+            onChartProcessChange={setChartProcess}
+            processes={processes}
+            historyPoints={historyPoints}
+          />
+          <DependencyGraphPanel dependencyEdges={dependencyEdges} />
         </div>
       </div>
 

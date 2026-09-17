@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { ExternalLink, FileCog, History, MoreHorizontal, Play, RefreshCw, ScrollText, Square, Rocket, Settings2, TerminalSquare } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Download, ExternalLink, FileCog, Hammer, History, MoreHorizontal, Play, RefreshCw, ScrollText, Square, Rocket, Settings2, TerminalSquare } from "lucide-react";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 import Checkbox from "../ui/Checkbox";
@@ -26,7 +27,11 @@ export default function ProcessListPanel({
     }
 
     const onPointerDown = (event) => {
-      if (!panelRef.current?.contains(event.target)) {
+      const target = event.target;
+      if (target?.closest?.(".process-row-menu-portal")) {
+        return;
+      }
+      if (!panelRef.current?.contains(target)) {
         setOpenActionMenu("");
       }
     };
@@ -57,17 +62,23 @@ export default function ProcessListPanel({
         </div>
 
         <div className="process-main-card-actions">
+          {items.length > 0 && (
+            <Button type="button" size="sm" variant="outlineInfo" onClick={() => controls.openBulkActionConfirmation?.("restart", "all")}>
+              <RefreshCw size={14} />
+              Restart all
+            </Button>
+          )}
           {selectedCount > 0 && (
             <div className="process-bulk-actions">
-              <Button type="button" size="sm" variant="outlineSuccess" onClick={() => runBulkAction("start")}>
+              <Button type="button" size="sm" variant="outlineSuccess" onClick={() => (controls.openBulkActionConfirmation ? controls.openBulkActionConfirmation("start", "selected") : runBulkAction("start"))}>
                 <Play size={14} />
                 Start
               </Button>
-              <Button type="button" size="sm" variant="outlineDanger" onClick={() => runBulkAction("stop")}>
+              <Button type="button" size="sm" variant="outlineDanger" onClick={() => (controls.openBulkActionConfirmation ? controls.openBulkActionConfirmation("stop", "selected") : runBulkAction("stop"))}>
                 <Square size={14} />
                 Stop
               </Button>
-              <Button type="button" size="sm" variant="outlineInfo" onClick={() => runBulkAction("restart")}>
+              <Button type="button" size="sm" variant="outlineInfo" onClick={() => (controls.openBulkActionConfirmation ? controls.openBulkActionConfirmation("restart", "selected") : runBulkAction("restart"))}>
                 <RefreshCw size={14} />
                 Restart
               </Button>
@@ -177,7 +188,9 @@ function MetricCell({ value, tone = "neutral" }) {
 }
 
 function RowActions({ item, controls, actionMenu }) {
-  const { proc, hasDotEnv } = item;
+  const { proc, hasDotEnv, npmCapabilities = {} } = item;
+  const actionCellRef = useRef(null);
+  const [menuStyle, setMenuStyle] = useState(null);
   const {
     openMetaModal,
     openDotEnvModal,
@@ -190,6 +203,8 @@ function RowActions({ item, controls, actionMenu }) {
     onOpenPm2Features
   } = controls;
   const isOnline = proc.status === "online";
+  const hasPackageJson = Boolean(npmCapabilities.hasPackageJson);
+  const hasBuildScript = Boolean(npmCapabilities.hasBuildScript);
   const canOpenApp = Number(proc.port) > 0;
   const menuKey = `${proc.name}:row`;
   const isMenuOpen = actionMenu?.openActionMenu === menuKey;
@@ -199,8 +214,108 @@ function RowActions({ item, controls, actionMenu }) {
     fn?.();
   };
 
+  useEffect(() => {
+    if (!isMenuOpen) {
+      setMenuStyle(null);
+      return undefined;
+    }
+
+    const updateMenuPosition = () => {
+      const rect = actionCellRef.current?.getBoundingClientRect();
+      if (!rect) {
+        return;
+      }
+
+      const menuWidth = window.innerWidth >= 640 ? 344 : 268;
+      const viewportPad = 12;
+      const preferredLeft = rect.right - menuWidth;
+      const left = Math.min(
+        window.innerWidth - menuWidth - viewportPad,
+        Math.max(viewportPad, preferredLeft)
+      );
+      const spaceBelow = window.innerHeight - rect.bottom - viewportPad;
+      const spaceAbove = rect.top - viewportPad;
+
+      if (spaceBelow < 220 && spaceAbove > spaceBelow) {
+        const maxHeight = Math.max(180, Math.min(360, spaceAbove - 8));
+        setMenuStyle({
+          left,
+          bottom: window.innerHeight - rect.top + 8,
+          width: menuWidth,
+          maxHeight
+        });
+        return;
+      }
+
+      setMenuStyle({
+        left,
+        top: rect.bottom + 8,
+        width: menuWidth,
+        maxHeight: Math.max(180, Math.min(360, spaceBelow))
+      });
+    };
+
+    updateMenuPosition();
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+    };
+  }, [isMenuOpen]);
+
+  const menu = isMenuOpen && menuStyle
+    ? createPortal(
+      <div className="action-menu process-row-menu process-row-menu-portal grid gap-1 sm:grid-cols-2" style={menuStyle}>
+        <ActionMenuItem icon={<Settings2 size={14} />} onClick={() => runAndClose(() => controls.openDetails(proc))}>
+          Inspect
+        </ActionMenuItem>
+        <ActionMenuItem icon={<ScrollText size={14} />} onClick={() => runAndClose(() => onOpenLogs(proc.name))}>
+          Logs
+        </ActionMenuItem>
+        <ActionMenuItem
+          icon={<Download size={14} />}
+          disabled={!hasPackageJson || loadingAction[`${proc.name}:npmInstall`]}
+          onClick={() => runAndClose(() => callAction("npmInstall", proc.name))}
+        >
+          Install
+        </ActionMenuItem>
+        <ActionMenuItem
+          icon={<Hammer size={14} />}
+          disabled={!hasBuildScript || loadingAction[`${proc.name}:npmBuild`]}
+          onClick={() => runAndClose(() => callAction("npmBuild", proc.name))}
+        >
+          Build
+        </ActionMenuItem>
+        <ActionMenuItem icon={<Rocket size={14} />} disabled={loadingAction[`${proc.name}:deploy`]} onClick={() => runAndClose(() => openDeployModal(proc))}>
+          Deploy
+        </ActionMenuItem>
+        {hasDotEnv && (
+          <ActionMenuItem icon={<FileCog size={14} />} onClick={() => runAndClose(() => openDotEnvModal(proc))}>
+            Env file
+          </ActionMenuItem>
+        )}
+        <ActionMenuItem icon={<History size={14} />} onClick={() => runAndClose(() => openDeploymentHistoryForProcess(proc.name))}>
+          History
+        </ActionMenuItem>
+        <ActionMenuItem icon={<TerminalSquare size={14} />} onClick={() => runAndClose(() => onOpenPm2Features?.(proc.name))}>
+          PM2 tools
+        </ActionMenuItem>
+        <ActionMenuItem icon={null} onClick={() => runAndClose(() => openMetaModal(proc))}>
+          Rules
+        </ActionMenuItem>
+        {canOpenApp && (
+          <ActionMenuItem icon={<ExternalLink size={14} />} onClick={() => runAndClose(() => onOpenApp(proc.port))}>
+            Open app
+          </ActionMenuItem>
+        )}
+      </div>,
+      document.body
+    )
+    : null;
+
   return (
-    <div className="process-actions-cell action-menu-anchor">
+    <div ref={actionCellRef} className="process-actions-cell action-menu-anchor">
       <Button
         type="button"
         size="sm"
@@ -234,38 +349,7 @@ function RowActions({ item, controls, actionMenu }) {
         <MoreHorizontal size={14} />
       </Button>
 
-      {isMenuOpen && (
-        <div className="action-menu action-menu-popover process-row-menu grid gap-1 sm:grid-cols-2">
-          <ActionMenuItem icon={<Settings2 size={14} />} onClick={() => runAndClose(() => controls.openDetails(proc))}>
-            Inspect
-          </ActionMenuItem>
-          <ActionMenuItem icon={<ScrollText size={14} />} onClick={() => runAndClose(() => onOpenLogs(proc.name))}>
-            Logs
-          </ActionMenuItem>
-          <ActionMenuItem icon={<Rocket size={14} />} disabled={loadingAction[`${proc.name}:deploy`]} onClick={() => runAndClose(() => openDeployModal(proc))}>
-            Deploy
-          </ActionMenuItem>
-          {hasDotEnv && (
-            <ActionMenuItem icon={<FileCog size={14} />} onClick={() => runAndClose(() => openDotEnvModal(proc))}>
-              Env file
-            </ActionMenuItem>
-          )}
-          <ActionMenuItem icon={<History size={14} />} onClick={() => runAndClose(() => openDeploymentHistoryForProcess(proc.name))}>
-            History
-          </ActionMenuItem>
-          <ActionMenuItem icon={<TerminalSquare size={14} />} onClick={() => runAndClose(() => onOpenPm2Features?.(proc.name))}>
-            PM2 tools
-          </ActionMenuItem>
-          <ActionMenuItem icon={null} onClick={() => runAndClose(() => openMetaModal(proc))}>
-            Rules
-          </ActionMenuItem>
-          {canOpenApp && (
-            <ActionMenuItem icon={<ExternalLink size={14} />} onClick={() => runAndClose(() => onOpenApp(proc.port))}>
-              Open app
-            </ActionMenuItem>
-          )}
-        </div>
-      )}
+      {menu}
     </div>
   );
 }

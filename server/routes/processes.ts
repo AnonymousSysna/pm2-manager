@@ -255,7 +255,7 @@ router.post("/:name/stop", writeLimiter, validateProcessParam, asyncHandler(asyn
     actor: req.user?.username || "unknown",
     ip: getRequestIp(req)
   });
-  res.status(result.success ? 200 : 500).json(result);
+  res.status(result.success ? 200 : /cannot stop itself/i.test(result.error || "") ? 400 : 500).json(result);
 }));
 
 router.post("/:name/restart", writeLimiter, validateProcessParam, asyncHandler(async (req, res) => {
@@ -346,7 +346,7 @@ router.delete("/:name", criticalWriteLimiter, validateProcessParam, asyncHandler
     actor: req.user?.username || "unknown",
     ip: getRequestIp(req)
   });
-  res.status(result.success ? 200 : 500).json(result);
+  res.status(result.success ? 200 : /cannot delete itself/i.test(result.error || "") ? 400 : 500).json(result);
 }));
 
 router.get("/:name/logs", readLimiter, validateProcessParam, asyncHandler(async (req, res) => {
@@ -365,12 +365,22 @@ router.post("/:name/flush", writeLimiter, validateProcessParam, asyncHandler(asy
 
 router.post("/:name/npm-install", criticalWriteLimiter, validateProcessParam, asyncHandler(async (req, res) => {
   const result = await npmInstall(req.params.name);
-  res.status(result.success ? 200 : 500).json(result);
+  const status = result.success
+    ? 200
+    : /No package.json|working directory|Cannot resolve/i.test(result.error || "")
+      ? 400
+      : 500;
+  res.status(status).json(result);
 }));
 
 router.post("/:name/npm-build", criticalWriteLimiter, validateProcessParam, asyncHandler(async (req, res) => {
   const result = await npmBuild(req.params.name);
-  res.status(result.success ? 200 : 500).json(result);
+  const status = result.success
+    ? 200
+    : /No package.json|Script .* not found|working directory|Cannot resolve/i.test(result.error || "")
+      ? 400
+      : 500;
+  res.status(status).json(result);
 }));
 
 router.post("/:name/deploy", criticalWriteLimiter, validateProcessParam, asyncHandler(async (req, res) => {
