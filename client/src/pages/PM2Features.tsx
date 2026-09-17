@@ -9,7 +9,6 @@ import Field from "../components/ui/Field";
 import Input from "../components/ui/Input";
 import InsetPanel from "../components/ui/InsetPanel";
 import Modal, { ConfirmDialog } from "../components/ui/Modal";
-import { PanelHeader } from "../components/ui/PageLayout";
 import Select from "../components/ui/Select";
 import { Skeleton } from "../components/ui/Skeleton";
 import TabButton from "../components/ui/TabButton";
@@ -52,24 +51,16 @@ function stringifyOutput(result) {
   return String(data.output || "").trim() || "No output returned.";
 }
 
-function summarizeFeatureForm(feature, form) {
-  const fields = feature.fields || [];
-  if (!fields.length) {
-    return "Ready";
-  }
+function featurePayload(feature, forms, preferredProcess) {
+  return {
+    ...makeDefaultForm(feature, preferredProcess),
+    ...(forms[feature.id] || {})
+  };
+}
 
-  const filled = fields
-    .map((field) => {
-      const rawValue = form[field.name];
-      const value = rawValue === undefined || rawValue === null || rawValue === ""
-        ? field.defaultValue || "not set"
-        : rawValue;
-      return `${field.label}: ${String(value)}`;
-    })
-    .slice(0, 2);
-
-  const remaining = fields.length - filled.length;
-  return `${filled.join(" · ")}${remaining > 0 ? ` · +${remaining}` : ""}`;
+function configuredCount(feature, forms, preferredProcess) {
+  const payload = featurePayload(feature, forms, preferredProcess);
+  return (feature.fields || []).filter((field) => String(payload[field.name] || "").trim()).length;
 }
 
 export default function PM2Features() {
@@ -137,10 +128,7 @@ export default function PM2Features() {
       return;
     }
 
-    const payload = {
-      ...makeDefaultForm(feature, preferredProcess),
-      ...(forms[feature.id] || {})
-    };
+    const payload = featurePayload(feature, forms, preferredProcess);
 
     try {
       setRunningId(feature.id);
@@ -168,9 +156,9 @@ export default function PM2Features() {
   };
 
   return (
-    <div className="compact-page-stack">
-      <section className="ai-setup-card pm2-tools-control-panel">
-        <div className="pm2-tools-topbar">
+    <div className="pm2-tools-page">
+      <section className="page-panel pm2-tools-header-card">
+        <div className="pm2-tools-header-main">
           <div className="min-w-0">
             <h1 className="page-heading">PM2 Tools</h1>
             <div className="pm2-tools-meta-row">
@@ -184,7 +172,7 @@ export default function PM2Features() {
 
         {loading ? (
           <div className="pm2-category-skeletons">
-            {Array.from({ length: 7 }).map((_, index) => <Skeleton key={index} className="h-10 w-full" />)}
+            {Array.from({ length: 7 }).map((_, index) => <Skeleton key={index} className="h-9 w-full" />)}
           </div>
         ) : (
           <div className="pm2-category-strip" aria-label="PM2 feature groups">
@@ -206,55 +194,70 @@ export default function PM2Features() {
         {(processes || []).map((proc) => <option key={proc.name} value={proc.name} />)}
       </datalist>
 
-      <section className="pm2-workspace-grid">
-        <div className="pm2-feature-list">
-          {selectedFeatures.map((feature) => (
-            <FeatureCard
-              key={feature.id}
-              feature={feature}
-              form={{ ...makeDefaultForm(feature, preferredProcess), ...(forms[feature.id] || {}) }}
-              running={runningId === feature.id}
-              onConfigure={() => setOptionsFeature(feature)}
-              onRun={() => executeFeature(feature)}
-            />
-          ))}
-          {!loading && selectedFeatures.length === 0 && (
-            <section className="page-panel text-sm text-text-3">No PM2 features found in this group.</section>
-          )}
+      <section className="page-panel pm2-command-panel">
+        <div className="pm2-command-panel-head">
+          <div className="min-w-0">
+            <h2 className="panel-heading">{selectedCategoryMeta?.label || "Actions"}</h2>
+          </div>
+          <Badge tone="neutral">{selectedFeatures.length}</Badge>
         </div>
 
-        <section className="result-panel pm2-result-bottom space-y-2">
-          <PanelHeader
-            title="Result"
-            actions={lastResult ? (
-              <Button type="button" size="sm" variant="secondary" onClick={copyOutput}>
-                <Copy size={14} />
-                Copy
-              </Button>
-            ) : null}
-          />
-          {lastResult ? (
-            <>
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge tone={lastResult.success ? "success" : "danger"}>{lastResult.success ? "Success" : "Failed"}</Badge>
-                {lastResult.data?.risk ? <Badge tone={riskTone[lastResult.data.risk] || "neutral"}>{lastResult.data.risk}</Badge> : null}
-                {lastResult.data?.code !== undefined ? <Badge tone="neutral">code {lastResult.data.code}</Badge> : null}
-              </div>
-              <p className="break-all rounded-lg border border-border bg-surface-2/60 p-2 text-xs text-text-3">
-                {lastResult.data?.command || lastResult.error || "No command recorded"}
-              </p>
-              <Textarea
-                readOnly
-                value={stringifyOutput(lastResult)}
-                className="min-h-[210px] resize-y font-mono text-xs"
+        {loading ? (
+          <div className="pm2-command-list">
+            {Array.from({ length: 8 }).map((_, index) => <Skeleton key={index} className="h-12 w-full rounded-xl" />)}
+          </div>
+        ) : selectedFeatures.length ? (
+          <div className="pm2-command-list">
+            {selectedFeatures.map((feature) => (
+              <FeatureRow
+                key={feature.id}
+                feature={feature}
+                running={runningId === feature.id}
+                configuredCount={configuredCount(feature, forms, preferredProcess)}
+                onConfigure={() => setOptionsFeature(feature)}
+                onRun={() => executeFeature(feature)}
               />
-            </>
-          ) : (
-            <InsetPanel padding="sm" className="result-empty-state">
-              Run an action to see output here.
-            </InsetPanel>
-          )}
-        </section>
+            ))}
+          </div>
+        ) : (
+          <InsetPanel padding="sm" className="result-empty-state">No PM2 actions found.</InsetPanel>
+        )}
+      </section>
+
+      <section className="page-panel pm2-result-panel-bottom">
+        <div className="pm2-result-head">
+          <div className="min-w-0">
+            <h2 className="panel-heading">Result</h2>
+          </div>
+          {lastResult ? (
+            <Button type="button" size="sm" variant="secondary" onClick={copyOutput}>
+              <Copy size={14} />
+              Copy
+            </Button>
+          ) : null}
+        </div>
+
+        {lastResult ? (
+          <div className="pm2-result-body">
+            <div className="pm2-result-meta">
+              <Badge tone={lastResult.success ? "success" : "danger"}>{lastResult.success ? "Success" : "Failed"}</Badge>
+              {lastResult.data?.risk ? <Badge tone={riskTone[lastResult.data.risk] || "neutral"}>{lastResult.data.risk}</Badge> : null}
+              {lastResult.data?.code !== undefined ? <Badge tone="neutral">code {lastResult.data.code}</Badge> : null}
+            </div>
+            <p className="pm2-result-command">
+              {lastResult.data?.command || lastResult.error || "No command recorded"}
+            </p>
+            <Textarea
+              readOnly
+              value={stringifyOutput(lastResult)}
+              className="min-h-[180px] resize-y font-mono text-xs"
+            />
+          </div>
+        ) : (
+          <InsetPanel padding="sm" className="result-empty-state">
+            Run an action to see output here.
+          </InsetPanel>
+        )}
       </section>
 
       {optionsFeature && (
@@ -294,7 +297,7 @@ export default function PM2Features() {
                   <FeatureField
                     key={field.name}
                     field={field}
-                    value={{ ...makeDefaultForm(optionsFeature, preferredProcess), ...(forms[optionsFeature.id] || {}) }[field.name] || ""}
+                    value={featurePayload(optionsFeature, forms, preferredProcess)[field.name] || ""}
                     processes={processes}
                     onChange={(value) => updateField(optionsFeature, field.name, value)}
                   />
@@ -325,54 +328,44 @@ export default function PM2Features() {
   );
 }
 
-function FeatureCard({ feature, form, running, onConfigure, onRun }) {
+function FeatureRow({ feature, running, configuredCount: activeOptions, onConfigure, onRun }) {
   const hasFields = (feature.fields || []).length > 0;
 
   return (
-    <article className="pm2-feature-card">
-      <div className="pm2-feature-main">
-        <div className="pm2-feature-title-row">
-          <h2 className="pm2-feature-title">{feature.label}</h2>
+    <article className="pm2-command-row">
+      <div className="pm2-command-main">
+        <div className="pm2-command-title-line">
+          <h3 className="pm2-command-title">{feature.label}</h3>
           <Badge tone={riskTone[feature.risk] || "neutral"}>{feature.risk}</Badge>
+          {hasFields && activeOptions ? <Badge tone="info">{activeOptions} set</Badge> : null}
+          {feature.risk === "sensitive-read" ? <Badge tone="warning">review output</Badge> : null}
         </div>
         <p className="command-chip">{feature.commandPreview}</p>
-        {feature.risk === "sensitive-read" ? (
-          <p className="pm2-inline-warning">Sensitive output. Review before sharing.</p>
-        ) : null}
       </div>
 
-      <button
-        type="button"
-        className="pm2-feature-config-summary"
-        onClick={hasFields ? onConfigure : undefined}
-        disabled={!hasFields}
-      >
-        <span>{summarizeFeatureForm(feature, form)}</span>
-      </button>
-
-      <div className="pm2-feature-actions">
+      <div className="pm2-command-actions">
         {hasFields ? (
-          <Button type="button" size="sm" variant="ghost" onClick={onConfigure} className="pm2-feature-options-button">
+          <Button type="button" size="sm" variant="secondary" onClick={onConfigure} className="pm2-feature-options-button">
             <Settings2 size={14} />
             Options
           </Button>
-        ) : null}
-        <Button
-          type="button"
-          size="sm"
-          variant={feature.risk === "critical" ? "danger" : "secondary"}
-          disabled={running}
-          onClick={onRun}
-          className="pm2-feature-run"
-        >
-          {feature.risk === "critical" ? <AlertTriangle size={14} /> : <Play size={14} />}
-          {running ? "Running..." : "Run"}
-        </Button>
+        ) : (
+          <Button
+            type="button"
+            size="sm"
+            variant={feature.risk === "critical" ? "danger" : "primary"}
+            disabled={running}
+            onClick={onRun}
+            className="pm2-feature-run"
+          >
+            {feature.risk === "critical" ? <AlertTriangle size={14} /> : <Play size={14} />}
+            {running ? "Running..." : "Run"}
+          </Button>
+        )}
       </div>
     </article>
   );
 }
-
 
 function FeatureField({ field, value, processes, onChange }) {
   if (field.type === "select") {
@@ -401,7 +394,6 @@ function FeatureField({ field, value, processes, onChange }) {
         />
         {field.type === "target" ? <TerminalSquare className="pointer-events-none absolute right-2 top-2.5 text-text-3" size={14} /> : null}
       </div>
-
     </Field>
   );
 }
