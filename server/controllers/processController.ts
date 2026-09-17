@@ -23,6 +23,15 @@ const {
   sanitizeCronExpression,
   sanitizeGitCloneUrl
 } = require("../utils/validation");
+const {
+  failure,
+  failureFrom,
+  invalid,
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError
+} = require("../utils/serviceResult");
 const { trackPm2Operation } = require("../middleware/metrics");
 const { appendHistoryEntry } = require("../utils/restartHistory");
 const {
@@ -294,10 +303,10 @@ function normalizeActorContext(actorOrContext = "unknown") {
 function sanitizeGitRemoteName(value) {
   const normalized = String(value || "").trim() || "origin";
   if (normalized.startsWith("-")) {
-    throw new Error("gitRemote cannot start with '-'");
+    throw new ValidationError("gitRemote cannot start with '-'", "invalid_git_remote");
   }
   if (!/^[A-Za-z0-9._-]{1,100}$/.test(normalized)) {
-    throw new Error("gitRemote contains invalid characters");
+    throw new ValidationError("gitRemote contains invalid characters", "invalid_git_remote");
   }
   return normalized;
 }
@@ -308,16 +317,16 @@ function sanitizeGitRef(value, fieldName, { allowEmpty = false } = {}) {
     if (allowEmpty) {
       return "";
     }
-    throw new Error(`${fieldName} is required`);
+    throw new ValidationError(`${fieldName} is required`, "validation_error");
   }
   if (normalized.startsWith("-")) {
-    throw new Error(`${fieldName} cannot start with '-'`);
+    throw new ValidationError(`${fieldName} cannot start with '-'`, "invalid_option");
   }
   if (/\s/.test(normalized)) {
-    throw new Error(`${fieldName} cannot contain whitespace`);
+    throw new ValidationError(`${fieldName} cannot contain whitespace`, "invalid_option");
   }
   if (normalized.length > 200) {
-    throw new Error(`${fieldName} exceeds max length 200`);
+    throw new ValidationError(`${fieldName} exceeds max length 200`, "invalid_option");
   }
   return normalized;
 }
@@ -915,7 +924,7 @@ function describeProcess(name) {
 async function resolveProcessWorkingDirectory(processName) {
   const proc = await describeProcess(processName);
   if (!proc) {
-    throw new Error(`Process not found: ${processName}`);
+    throw new NotFoundError(`Process not found: ${processName}`, "process_not_found");
   }
 
   const cwd = proc.pm2_env?.pm_cwd;
@@ -927,7 +936,7 @@ async function resolveProcessWorkingDirectory(processName) {
   }
 
   if (!cwd || !cwdStat || !cwdStat.isDirectory()) {
-    throw new Error(`Cannot resolve process working directory for: ${processName}`);
+    throw new ValidationError(`Cannot resolve process working directory for: ${processName}`, "unknown_working_directory");
   }
 
   return { proc, cwd: path.resolve(cwd) };
@@ -937,7 +946,7 @@ async function resolveDotEnvEditableDirectory(processName) {
   const { proc, cwd } = await resolveProcessWorkingDirectory(processName);
   const allowedRoot = getDotEnvAllowedRoot();
   if (!isPathInside(allowedRoot, cwd)) {
-    throw new Error(`.env editing is restricted to ${allowedRoot}`);
+    throw new ForbiddenError(`.env editing is restricted to ${allowedRoot}`, "dotenv_restricted");
   }
   return { proc, cwd, allowedRoot };
 }
@@ -952,10 +961,10 @@ function parsePortValue(portValue) {
   }
   const parsed = Number(portValue);
   if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
-    throw new Error("port must be an integer");
+    throw new ValidationError("port must be an integer", "invalid_port");
   }
   if (parsed < 1 || parsed > 65535) {
-    throw new Error("port must be between 1 and 65535");
+    throw new ValidationError("port must be between 1 and 65535", "invalid_port");
   }
   return parsed;
 }
@@ -1063,7 +1072,7 @@ async function startProcess(name, actorContext = "unknown") {
 
     const health = await waitForHealthyStart(processName, baselineRestarts);
     if (!health.ok) {
-      throw new Error(health.reason || `${processName} failed startup validation`);
+      throw new ConflictError(health.reason || `${processName} failed startup validation`, "startup_validation_failed");
     }
 
     return {
@@ -1104,11 +1113,11 @@ async function stopProcess(name, actorContext = "unknown") {
   const { actor, ip } = normalizeActorContext(actorContext);
 
   if (isDashboardSelfProcess(processName)) {
-    const result = {
-      success: false,
-      data: null,
-      error: "PM2 Manager cannot stop itself from the dashboard. Use the server terminal if you really need to shut it down."
-    };
+    const result = failure(
+      "PM2 Manager cannot stop itself from the dashboard. Use the server terminal if you really need to shut it down.",
+      409,
+      "self_process_protected"
+    );
     trackPm2Operation("processes.stop", false);
     await writeAudit("process.stop", { actor, ip }, {
       processName,
@@ -1205,19 +1214,11 @@ async function runBulkAction(action, names = [], actorContext = "unknown") {
   const safeAction = String(action || "").trim().toLowerCase();
   const allowed = new Set(["start", "stop", "restart"]);
   if (!allowed.has(safeAction)) {
-    return {
-      success: false,
-      data: null,
-      error: `Unsupported bulk action: ${safeAction}`
-    };
+    return invalid(`Unsupported bulk action: ${safeAction}`, "unsupported_bulk_action");
   }
 
   if (!Array.isArray(names) || names.length === 0) {
-    return {
-      success: false,
-      data: null,
-      error: "names must be a non-empty array"
-    };
+    return invalid("names must be a non-empty array", "invalid_names");
   }
 
   const sanitizedNames = [];
@@ -1225,11 +1226,11 @@ async function runBulkAction(action, names = [], actorContext = "unknown") {
     try {
       sanitizedNames.push(sanitizeProcessName(names[index], "process name"));
     } catch (error) {
-      return {
-        success: false,
-        data: null,
-        error: error?.message || `Invalid process name at index ${index}`
-      };
+      return failureFrom(
+        error,
+        400,
+        `Invalid process name at index ${index}`
+      );
     }
   }
 
@@ -1343,7 +1344,7 @@ async function updateProcessEnv(name, envPatch = {}, options = {}, actorContext 
   const result = await withPM2(async () => {
     const proc = await describeProcess(processName);
     if (!proc) {
-      throw new Error(`Process not found: ${processName}`);
+      throw new NotFoundError(`Process not found: ${processName}`, "process_not_found");
     }
 
     const currentEnv = sanitizeEnvObject(proc.pm2_env?.env || {});
@@ -1449,18 +1450,18 @@ async function updateProcessDotEnv(name, payload = {}, actorContext = "unknown")
   const { actor, ip } = normalizeActorContext(actorContext);
   const valuesRaw = payload?.values || {};
   if (!valuesRaw || typeof valuesRaw !== "object" || Array.isArray(valuesRaw)) {
-    return { success: false, data: null, error: "values must be an object" };
+    return invalid("values must be an object", "invalid_env_payload");
   }
 
   const values = {};
   for (const [rawKey, rawValue] of Object.entries(valuesRaw)) {
     const key = String(rawKey || "").trim();
     if (!ENV_KEY_PATTERN.test(key)) {
-      return { success: false, data: null, error: `Invalid environment variable name: ${rawKey}` };
+      return invalid(`Invalid environment variable name: ${rawKey}`, "invalid_env_key");
     }
     const value = String(rawValue ?? "");
     if (/\r|\n/.test(value)) {
-      return { success: false, data: null, error: `Invalid newline in value for ${key}` };
+      return invalid(`Invalid newline in value for ${key}`, "invalid_env_value");
     }
     values[key] = value;
   }
@@ -1472,13 +1473,13 @@ async function updateProcessDotEnv(name, payload = {}, actorContext = "unknown")
     try {
       await fs.promises.access(envPath, fs.constants.R_OK | fs.constants.W_OK);
     } catch (_error) {
-      throw new Error(`.env file not found or not writable for ${processName}`);
+      throw new ValidationError(`.env file not found or not writable for ${processName}`, "dotenv_unwritable");
     }
 
     const content = await fs.promises.readFile(envPath, "utf8");
     const invalidLines = collectInvalidDotEnvLines(content);
     if (invalidLines.length > 0) {
-      throw new Error(
+      throw new ValidationError(
         `.env has invalid syntax on line(s): ${invalidLines
           .slice(0, 5)
           .map((item) => item.line)
@@ -1505,7 +1506,7 @@ async function updateProcessDotEnv(name, payload = {}, actorContext = "unknown")
     const nextParsed = parseDotEnvContent(nextLines.join(eol));
     const nextInvalidLines = collectInvalidDotEnvLines(nextLines.join(eol));
     if (nextInvalidLines.length > 0) {
-      throw new Error(
+      throw new ValidationError(
         `.env validation failed after update on line(s): ${nextInvalidLines
           .slice(0, 5)
           .map((item) => item.line)
@@ -1556,11 +1557,11 @@ async function deleteProcess(name, actorContext = "unknown") {
   const { actor, ip } = normalizeActorContext(actorContext);
 
   if (isDashboardSelfProcess(processName)) {
-    const result = {
-      success: false,
-      data: null,
-      error: "PM2 Manager cannot delete itself from the dashboard."
-    };
+    const result = failure(
+      "PM2 Manager cannot delete itself from the dashboard.",
+      409,
+      "self_process_protected"
+    );
     trackPm2Operation("processes.delete", false);
     await writeAudit("process.delete", { actor, ip }, {
       processName,
@@ -1722,7 +1723,7 @@ async function createProcess(config, actorContext = "unknown") {
         }
 
         if (!projectStat.isDirectory()) {
-          throw new Error(`Project path is not a directory: ${projectDir}`);
+          throw new ValidationError(`Project path is not a directory: ${projectDir}`, "invalid_project_path");
         }
 
         if (await directoryIsEmpty(projectDir)) {
@@ -1736,15 +1737,16 @@ async function createProcess(config, actorContext = "unknown") {
           try {
             await runCommand("git", ["rev-parse", "--is-inside-work-tree"], projectDir);
           } catch (_error) {
-            throw new Error(`Project path is not empty and not a git repository: ${projectDir}`);
+            throw new ValidationError(`Project path is not empty and not a git repository: ${projectDir}`, "invalid_project_path");
           }
 
           const existingOrigin = (await runCommand("git", ["remote", "get-url", "origin"], projectDir))
             .stdout
             .trim();
           if (existingOrigin && existingOrigin !== gitUrl) {
-            throw new Error(
-              `Project path already uses a different origin remote. expected=${gitUrl} actual=${existingOrigin}`
+            throw new ConflictError(
+              `Project path already uses a different origin remote. expected=${gitUrl} actual=${existingOrigin}`,
+              "git_origin_conflict"
             );
           }
 
@@ -1761,7 +1763,7 @@ async function createProcess(config, actorContext = "unknown") {
       }
 
       if (!projectStat || !projectStat.isDirectory()) {
-        throw new Error(`Project path does not exist or is not a directory: ${projectDir}`);
+        throw new ValidationError(`Project path does not exist or is not a directory: ${projectDir}`, "invalid_project_path");
       }
 
       if (env_file_content !== undefined && env_file_content !== null) {
@@ -1774,13 +1776,14 @@ async function createProcess(config, actorContext = "unknown") {
       } catch (_error) {
         const staticSite = await detectStaticSiteProject(projectDir);
         if (!staticSite.isStaticSite) {
-          throw new Error(`package.json not found at: ${packageJsonPath}`);
+          throw new ValidationError(`package.json not found at: ${packageJsonPath}`, "missing_package_json");
         }
 
         const staticServerCommand = await resolveStaticSiteServer();
         if (!staticServerCommand) {
-          throw new Error(
-            `Static site detected at ${staticSite.entryPath}, but no supported static file server was found. Install python3/python or use Script Path mode.`
+          throw new ValidationError(
+            `Static site detected at ${staticSite.entryPath}, but no supported static file server was found. Install python3/python or use Script Path mode.`,
+            "missing_static_server"
           );
         }
 
@@ -1805,7 +1808,7 @@ async function createProcess(config, actorContext = "unknown") {
       }
 
       if (!finalScript || !String(finalScript).trim()) {
-        throw new Error(`Unable to determine runtime for project: ${projectDir}`);
+        throw new ValidationError(`Unable to determine runtime for project: ${projectDir}`, "unknown_runtime");
       }
 
       if (resolvedInterpreterOverride === "none") {
@@ -1858,7 +1861,7 @@ async function createProcess(config, actorContext = "unknown") {
 
         if (run_build) {
           if (!scripts.build) {
-            throw new Error(`Missing "build" script in ${packageJsonPath}`);
+            throw new ValidationError(`Missing "build" script in ${packageJsonPath}`, "missing_build_script");
           }
           try {
             await runCreateStep(
@@ -1905,7 +1908,7 @@ async function createProcess(config, actorContext = "unknown") {
         }
 
         if (!scripts[startScriptName]) {
-          throw new Error(`Missing "${startScriptName}" script in ${packageJsonPath}`);
+          throw new ValidationError(`Missing "${startScriptName}" script in ${packageJsonPath}`, "missing_start_script");
         }
 
         finalScript = npmCmd;
@@ -1935,7 +1938,7 @@ async function createProcess(config, actorContext = "unknown") {
     }
 
     if (!finalScript || !String(finalScript).trim()) {
-      throw new Error("Script path is required");
+      throw new ValidationError("Script path is required", "missing_script_path");
     }
     const safeScript = sanitizeScriptPath(finalScript);
     const safeEnv = sanitizeEnvObject(env);
@@ -1979,15 +1982,15 @@ async function createProcess(config, actorContext = "unknown") {
       if (existingProcess) {
         const existingName = String(existingProcess.name || existingProcess.pm2_env?.name || "").trim() || "unknown process";
         if (existingName === safeName) {
-          throw new Error(`Port ${normalizedPort} is already in use: ${safeName} was already using that port`);
+          throw new ConflictError(`Port ${normalizedPort} is already in use: ${safeName} was already using that port`, "port_in_use");
         }
-        throw new Error(`Port ${normalizedPort} is already in use by ${existingName}`);
+        throw new ConflictError(`Port ${normalizedPort} is already in use by ${existingName}`, "port_in_use");
       }
 
       const portBinding = await checkPortBinding(normalizedPort);
       if (!portBinding.available) {
         const suffix = portBinding.code ? ` (${portBinding.code})` : "";
-        throw new Error(`Port ${normalizedPort} is already in use by another service${suffix}`);
+        throw new ConflictError(`Port ${normalizedPort} is already in use by another service${suffix}`, "port_in_use");
       }
     }
 
@@ -2051,7 +2054,7 @@ async function createProcess(config, actorContext = "unknown") {
           durationMs,
           error: health?.reason || "Healthcheck failed"
         });
-        throw new Error(health.reason || `Startup validation failed for ${safeName}`);
+        throw new ConflictError(health.reason || `Startup validation failed for ${safeName}`, "startup_validation_failed");
       }
       const durationMs = Date.now() - healthStartedAt;
       createSteps.push({
@@ -2267,11 +2270,7 @@ async function readSystemResources() {
       error: null
     };
   } catch (error) {
-    return {
-      success: false,
-      data: null,
-      error: error?.message || "Failed to read system resources"
-    };
+    return failureFrom(error, 500, "Failed to read system resources");
   }
 }
 
@@ -2283,7 +2282,7 @@ async function updateProcessSchedule(name, payload = {}, actorContext = "unknown
   try {
     cronRestart = sanitizeCronExpression(payload.cron_restart);
   } catch (error) {
-    return { success: false, data: null, error: error?.message || "Invalid cron_restart" };
+    return failureFrom(error, 400, "Invalid cron_restart");
   }
 
   const result = await withPM2(
@@ -2338,18 +2337,21 @@ async function duplicateProcess(name, payload = {}, actorContext = "unknown") {
   const targetName = sanitizeProcessName(payload?.name, "duplicate process name");
 
   if (sourceName === targetName) {
-    return { success: false, data: null, error: "duplicate process name must differ from source process name" };
+    return invalid(
+      "duplicate process name must differ from source process name",
+      "duplicate_name_conflict"
+    );
   }
 
   const result = await withPM2(async () => {
     const source = await describeProcess(sourceName);
     if (!source) {
-      throw new Error(`Process not found: ${sourceName}`);
+      throw new NotFoundError(`Process not found: ${sourceName}`, "process_not_found");
     }
 
     const existingTarget = await describeProcess(targetName);
     if (existingTarget) {
-      throw new Error(`Process already exists: ${targetName}`);
+      throw new ConflictError(`Process already exists: ${targetName}`, "process_exists");
     }
 
     const pm2Env = source.pm2_env || {};
@@ -2421,7 +2423,7 @@ async function runNpmScriptForProcess(name, scriptName, args = []) {
   const result = await withPM2(async () => {
     const proc = await describeProcess(processName);
     if (!proc) {
-      throw new Error(`Process not found: ${processName}`);
+      throw new NotFoundError(`Process not found: ${processName}`, "process_not_found");
     }
 
     const rawCwd = proc.pm2_env?.pm_cwd;
@@ -2434,14 +2436,14 @@ async function runNpmScriptForProcess(name, scriptName, args = []) {
     }
 
     if (!cwd || !cwdStat || !cwdStat.isDirectory()) {
-      throw new Error(`Cannot resolve process working directory for: ${processName}`);
+      throw new ValidationError(`Cannot resolve process working directory for: ${processName}`, "unknown_working_directory");
     }
 
     const packageJsonPath = path.join(cwd, "package.json");
     try {
       await fs.promises.access(packageJsonPath, fs.constants.R_OK);
     } catch (_error) {
-      throw new Error(`No package.json found in process directory: ${cwd}`);
+      throw new ValidationError(`No package.json found in process directory: ${cwd}`, "missing_package_json");
     }
 
     const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
@@ -2458,7 +2460,7 @@ async function runNpmScriptForProcess(name, scriptName, args = []) {
     const packageJson = JSON.parse(await fs.promises.readFile(packageJsonPath, "utf8"));
     const scripts = packageJson.scripts || {};
     if (!scripts[scriptName]) {
-      throw new Error(`Script "${scriptName}" not found in ${packageJsonPath}`);
+      throw new ValidationError(`Script "${scriptName}" not found in ${packageJsonPath}`, "missing_npm_script");
     }
 
     const result = await runCommand(npmCmd, ["run", scriptName, ...args], cwd);
@@ -2496,11 +2498,8 @@ async function deployProcess(name, options = {}, actorContext = "unknown") {
     branch = sanitizeGitRef(options.branch, "branch", { allowEmpty: true });
     gitRemote = sanitizeGitRemoteName(options.gitRemote);
   } catch (error) {
-    return {
-      success: false,
-      data: null,
-      error: redactSecretsFromText(error.message) || "Invalid deploy options"
-    };
+    const failed = failureFrom(error, 400, "Invalid deploy options");
+    return { ...failed, error: redactSecretsFromText(failed.error) };
   }
   const installDependencies = options.installDependencies !== false;
   const runBuild = options.runBuild !== false;
@@ -2511,7 +2510,7 @@ async function deployProcess(name, options = {}, actorContext = "unknown") {
   const result = await withPM2(async () => {
     const proc = await describeProcess(processName);
     if (!proc) {
-      throw new Error(`Process not found: ${processName}`);
+      throw new NotFoundError(`Process not found: ${processName}`, "process_not_found");
     }
 
     const rawCwd = proc.pm2_env?.pm_cwd;
@@ -2524,7 +2523,7 @@ async function deployProcess(name, options = {}, actorContext = "unknown") {
     }
 
     if (!cwd || !cwdStat || !cwdStat.isDirectory()) {
-      throw new Error(`Cannot resolve process working directory for: ${processName}`);
+      throw new ValidationError(`Cannot resolve process working directory for: ${processName}`, "unknown_working_directory");
     }
 
     const steps = deploymentSteps;
@@ -2680,7 +2679,7 @@ async function getGitCommitsForProcess(name, limit = 20) {
   const result = await withPM2(async () => {
     const proc = await describeProcess(processName);
     if (!proc) {
-      throw new Error(`Process not found: ${processName}`);
+      throw new NotFoundError(`Process not found: ${processName}`, "process_not_found");
     }
 
     const rawCwd = proc.pm2_env?.pm_cwd;
@@ -2692,7 +2691,7 @@ async function getGitCommitsForProcess(name, limit = 20) {
       cwdStat = null;
     }
     if (!cwd || !cwdStat || !cwdStat.isDirectory()) {
-      throw new Error(`Cannot resolve process working directory for: ${processName}`);
+      throw new ValidationError(`Cannot resolve process working directory for: ${processName}`, "unknown_working_directory");
     }
 
     const normalizedLimit = Math.max(1, Math.min(100, Number(limit) || 20));
@@ -2864,11 +2863,8 @@ async function rollbackProcess(name, options = {}, actorContext = "unknown") {
   try {
     targetCommit = sanitizeGitRef(options.targetCommit, "targetCommit", { allowEmpty: true });
   } catch (error) {
-    return {
-      success: false,
-      data: null,
-      error: redactSecretsFromText(error.message) || "Invalid rollback options"
-    };
+    const failed = failureFrom(error, 400, "Invalid rollback options");
+    return { ...failed, error: redactSecretsFromText(failed.error) };
   }
   const restartMode = String(options.restartMode || "restart").trim() === "reload" ? "reload" : "restart";
   /** @type {CommandStep[]} */
@@ -2877,7 +2873,7 @@ async function rollbackProcess(name, options = {}, actorContext = "unknown") {
   const result = await withPM2(async () => {
     const proc = await describeProcess(processName);
     if (!proc) {
-      throw new Error(`Process not found: ${processName}`);
+      throw new NotFoundError(`Process not found: ${processName}`, "process_not_found");
     }
 
     const rawCwd = proc.pm2_env?.pm_cwd;
@@ -2889,7 +2885,7 @@ async function rollbackProcess(name, options = {}, actorContext = "unknown") {
       cwdStat = null;
     }
     if (!cwd || !cwdStat || !cwdStat.isDirectory()) {
-      throw new Error(`Cannot resolve process working directory for: ${processName}`);
+      throw new ValidationError(`Cannot resolve process working directory for: ${processName}`, "unknown_working_directory");
     }
 
     const steps = rollbackSteps;
@@ -3090,11 +3086,11 @@ async function getInterpreterCatalog() {
 async function installInterpreterRuntime(payload = {}) {
   const key = String(payload?.key || "").trim().toLowerCase();
   if (!key) {
-    return { success: false, data: null, error: "key is required" };
+    return invalid("key is required", "missing_interpreter_key");
   }
   const target = INTERPRETER_CATALOG.find((item) => item.key === key);
   if (!target) {
-    return { success: false, data: null, error: `Unsupported interpreter key: ${key}` };
+    return invalid(`Unsupported interpreter key: ${key}`, "unsupported_interpreter_key");
   }
 
   try {
@@ -3116,11 +3112,7 @@ async function installInterpreterRuntime(payload = {}) {
       error: null
     };
   } catch (error) {
-    return {
-      success: false,
-      data: null,
-      error: error?.message || `Failed to install interpreter: ${key}`
-    };
+    return failureFrom(error, 500, `Failed to install interpreter: ${key}`);
   }
 }
 
@@ -3136,7 +3128,7 @@ async function getNodeRuntimeStatus() {
 async function installNodeRuntime(payload = {}) {
   const version = normalizeVersion(payload?.version);
   if (!version) {
-    return { success: false, data: null, error: "version is required" };
+    return invalid("version is required", "missing_version");
   }
   const preferredManager = String(payload?.manager || "").trim().toLowerCase();
   try {
@@ -3151,11 +3143,7 @@ async function installNodeRuntime(payload = {}) {
       error: null
     };
   } catch (error) {
-    return {
-      success: false,
-      data: null,
-      error: error?.message || "Failed to install requested Node version"
-    };
+    return failureFrom(error, 500, "Failed to install requested Node version");
   }
 }
 
@@ -3168,11 +3156,7 @@ async function updateProcessMetadata(name, payload) {
       error: null
     };
   } catch (error) {
-    return {
-      success: false,
-      data: null,
-      error: error?.message || "Failed to update process metadata"
-    };
+    return failureFrom(error, 400, "Failed to update process metadata");
   }
 }
 

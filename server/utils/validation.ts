@@ -1,4 +1,5 @@
 const path = require("path");
+const { ValidationError } = require("./serviceResult");
 
 const PROCESS_NAME_PATTERN = /^[A-Za-z0-9:_-]{1,100}$/;
 const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -10,10 +11,10 @@ const GIT_CLONE_PROTOCOLS = new Set(["http:", "https:", "ssh:", "git:", "file:"]
 function sanitizeProcessName(name, field = "name") {
   const value = String(name || "").trim();
   if (!PROCESS_NAME_PATTERN.test(value)) {
-    throw new Error(`${field} must match ${PROCESS_NAME_PATTERN}`);
+    throw new ValidationError(`${field} must match ${PROCESS_NAME_PATTERN}`);
   }
   if (RESERVED_PROCESS_NAMES.has(value.toLowerCase())) {
-    throw new Error(`${field} contains reserved value: ${value}`);
+    throw new ValidationError(`${field} contains reserved value: ${value}`);
   }
   return value;
 }
@@ -21,13 +22,13 @@ function sanitizeProcessName(name, field = "name") {
 function sanitizeScriptPath(script) {
   const value = String(script || "").trim();
   if (!value) {
-    throw new Error("Script path is required");
+    throw new ValidationError("Script path is required");
   }
 
   const normalized = path.normalize(value);
   const segments = normalized.split(path.sep).filter(Boolean);
   if (segments.includes("..")) {
-    throw new Error("Script path cannot contain traversal segments");
+    throw new ValidationError("Script path cannot contain traversal segments");
   }
 
   return normalized;
@@ -39,14 +40,14 @@ function sanitizeEnvObject(env) {
   }
 
   if (typeof env !== "object" || Array.isArray(env)) {
-    throw new Error("env must be an object");
+    throw new ValidationError("env must be an object");
   }
 
   const cleaned = {};
   for (const [rawKey, rawValue] of Object.entries(env)) {
     const key = String(rawKey || "").trim();
     if (!ENV_KEY_PATTERN.test(key)) {
-      throw new Error(`Invalid environment variable name: ${rawKey}`);
+      throw new ValidationError(`Invalid environment variable name: ${rawKey}`);
     }
     cleaned[key] = String(rawValue ?? "");
   }
@@ -56,7 +57,7 @@ function sanitizeEnvObject(env) {
 function resolveSafePath(inputPath, basePath, fieldName = "path") {
   const raw = String(inputPath || "").trim();
   if (!raw) {
-    throw new Error(`${fieldName} is required`);
+    throw new ValidationError(`${fieldName} is required`);
   }
 
   const sanitized = sanitizeScriptPath(raw);
@@ -69,7 +70,7 @@ function resolveSafePath(inputPath, basePath, fieldName = "path") {
   const isInsideBase =
     relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
   if (!isInsideBase) {
-    throw new Error(`${fieldName} must be inside allowed base path`);
+    throw new ValidationError(`${fieldName} must be inside allowed base path`);
   }
 
   return resolved;
@@ -84,10 +85,10 @@ function sanitizeOptionalString(value, fieldName, maxLength = 256) {
     return undefined;
   }
   if (str.length > maxLength) {
-    throw new Error(`${fieldName} exceeds max length ${maxLength}`);
+    throw new ValidationError(`${fieldName} exceeds max length ${maxLength}`);
   }
   if (!SAFE_ARG_CHARS.test(str)) {
-    throw new Error(`${fieldName} contains invalid characters`);
+    throw new ValidationError(`${fieldName} contains invalid characters`);
   }
   return str;
 }
@@ -108,7 +109,7 @@ function sanitizeMaxMemoryRestart(value) {
   }
   const str = String(value).trim();
   if (!/^\d+(?:\.\d+)?(?:K|M|G)$/i.test(str)) {
-    throw new Error("max_memory_restart must match e.g. 256M, 1G");
+    throw new ValidationError("max_memory_restart must match e.g. 256M, 1G");
   }
   return str.toUpperCase();
 }
@@ -126,10 +127,10 @@ function sanitizeCronExpression(value) {
     return undefined;
   }
   if (str.length > 128) {
-    throw new Error("cron_restart exceeds max length 128");
+    throw new ValidationError("cron_restart exceeds max length 128");
   }
   if (!/^[A-Za-z0-9_*,\/\-?\s]+$/.test(str)) {
-    throw new Error("cron_restart contains invalid characters");
+    throw new ValidationError("cron_restart contains invalid characters");
   }
   return str;
 }
@@ -137,19 +138,19 @@ function sanitizeCronExpression(value) {
 function sanitizeGitCloneUrl(value, fieldName = "git_clone_url") {
   const str = String(value || "").trim();
   if (!str) {
-    throw new Error(`${fieldName} is required`);
+    throw new ValidationError(`${fieldName} is required`);
   }
   if (str.length > 2048) {
-    throw new Error(`${fieldName} exceeds max length 2048`);
+    throw new ValidationError(`${fieldName} exceeds max length 2048`);
   }
   if (/\s/.test(str)) {
-    throw new Error(`${fieldName} cannot contain whitespace`);
+    throw new ValidationError(`${fieldName} cannot contain whitespace`);
   }
 
   if (GIT_CLONE_SSH_PATTERN.test(str)) {
     const remotePath = str.split(":").slice(1).join(":");
     if (!remotePath || !remotePath.includes("/")) {
-      throw new Error(`${fieldName} must be a valid git clone URL`);
+      throw new ValidationError(`${fieldName} must be a valid git clone URL`);
     }
     return str;
   }
@@ -158,17 +159,17 @@ function sanitizeGitCloneUrl(value, fieldName = "git_clone_url") {
   try {
     parsed = new URL(str);
   } catch (_error) {
-    throw new Error(`${fieldName} must be a valid git clone URL`);
+    throw new ValidationError(`${fieldName} must be a valid git clone URL`);
   }
 
   if (!GIT_CLONE_PROTOCOLS.has(parsed.protocol)) {
-    throw new Error(`${fieldName} must use http, https, ssh, git, or file protocol`);
+    throw new ValidationError(`${fieldName} must use http, https, ssh, git, or file protocol`);
   }
   if (parsed.protocol !== "file:" && !parsed.hostname) {
-    throw new Error(`${fieldName} must include a hostname`);
+    throw new ValidationError(`${fieldName} must include a hostname`);
   }
   if (!parsed.pathname || parsed.pathname === "/") {
-    throw new Error(`${fieldName} must include a repository path`);
+    throw new ValidationError(`${fieldName} must include a repository path`);
   }
 
   return str;

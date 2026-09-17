@@ -32,6 +32,21 @@ names are `development`, `test`, `staging`, and `production`. Client builds read
 `client/.env.<mode>` (see `client/.env.example`); never put secrets there,
 because everything in those files ships to the browser.
 
+## API error contract
+
+- Controllers return `{ success, data, error }` envelopes; failures built with
+  `server/utils/serviceResult.ts` also carry `status` and `code`. Routes answer with
+  `res.status(resultStatus(result))` and nothing else.
+- Never pick a status by pattern-matching `result.error`. `ValidationError` (400),
+  `ConflictError` (409), `ForbiddenError` (403), `NotFoundError` (404), and
+  `UnavailableError` (503) exist so the failure itself states its meaning; reword
+  the message freely without changing the response code.
+- The client renders the server's `error` string for any status, so a status code
+  drives retry and copy behavior, not whether the user sees the message.
+- Installer routes no longer guess: an install or environment failure reports 500
+  rather than the old 400. Move the classification into the installer module (for
+  example `UnavailableError` when a version manager is missing) if a 4xx is needed.
+
 ## Recommended
 
 - Put the dashboard behind HTTPS.

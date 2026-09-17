@@ -40,6 +40,7 @@ const {
 } = require("../controllers/processController");
 const { verifyToken } = require("../middleware/auth");
 const { validateProcessParam } = require("../middleware/validate");
+const { resultStatus } = require("../utils/serviceResult");
 const { asyncHandler } = require("../middleware/asyncHandler");
 const {
   readLimiter,
@@ -56,42 +57,32 @@ router.use(verifyToken);
 
 router.get("/", readLimiter, asyncHandler(async (_req, res) => {
   const result = await listProcesses();
-  res.status(result.success ? 200 : 500).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.get("/catalog", readLimiter, asyncHandler(async (_req, res) => {
   const result = await getProcessCatalog();
-  res.status(result.success ? 200 : 500).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.get("/interpreters", readLimiter, asyncHandler(async (_req, res) => {
   const result = await getInterpreterCatalog();
-  res.status(result.success ? 200 : 500).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.post("/interpreters/install", criticalWriteLimiter, asyncHandler(async (req, res) => {
   const result = await installInterpreterRuntime(req.body || {});
-  const status = result.success
-    ? 200
-    : /required|unsupported|not running|elevated|failed|not available/i.test(result.error || "")
-      ? 400
-      : 500;
-  res.status(status).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.get("/runtimes/node", readLimiter, asyncHandler(async (_req, res) => {
   const result = await getNodeRuntimeStatus();
-  res.status(result.success ? 200 : 500).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.post("/runtimes/node/install", criticalWriteLimiter, asyncHandler(async (req, res) => {
   const result = await installNodeRuntime(req.body || {});
-  const status = result.success
-    ? 200
-    : /required|not installed|no supported|failed/i.test(result.error || "")
-      ? 400
-      : 500;
-  res.status(status).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.get("/history/restarts", readLimiter, asyncHandler(async (req, res) => {
@@ -125,7 +116,7 @@ router.get("/history/deployments", readLimiter, asyncHandler(async (req, res) =>
     const pageSize = Math.max(1, Math.min(100, Number(req.query.pageSize) || 25));
     const processName = String(req.query.process || "").trim();
     const result = await getDeploymentHistory({ page, pageSize, processName });
-    res.status(result.success ? 200 : 500).json(result);
+    res.status(resultStatus(result)).json(result);
     return;
   }
 
@@ -138,7 +129,7 @@ router.get("/history/deployments", readLimiter, asyncHandler(async (req, res) =>
       : 100;
   const processName = String(req.query.process || "").trim();
   const result = await getDeploymentHistory(limit, processName);
-  res.status(result.success ? 200 : 500).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.get("/history/audit", readLimiter, asyncHandler(async (req, res) => {
@@ -153,27 +144,27 @@ router.get("/history/audit", readLimiter, asyncHandler(async (req, res) => {
 
 router.get("/monitoring/summary", readLimiter, asyncHandler(async (_req, res) => {
   const result = await readMonitoringSummary();
-  res.status(result.success ? 200 : 500).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.get("/system/resources", readLimiter, asyncHandler(async (_req, res) => {
   const result = await readSystemResources();
-  res.status(result.success ? 200 : 500).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.get("/config/export", readLimiter, asyncHandler(async (_req, res) => {
   const result = await exportProcessConfig();
-  res.status(result.success ? 200 : 500).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.post("/config/import", writeLimiter, asyncHandler(async (req, res) => {
   const result = await importProcessConfig(req.body || {});
-  res.status(result.success ? 200 : 500).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.get("/:name", readLimiter, validateProcessParam, asyncHandler(async (req, res) => {
   const result = await getProcessDetails(req.params.name);
-  res.status(result.success ? 200 : 500).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.get("/:name/metrics", readLimiter, validateProcessParam, asyncHandler(async (req, res) => {
@@ -182,7 +173,7 @@ router.get("/:name/metrics", readLimiter, validateProcessParam, asyncHandler(asy
     ? Math.min(2000, Math.max(10, Math.floor(requested)))
     : 120;
   const result = await readProcessMetrics(req.params.name, limit);
-  res.status(result.success ? 200 : 500).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.get("/:name/health", readLimiter, validateProcessParam, asyncHandler(async (req, res) => {
@@ -191,22 +182,17 @@ router.get("/:name/health", readLimiter, validateProcessParam, asyncHandler(asyn
     ? Math.min(2000, Math.max(10, Math.floor(requested)))
     : 120;
   const result = await readProcessHealth(req.params.name, limit);
-  res.status(result.success ? 200 : 500).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.patch("/:name/meta", writeLimiter, validateProcessParam, asyncHandler(async (req, res) => {
   const result = await updateProcessMetadata(req.params.name, req.body || {});
-  const status = result.success
-    ? 200
-    : /health check port|must be|invalid|required|threshold/i.test(result.error || "")
-      ? 400
-      : 500;
-  res.status(status).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.delete("/:name/meta", writeLimiter, validateProcessParam, asyncHandler(async (req, res) => {
   const result = await removeProcessMetadata(req.params.name);
-  res.status(result.success ? 200 : 500).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.post("/create", writeLimiter, asyncHandler(async (req, res) => {
@@ -216,12 +202,7 @@ router.post("/create", writeLimiter, asyncHandler(async (req, res) => {
     io: req.app.get("io"),
     createOperationId: String(req.body?.create_operation_id || "").trim()
   });
-  const status = result.success
-    ? 200
-    : /must|required|invalid|inside allowed|cannot contain|already in use|port must be|did not become healthy|restarted during startup/i.test(result.error || "")
-      ? 400
-      : 500;
-  res.status(status).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.post("/bulk-action", writeLimiter, asyncHandler(async (req, res) => {
@@ -229,12 +210,7 @@ router.post("/bulk-action", writeLimiter, asyncHandler(async (req, res) => {
     actor: req.user?.username || "unknown",
     ip: getRequestIp(req)
   });
-  const status = result.success
-    ? 200
-    : /must|required|invalid|unsupported|non-empty array/i.test(result.error || "")
-      ? 400
-      : 500;
-  res.status(status).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.post("/:name/start", writeLimiter, validateProcessParam, asyncHandler(async (req, res) => {
@@ -242,12 +218,7 @@ router.post("/:name/start", writeLimiter, validateProcessParam, asyncHandler(asy
     actor: req.user?.username || "unknown",
     ip: getRequestIp(req)
   });
-  const status = result.success
-    ? 200
-    : /did not become healthy|restarted during startup|failed startup validation/i.test(result.error || "")
-      ? 409
-      : 500;
-  res.status(status).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.post("/:name/stop", writeLimiter, validateProcessParam, asyncHandler(async (req, res) => {
@@ -255,7 +226,7 @@ router.post("/:name/stop", writeLimiter, validateProcessParam, asyncHandler(asyn
     actor: req.user?.username || "unknown",
     ip: getRequestIp(req)
   });
-  res.status(result.success ? 200 : /cannot stop itself/i.test(result.error || "") ? 400 : 500).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.post("/:name/restart", writeLimiter, validateProcessParam, asyncHandler(async (req, res) => {
@@ -263,7 +234,7 @@ router.post("/:name/restart", writeLimiter, validateProcessParam, asyncHandler(a
     actor: req.user?.username || "unknown",
     ip: getRequestIp(req)
   });
-  res.status(result.success ? 200 : 500).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.post("/:name/reload", writeLimiter, validateProcessParam, asyncHandler(async (req, res) => {
@@ -271,7 +242,7 @@ router.post("/:name/reload", writeLimiter, validateProcessParam, asyncHandler(as
     actor: req.user?.username || "unknown",
     ip: getRequestIp(req)
   });
-  res.status(result.success ? 200 : 500).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.patch("/:name/schedule", writeLimiter, validateProcessParam, asyncHandler(async (req, res) => {
@@ -279,12 +250,7 @@ router.patch("/:name/schedule", writeLimiter, validateProcessParam, asyncHandler
     actor: req.user?.username || "unknown",
     ip: getRequestIp(req)
   });
-  const status = result.success
-    ? 200
-    : /invalid|required|cron/i.test(result.error || "")
-      ? 400
-      : 500;
-  res.status(status).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.post("/:name/duplicate", writeLimiter, validateProcessParam, asyncHandler(async (req, res) => {
@@ -292,12 +258,7 @@ router.post("/:name/duplicate", writeLimiter, validateProcessParam, asyncHandler
     actor: req.user?.username || "unknown",
     ip: getRequestIp(req)
   });
-  const status = result.success
-    ? 200
-    : /must|invalid|already exists|not found|differ/i.test(result.error || "")
-      ? 400
-      : 500;
-  res.status(status).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.patch("/:name/env", writeLimiter, validateProcessParam, asyncHandler(async (req, res) => {
@@ -310,20 +271,12 @@ router.patch("/:name/env", writeLimiter, validateProcessParam, asyncHandler(asyn
       ip: getRequestIp(req)
     }
   );
-  const status = result.success ? 200 : /must|required|invalid|env/i.test(result.error || "") ? 400 : 500;
-  res.status(status).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.get("/:name/dotenv", readLimiter, validateProcessParam, asyncHandler(async (req, res) => {
   const result = await readProcessDotEnv(req.params.name);
-  const status = result.success
-    ? 200
-    : /restricted/i.test(result.error || "")
-      ? 403
-      : /not found|working directory|process/i.test(result.error || "")
-        ? 404
-        : 500;
-  res.status(status).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.patch("/:name/dotenv", writeLimiter, validateProcessParam, asyncHandler(async (req, res) => {
@@ -331,14 +284,7 @@ router.patch("/:name/dotenv", writeLimiter, validateProcessParam, asyncHandler(a
     actor: req.user?.username || "unknown",
     ip: getRequestIp(req)
   });
-  const status = result.success
-    ? 200
-    : /restricted/i.test(result.error || "")
-      ? 403
-      : /must|required|invalid|env|writable|not found/i.test(result.error || "")
-        ? 400
-        : 500;
-  res.status(status).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.delete("/:name", criticalWriteLimiter, validateProcessParam, asyncHandler(async (req, res) => {
@@ -346,7 +292,7 @@ router.delete("/:name", criticalWriteLimiter, validateProcessParam, asyncHandler
     actor: req.user?.username || "unknown",
     ip: getRequestIp(req)
   });
-  res.status(result.success ? 200 : /cannot delete itself/i.test(result.error || "") ? 400 : 500).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.get("/:name/logs", readLimiter, validateProcessParam, asyncHandler(async (req, res) => {
@@ -355,32 +301,22 @@ router.get("/:name/logs", readLimiter, validateProcessParam, asyncHandler(async 
     ? Math.min(2000, Math.max(1, Math.floor(requested)))
     : 100;
   const result = await getProcessLogs(req.params.name, lines);
-  res.status(result.success ? 200 : 500).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.post("/:name/flush", writeLimiter, validateProcessParam, asyncHandler(async (req, res) => {
   const result = await flushLogs(req.params.name);
-  res.status(result.success ? 200 : 500).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.post("/:name/npm-install", criticalWriteLimiter, validateProcessParam, asyncHandler(async (req, res) => {
   const result = await npmInstall(req.params.name);
-  const status = result.success
-    ? 200
-    : /No package.json|working directory|Cannot resolve/i.test(result.error || "")
-      ? 400
-      : 500;
-  res.status(status).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.post("/:name/npm-build", criticalWriteLimiter, validateProcessParam, asyncHandler(async (req, res) => {
   const result = await npmBuild(req.params.name);
-  const status = result.success
-    ? 200
-    : /No package.json|Script .* not found|working directory|Cannot resolve/i.test(result.error || "")
-      ? 400
-      : 500;
-  res.status(status).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.post("/:name/deploy", criticalWriteLimiter, validateProcessParam, asyncHandler(async (req, res) => {
@@ -388,18 +324,13 @@ router.post("/:name/deploy", criticalWriteLimiter, validateProcessParam, asyncHa
     actor: req.user?.username || "unknown",
     ip: getRequestIp(req)
   });
-  res.status(result.success ? 200 : 500).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 
 router.get("/:name/git/status", readLimiter, validateProcessParam, asyncHandler(async (req, res) => {
   const result = await getGitStatusForProcess(req.params.name);
-  const status = result.success
-    ? 200
-    : /not in a git repository|not found|working directory/i.test(result.error || "")
-      ? 400
-      : 500;
-  res.status(status).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.get("/:name/git/commits", readLimiter, validateProcessParam, asyncHandler(async (req, res) => {
@@ -408,18 +339,14 @@ router.get("/:name/git/commits", readLimiter, validateProcessParam, asyncHandler
     ? Math.min(100, Math.max(1, Math.floor(requested)))
     : 20;
   const result = await getGitCommitsForProcess(req.params.name, limit);
-  res.status(result.success ? 200 : 500).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 router.post("/:name/git/pull", criticalWriteLimiter, validateProcessParam, asyncHandler(async (req, res) => {
   const result = await gitPullProcess(req.params.name, req.body || {});
-  const status = result.success && result.data?.requiresConfirmation
-    ? 409
-    : result.success
-      ? 200
-      : /not in a git repository|not found|working directory/i.test(result.error || "")
-        ? 400
-        : 500;
+  // A pull that needs confirmation is reported as a conflict so the client can
+  // prompt for it; every other outcome uses the status carried by the result.
+  const status = result.success && result.data?.requiresConfirmation ? 409 : resultStatus(result);
   res.status(status).json(result);
 }));
 
@@ -428,7 +355,7 @@ router.post("/:name/rollback", criticalWriteLimiter, validateProcessParam, async
     actor: req.user?.username || "unknown",
     ip: getRequestIp(req)
   });
-  res.status(result.success ? 200 : 500).json(result);
+  res.status(resultStatus(result)).json(result);
 }));
 
 module.exports = router;

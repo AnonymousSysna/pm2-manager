@@ -1,5 +1,6 @@
 const pm2 = require("pm2");
 const permissionHints = require("./permissionHints.js");
+const { success, failure, failureFrom, unavailable } = require("./serviceResult");
 const withPermissionHint =
   typeof permissionHints?.withPermissionHint === "function"
     ? permissionHints.withPermissionHint
@@ -41,11 +42,13 @@ function runPM2(action) {
     };
 
     const operationTimeout = setTimeout(() => {
-      finish({
-        success: false,
-        data: null,
-        error: withPermissionHint(`PM2 operation timed out after ${PM2_OPERATION_TIMEOUT_MS}ms`)
-      });
+      finish(
+        failure(
+          withPermissionHint(`PM2 operation timed out after ${PM2_OPERATION_TIMEOUT_MS}ms`),
+          504,
+          "pm2_timeout"
+        )
+      );
     }, PM2_OPERATION_TIMEOUT_MS);
     if (typeof operationTimeout.unref === "function") {
       operationTimeout.unref();
@@ -53,7 +56,7 @@ function runPM2(action) {
 
     pm2.connect((connectError) => {
       if (connectError) {
-        finish({ success: false, data: null, error: withPermissionHint(connectError.message) });
+        finish(unavailable(withPermissionHint(connectError.message), "pm2_unavailable"));
         return;
       }
 
@@ -61,15 +64,13 @@ function runPM2(action) {
       Promise.resolve()
         .then(action)
         .then((data) => {
-          finish({ success: true, data, error: null });
+          finish(success(data));
         })
         .catch((error) => {
-          const raw = error?.message || "Unknown PM2 error";
-          finish({
-            success: false,
-            data: null,
-            error: withPermissionHint(raw)
-          });
+          // failureFrom keeps the status of a thrown ValidationError/ServiceError, so an
+          // action that rejects bad input reports 400 instead of 500.
+          const failed = failureFrom(error, 500, "Unknown PM2 error");
+          finish({ ...failed, error: withPermissionHint(failed.error) });
         });
     });
   });
@@ -77,19 +78,21 @@ function runPM2(action) {
 
 function enqueuePM2Operation(action) {
   if (queuedOperations >= PM2_OPERATION_QUEUE_MAX) {
-    return Promise.resolve({
-      success: false,
-      data: null,
-      error: "PM2 is busy. Please retry after the current operations finish."
-    });
+    return Promise.resolve(
+      unavailable("PM2 is busy. Please retry after the current operations finish.", "pm2_busy")
+    );
   }
 
   queuedOperations += 1;
   const run = () => runPM2(action);
   const queued = operationChain.then(run, run);
-  operationChain = queued.catch(() => null).finally(() => {
+  const settleQueue = () => {
     queuedOperations = Math.max(0, queuedOperations - 1);
-  });
+  };
+  // Settle both paths with then(settleQueue, settleQueue) instead of catch().finally():
+  // the counter still decrements after a rejection, and the stored chain stays
+  // Promise<void> rather than widening to Promise<unknown>.
+  operationChain = queued.then(settleQueue, settleQueue);
   return queued;
 }
 
