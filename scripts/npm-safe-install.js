@@ -3,9 +3,25 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const {
+  ensureBuildTools,
+  findNativeDependencies,
+  readPackageJson,
+  isNativeBuildError,
+  formatNativeBuildFailure
+} = require("./build-tools.js");
 
 const appDir = path.resolve(__dirname, "..");
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+const NATIVE_DEPENDENCY_HINT = "build-essential python3";
+
+class InstallError extends Error {
+  constructor(message, options = {}) {
+    super(message);
+    this.name = "InstallError";
+    this.kind = options.kind || "install";
+  }
+}
 
 const TARGETS = {
   root: appDir,
@@ -27,18 +43,30 @@ function parseArgs(argv) {
 }
 
 function run(args, cwd) {
-  const result = spawnSync(npmCommand, args, {
+  const options = {
     cwd,
     env: process.env,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
     maxBuffer: 1024 * 1024 * 12
-  });
+  };
+
+  // npm on Windows is npm.cmd, and Node refuses to spawn .cmd shims directly
+  // (spawn EINVAL, with no output captured). Going through cmd.exe keeps the
+  // failure visible, which is what the native-build detection relies on.
+  const result = process.platform === "win32"
+    ? spawnSync("cmd.exe", ["/d", "/s", "/c", [npmCommand, ...args].join(" ")], options)
+    : spawnSync(npmCommand, args, options);
+
+  const output = `${result.stdout || ""}${result.stderr || ""}`;
+  if (result.error) {
+    return { ok: false, status: result.status ?? 1, output: `${output}\n${result.error.message}` };
+  }
 
   return {
     ok: result.status === 0,
     status: result.status ?? 1,
-    output: `${result.stdout || ""}${result.stderr || ""}`
+    output
   };
 }
 
@@ -48,6 +76,11 @@ function printTail(output, maxLines = 24) {
   for (const line of tail) {
     console.log(line);
   }
+}
+
+function tailText(output, maxLines = 12) {
+  const lines = String(output || "").trim().split(/\r?\n/).filter(Boolean);
+  return lines.slice(-maxLines).join("\n");
 }
 
 function isNpmTreeError(output) {
@@ -71,6 +104,36 @@ function hasPackageJson(dir) {
   return fs.existsSync(path.join(dir, "package.json"));
 }
 
+// Native modules such as node-pty compile through node-gyp, so npm needs
+// make/g++/python3 before it can even resolve the tree. Check that first and
+// install the packages ourselves when we are allowed to; otherwise fail with a
+// single paste-ready command instead of a wall of gyp output.
+function prepareNativeBuildTools(name, dir, options = {}) {
+  if (String(process.env.PM2_MANAGER_SKIP_BUILD_TOOLS || "") === "1") {
+    return null;
+  }
+
+  let result;
+  try {
+    result = ensureBuildTools({
+      packageDir: dir,
+      allowInstall: options.autoInstallBuildTools !== false
+    });
+  } catch (error) {
+    throw new InstallError(
+      `[${name}] Unable to verify native build tools: ${error?.message || error}\n` +
+        `- Install ${NATIVE_DEPENDENCY_HINT} manually, then re-run: npm run setup`,
+      { kind: "build-tools" }
+    );
+  }
+
+  if (result && result.ok === false) {
+    throw new InstallError(`[${name}] ${result.error}`, { kind: "build-tools" });
+  }
+
+  return result;
+}
+
 function cleanInstallArtifacts(dir, { removeLock = false } = {}) {
   removePath(path.join(dir, "node_modules"));
   if (removeLock) {
@@ -89,6 +152,15 @@ function installTarget(name, options = {}) {
     return;
   }
 
+  const buildTools = prepareNativeBuildTools(name, dir, options);
+  // The preflight may have been skipped; fall back to reading package.json so the
+  // failure message still names the native dependency that failed to compile.
+  const nativeDependencies = (buildTools?.nativeDependencies || []).length
+    ? buildTools.nativeDependencies
+    : findNativeDependencies(readPackageJson(dir));
+
+  // Clean only after the toolchain check, so a missing-toolchain failure never
+  // leaves the directory without its existing node_modules.
   if (options.clean) {
     console.log(`[${name}] cleaning node_modules before install...`);
     cleanInstallArtifacts(dir);
@@ -119,6 +191,20 @@ function installTarget(name, options = {}) {
 
     lastOutput = result.output;
     console.log(`[${name}] ${attempt.label} failed.`);
+
+    if (isNativeBuildError(result.output)) {
+      throw new InstallError(
+        formatNativeBuildFailure({
+          name,
+          packageDir: dir,
+          nativeDependencies,
+          plan: buildTools?.plan,
+          output: result.output
+        }),
+        { kind: "native-build" }
+      );
+    }
+
     printTail(result.output);
 
     if (isNpmTreeError(result.output)) {
@@ -141,7 +227,32 @@ function installTarget(name, options = {}) {
     printTail(recovery.output);
   }
 
-  throw new Error(`[${name}] npm dependency install failed. Last npm output:\n${String(lastOutput).trim()}`);
+  if (isNativeBuildError(lastOutput)) {
+    throw new InstallError(
+      formatNativeBuildFailure({
+        name,
+        packageDir: dir,
+        nativeDependencies,
+        plan: buildTools?.plan,
+        output: lastOutput
+      }),
+      { kind: "native-build" }
+    );
+  }
+
+  // Keep the failure readable: npm verbose logs are available on demand.
+  const tail = tailText(lastOutput) || "(npm produced no output; see the full log below)";
+  throw new InstallError(
+    [
+      `[${name}] npm dependency install failed.`,
+      "",
+      "Last npm output:",
+      tail,
+      "",
+      `Full log: npm ci --prefix "${dir}" --loglevel=verbose`
+    ].join("\n"),
+    { kind: "install" }
+  );
 }
 
 function resolveTargets(rawTargets, includeRoot) {
@@ -186,7 +297,10 @@ if (require.main === module) {
 }
 
 module.exports = {
+  InstallError,
   isNpmTreeError,
+  prepareNativeBuildTools,
+  tailText,
   resolveTargets,
   installTarget
 };

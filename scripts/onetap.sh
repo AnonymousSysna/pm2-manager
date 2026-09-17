@@ -106,6 +106,14 @@ else
   cd "$APP_DIR"
 fi
 
+# Native dependencies (node-pty) compile through node-gyp, so make, a C/C++
+# compiler and python3 must exist before npm runs. Install them automatically
+# when we are privileged; otherwise stop with a paste-ready command instead of
+# an npm gyp stack trace.
+if [ "${PM2_MANAGER_SKIP_BUILD_TOOLS:-0}" != "1" ]; then
+  node "$APP_DIR/scripts/build-tools.js" --ensure --dir "$APP_DIR/server"
+fi
+
 # When launched as `curl ... | bash`, stdin belongs to the downloaded script,
 # not the user's terminal. Reopen /dev/tty so the Node installer can safely ask
 # for the public HTTPS domain during interactive installs.

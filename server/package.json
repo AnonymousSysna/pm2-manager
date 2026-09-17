@@ -4,6 +4,7 @@
   "main": "index.ts",
   "type": "commonjs",
   "scripts": {
+    "preinstall": "node ../scripts/build-tools.js --check --quiet --dir .",
     "dev": "tsx watch index.ts",
     "start": "tsx index.ts",
     "test": "tsx --test tests/**/*.test.ts",

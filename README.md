@@ -50,6 +50,18 @@ If you already have the app installed and only want to update it, jump to `Updat
 - Node.js 18+ (`20+` recommended)
 - npm
 - git
+- A C/C++ toolchain and Python 3 (needed to compile `node-pty`, the JCode terminal runtime)
+
+On Ubuntu/Debian:
+
+```bash
+sudo apt-get update && sudo apt-get install -y build-essential python3
+```
+
+The installer checks for these tools before running `npm install`, installs them
+automatically when it has root or passwordless `sudo`, and otherwise stops with
+that one command instead of an npm/gyp stack trace. Check your machine at any
+time with `npm run doctor:build-tools`.
 
 Caddy is optional. The app should work without it.
 
@@ -303,6 +315,7 @@ Supported overrides:
 - `PM2_MANAGER_SETUP_SSL=true|false` or `--setup-ssl` / `--no-setup-ssl`
 - `PM2_MANAGER_INSTALL_CADDY=true|false` or `--install-caddy` / `--no-install-caddy`
 - `PM2_MANAGER_UPSTREAM=<host:port>` or `--upstream <host:port>`
+- `PM2_MANAGER_SKIP_BUILD_TOOLS=1` to skip the native build-tool preflight (the install then fails the way npm normally does)
 
 If you are already inside this repo:
 
@@ -430,6 +443,20 @@ npm run deploy
 - A healthy unauthenticated hit to `/api/v1/caddy/status` should return `401`, not a rendered page
 
 ## Troubleshooting
+
+### `npm install` fails with `gyp ERR! stack Error: not found: make`
+
+A native dependency (`node-pty`) has to compile, and the server is missing the
+compiler toolchain. Install it and re-run the installer:
+
+```bash
+sudo apt-get update && sudo apt-get install -y build-essential python3
+npm run setup
+```
+
+Check the machine first with `npm run doctor:build-tools`. Optional `esbuild`
+platform warnings and npm audit notices are unrelated to this failure; the real
+error is always the missing `make`/`g++`/`python3`.
 
 ### I pulled the latest code but nothing changed
 

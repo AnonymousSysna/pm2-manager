@@ -433,7 +433,12 @@ function runCommand(command, args, options = {}) {
   } = options;
 
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    // npm on Windows is a .cmd shim, and Node refuses to spawn .cmd/.bat
+    // scripts directly (spawn EINVAL). Route those through cmd.exe instead.
+    const isWindowsShim = process.platform === "win32" && /\.(cmd|bat)$/i.test(command);
+    const spawnCommand = isWindowsShim ? "cmd.exe" : command;
+    const spawnArgs = isWindowsShim ? ["/d", "/s", "/c", [command, ...args].join(" ")] : args;
+    const child = spawn(spawnCommand, spawnArgs, {
       cwd,
       env,
       stdio: quiet ? ["ignore", "pipe", "pipe"] : "inherit"
@@ -683,6 +688,27 @@ function ensureDirExists(targetPath) {
   fs.mkdirSync(targetPath, { recursive: true });
 }
 
+// node-pty (and any other native dependency) compiles through node-gyp, which
+// needs make/g++/python3. Install them when we are privileged, and otherwise
+// stop with one copy-paste command instead of an npm gyp stack trace.
+function ensureNativeBuildTools(appDir) {
+  if (String(process.env.PM2_MANAGER_SKIP_BUILD_TOOLS || "") === "1") {
+    return null;
+  }
+
+  const { ensureBuildTools } = require("./build-tools.js");
+  const result = ensureBuildTools({
+    packageDir: path.join(appDir, "server"),
+    logger: console
+  });
+
+  if (!result.ok) {
+    throw new Error(result.error);
+  }
+
+  return result;
+}
+
 function prepareEnvFile(appDir, options) {
   const envPath = path.join(appDir, ".env");
   const envExamplePath = path.join(appDir, ".env.example");
@@ -777,11 +803,25 @@ async function installDependencies(appDir) {
   console.log("Root npm install is skipped for one-tap production setup to avoid npm workspace tree corruption.");
   console.log("Use `npm run setup:dev` later if you need root dev-only tools.");
 
+  ensureNativeBuildTools(appDir);
+
   console.log("[2/6] Installing backend dependencies, including local PM2...");
-  await runCommand(process.execPath, [path.join(appDir, NPM_SAFE_INSTALL_SCRIPT), "server"], { cwd: appDir });
+  const serverInstall = await runCommand(process.execPath, [path.join(appDir, NPM_SAFE_INSTALL_SCRIPT), "server"], {
+    cwd: appDir,
+    allowNonZero: true
+  });
+  if (serverInstall.code !== 0) {
+    throw new Error("Backend dependency install failed. Fix the problem reported above, then re-run: npm run setup");
+  }
 
   console.log("[3/6] Installing frontend dependencies...");
-  await runCommand(process.execPath, [path.join(appDir, NPM_SAFE_INSTALL_SCRIPT), "client"], { cwd: appDir });
+  const clientInstall = await runCommand(process.execPath, [path.join(appDir, NPM_SAFE_INSTALL_SCRIPT), "client"], {
+    cwd: appDir,
+    allowNonZero: true
+  });
+  if (clientInstall.code !== 0) {
+    throw new Error("Frontend dependency install failed. Fix the problem reported above, then re-run: npm run setup");
+  }
 }
 
 async function buildClient(appDir) {
@@ -1173,14 +1213,22 @@ async function main() {
 
 if (require.main === module) {
   main().catch((error) => {
+    const message = String(error?.message || error);
     console.error("");
     console.error("Install failed");
-    console.error(error?.message || error);
+    console.error(message);
+    if (/native build tools|build-essential|gyp/i.test(message)) {
+      console.error("");
+      console.error("Native dependencies need a C/C++ toolchain. On Ubuntu/Debian run:");
+      console.error("  sudo apt-get update && sudo apt-get install -y build-essential python3");
+      console.error("Then re-run: npm run setup");
+    }
     console.error("");
     console.error("Recovery commands");
     console.error("- Check PM2: npm run pm2:status");
     console.error("- Read logs: npm run pm2:logs -- --lines 120");
     console.error("- Restart after fixing env: npm run pm2:restart");
+    console.error("- Reinstall dependencies: npm run setup");
     process.exitCode = 1;
   });
 }
@@ -1204,6 +1252,7 @@ module.exports = {
   needsStrongSecretGeneratedValue,
   createPasswordHash,
   installDependencies,
+  ensureNativeBuildTools,
   buildClient,
   ensureBaseInstall,
   requestHttpReady,
