@@ -127,6 +127,23 @@ because everything in those files ships to the browser.
 - Module boundaries that are crossed with `require()` are typed structurally at
   the use site, because `require` itself gives no type information.
 
+## Live data layer
+
+- The live process list is served by `client/src/sync/DataSyncService`, which
+  owns the state, the poll fallback, and the reconnect flags. The transport is
+  injected, so changing how updates arrive does not touch the UI:
+  - `sync/socketTransport.ts` is the socket.io adapter (the only file that
+    knows event names).
+  - `sync/processStore.ts` holds the pure merge and buffer-cap rules.
+  - `hooks/useSocket.ts` is the React binding and nothing else.
+- Server payloads are treated as untrusted JSON. A malformed snapshot, delta,
+  or log line is dropped rather than blanking the list or the log view.
+- Buffers are capped (1000 log lines per process, 200 alerts, 400
+  notifications, 200 create steps) so a long-lived tab cannot grow without
+  bound.
+- The fallback poll runs at 3x the configured push interval, clamped to 5-15s,
+  and is a safety net only; the socket remains the primary source.
+
 ## Recommended
 
 - Put the dashboard behind HTTPS.
