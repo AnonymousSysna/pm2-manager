@@ -722,6 +722,139 @@ export default function Dashboard() {
     }
   };
 
+
+
+  const openDotEnvModal = async (proc) => {
+    if (!proc?.name) {
+      toast.error("Process is missing");
+      return;
+    }
+
+    if (!dotEnvByProcess[proc.name]) {
+      toast.error(`No .env file found in ${proc.name} directory`);
+      return;
+    }
+
+    setEditingDotEnvProcess(proc);
+    setDotEnvLoading(true);
+    setDotEnvFields([]);
+    setDotEnvOriginalValues({});
+    setDotEnvRevealValues(false);
+    setDotEnvDiffEntries([]);
+    setDotEnvDiffOpen(false);
+    setDotEnvValidationError("");
+
+    try {
+      const result = await processApi.getDotEnv(proc.name);
+      if (!result.success) {
+        throw new Error(result.error || "Unable to load .env file");
+      }
+      if (!result.data?.hasEnvFile) {
+        throw new Error(".env file is missing for this process");
+      }
+
+      const entries = Array.isArray(result.data?.entries) ? result.data.entries : [];
+      const invalidLines = Array.isArray(result.data?.invalidLines) ? result.data.invalidLines : [];
+      if (invalidLines.length > 0) {
+        const lineList = invalidLines.slice(0, 5).map((item) => item.line).join(", ");
+        setDotEnvValidationError(`Invalid .env syntax detected on line(s): ${lineList}`);
+      }
+
+      const originalByKey = {};
+      entries.forEach((item) => {
+        originalByKey[item.key] = String(item.value ?? "");
+      });
+
+      setDotEnvOriginalValues(originalByKey);
+      setDotEnvFields(
+        entries.map((item) => ({
+          key: item.key,
+          value: String(item.value ?? ""),
+          valueType: item.valueType || "string",
+          sensitive: isSensitiveEnvKey(item.key)
+        }))
+      );
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Failed to load .env file"));
+      setEditingDotEnvProcess(null);
+    } finally {
+      setDotEnvLoading(false);
+    }
+  };
+
+  const submitDotEnvModal = async () => {
+    if (!editingDotEnvProcess?.name) {
+      return;
+    }
+
+    if (dotEnvValidationError) {
+      toast.error(dotEnvValidationError);
+      return;
+    }
+
+    const diffEntries = dotEnvFields
+      .map((item) => {
+        const before = String(dotEnvOriginalValues[item.key] ?? "");
+        const after = String(item.value ?? "");
+        if (before === after) {
+          return null;
+        }
+        return {
+          key: item.key,
+          before,
+          after,
+          sensitive: Boolean(item.sensitive)
+        };
+      })
+      .filter(Boolean);
+
+    if (diffEntries.length === 0) {
+      toast.info("No .env changes to save");
+      return;
+    }
+
+    setDotEnvDiffEntries(diffEntries);
+    setDotEnvDiffOpen(true);
+  };
+
+  const confirmDotEnvSave = async () => {
+    if (!editingDotEnvProcess?.name) {
+      return;
+    }
+
+    try {
+      setDotEnvSaving(true);
+      const values = {};
+      dotEnvFields.forEach((item) => {
+        values[item.key] = String(item.value ?? "");
+      });
+
+      await toast.promise(
+        processApi.updateDotEnv(editingDotEnvProcess.name, values).then((response) => {
+          if (!response.success) {
+            throw new Error(response.error || "Unable to update .env file");
+          }
+          return response;
+        }),
+        {
+          loading: `Updating .env for ${editingDotEnvProcess.name}...`,
+          success: `.env updated for ${editingDotEnvProcess.name}`,
+          error: (error) => getErrorMessage(error, "Failed to update .env file")
+        }
+      );
+
+      setDotEnvDiffOpen(false);
+      setEditingDotEnvProcess(null);
+      setDotEnvFields([]);
+      setDotEnvOriginalValues({});
+      refreshCatalog();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Failed to update .env file"));
+    } finally {
+      setDotEnvSaving(false);
+    }
+  };
+
   const openMetaModal = (proc) => {
     const current = processMeta[proc.name] || {};
     const healthCheck = current.healthCheck || {};
