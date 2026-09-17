@@ -193,7 +193,7 @@ JCODE_USE_XDG_RUNTIME_DIR=1
 
 Coding-agent workflows now run through **JCode**. The dashboard no longer ships a separate assistant page or internal chat endpoint.
 
-Use `Extensions` to install JCode. After installation, open the `JCode` tab to start a live browser terminal session, control status, gateway start/stop, pairing, provider command building, and basic checks. PM2 Manager does not store provider API keys; JCode manages provider access through its own login, provider profiles, or environment variables. If a stale Unix socket exists but refuses connections, PM2 Manager removes that stale `jcode.sock`, starts a fresh JCode server, and then attaches the terminal.
+Use `Extensions` to install JCode. After installation, open the `JCode` tab to start a live browser terminal session, choose the startup command (`jcode`, `jcode login --provider ...`, auth test, or custom shell command), control gateway start/stop, pairing, provider command building, and basic checks. PM2 Manager does not store provider API keys; JCode manages provider access through its own login, provider profiles, or environment variables. The browser terminal sends raw keys and paste into a server PTY so login prompts and the JCode coding-agent flow behave like a real terminal. Custom non-`jcode` commands are allowed only when PM2 Manager runs as root or `JCODE_ALLOW_CUSTOM_TERMINAL=1` is set.
 
 ## Updating an Existing Install
 
@@ -626,9 +626,9 @@ Run `npm run setup` from the repository root after cloning. This installs client
 
 ### JCode extension terminal
 
-The JCode dashboard tab can now start an interactive JCode session inside the browser. Press **Start session** to start or reuse the local JCode server first, then attach with `jcode connect` through the existing authenticated Socket.IO terminal bridge. This avoids the first-run hang where a raw `jcode` client could stop at “Connecting to server...” under PM2/root when the runtime socket directory was missing. The JCode gateway controls remain available for pairing and thin clients, but the main workflow is now terminal-first.
+The JCode dashboard tab can now start an interactive JCode session inside the browser. Choose **JCode agent** for the normal coding-agent interface, or choose a login command such as `jcode login --provider openai-compatible` before pressing **Start session**. The terminal surface is focusable and sends raw keys, Enter, arrows, paste, Ctrl+C, and Ctrl+D through the authenticated Socket.IO terminal bridge into a server PTY. Custom shell commands are gated to root installs or `JCODE_ALLOW_CUSTOM_TERMINAL=1`.
 
 
 ### JCode terminal runtime note
 
-The JCode web terminal starts the real JCode client directly by default, with `JCODE_RUNTIME_DIR` and `XDG_RUNTIME_DIR` pointed at PM2 Manager's owned runtime folder. The older server-first attach path is still available internally, but failures now include captured `jcode serve` output and the UI includes **Repair runtime** for stale sockets or locks.
+The JCode web terminal starts the selected command inside a PTY with `JCODE_RUNTIME_DIR` and `XDG_RUNTIME_DIR` pointed at PM2 Manager's owned runtime folder. The default command is `jcode`, so JCode can bootstrap its own daemon naturally. The older server-first attach path is still available internally, and the UI includes **Repair runtime** for stale sockets or locks.

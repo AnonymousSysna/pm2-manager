@@ -488,6 +488,35 @@ function sanitizeOutput(value) {
   return String(value || "").trim().slice(-4000);
 }
 
+
+function getJcodeOperatorInfo() {
+  let user = null;
+  let uid = null;
+  try {
+    const info = os.userInfo();
+    user = info?.username || null;
+    uid = Number.isInteger(info?.uid) ? info.uid : null;
+  } catch (_error) {
+    // Restricted containers can block os.userInfo().
+  }
+
+  const currentUid = getCurrentUid();
+  const normalizedUid = Number.isInteger(uid) ? uid : Number(currentUid);
+  const isRoot = normalizedUid === 0 || String(user || "").toLowerCase() === "root";
+  return {
+    user: user || process.env.USER || process.env.USERNAME || null,
+    uid: Number.isInteger(normalizedUid) ? normalizedUid : currentUid,
+    isRoot,
+    cwd: process.cwd(),
+    shell: process.env.SHELL || process.env.ComSpec || null,
+    customCommandsAllowed: isRoot || isTruthy(process.env.JCODE_ALLOW_CUSTOM_TERMINAL)
+  };
+}
+
+function isTruthy(value) {
+  return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
+}
+
 async function getJcodeStatus() {
   const platform = getPlatformName();
   const binaryPath = await resolveJcodeBinary();
@@ -536,6 +565,7 @@ async function getJcodeStatus() {
             ? "XDG_RUNTIME_DIR"
             : "pm2-manager-default"
       },
+      operator: getJcodeOperatorInfo(),
       lastAction: state.lastAction || null,
       lastOutput: state.lastOutput || ""
     },
@@ -1046,7 +1076,51 @@ function normalizeTerminalSize(value, fallback, min, max) {
 
 function normalizeTerminalMode(value) {
   const mode = String(value || "start").trim().toLowerCase();
-  return ["start", "connect", "resume"].includes(mode) ? mode : "start";
+  return ["start", "connect", "resume", "command"].includes(mode) ? mode : "start";
+}
+
+function normalizeTerminalCommand(value) {
+  const command = String(value || "").replace(/\r/g, "").trim();
+  if (!command) {
+    return "";
+  }
+  if (command.length > 2000) {
+    throw new Error("Terminal command is too long");
+  }
+  if (/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(command)) {
+    throw new Error("Terminal command contains unsupported control characters");
+  }
+  return command;
+}
+
+function isJcodeTerminalCommand(command) {
+  return /^jcode(?:\s|$)/.test(String(command || "").trim());
+}
+
+function allowCustomTerminalCommands() {
+  return getJcodeOperatorInfo().customCommandsAllowed;
+}
+
+function resolveShellExecutable() {
+  if (process.platform === "win32") {
+    return process.env.ComSpec || "cmd.exe";
+  }
+  return process.env.SHELL || "/bin/bash";
+}
+
+function buildShellSpawn(commandText) {
+  if (process.platform === "win32") {
+    return { command: resolveShellExecutable(), args: ["/d", "/s", "/c", commandText] };
+  }
+  return { command: resolveShellExecutable(), args: ["-lc", commandText] };
+}
+
+function resolveJcodeShellCommand(commandText, binaryPath) {
+  const normalized = String(commandText || "").trim();
+  if (!isJcodeTerminalCommand(normalized)) {
+    return normalized;
+  }
+  return normalized.replace(/^jcode\b/, shellQuote(binaryPath));
 }
 
 function resolveTerminalCwd(value) {
@@ -1076,6 +1150,16 @@ async function createJcodeTerminalProcess(payload = {}) {
 
   const mode = normalizeTerminalMode(payload.mode);
   const resumeName = String(payload.resume || "").trim();
+  let requestedCommand = "";
+  try {
+    requestedCommand = normalizeTerminalCommand(payload.command);
+  } catch (error) {
+    return {
+      success: false,
+      child: null,
+      error: error?.message || "Invalid terminal command"
+    };
+  }
 
   const cols = normalizeTerminalSize(payload.cols, 100, 40, 240);
   const rows = normalizeTerminalSize(payload.rows, 30, 12, 80);
@@ -1092,12 +1176,34 @@ async function createJcodeTerminalProcess(payload = {}) {
   const args = [];
   let prelude = "";
   let socketPath = process.platform === "win32" ? null : getJcodeSocketPath(env);
+  let commandText = "";
+  let label = "";
 
-  if (mode === "start") {
+  if (requestedCommand) {
+    const commandIsJcode = isJcodeTerminalCommand(requestedCommand);
+    if (!commandIsJcode && !allowCustomTerminalCommands()) {
+      return {
+        success: false,
+        child: null,
+        error: "Custom terminal commands are disabled unless PM2 Manager is running as root or JCODE_ALLOW_CUSTOM_TERMINAL=1 is set. Use a command that starts with jcode, or enable custom terminal commands deliberately."
+      };
+    }
+
+    commandText = resolveJcodeShellCommand(requestedCommand, binaryPath);
+    label = requestedCommand;
+    prelude = [
+      socketPath ? `Runtime socket: ${socketPath}` : null,
+      commandIsJcode
+        ? `Starting JCode command in ${cwd}: ${requestedCommand}`
+        : `Starting custom terminal command in ${cwd}: ${requestedCommand}`
+    ].filter(Boolean).join("\n");
+  } else if (mode === "start") {
     // Default web terminal behavior: launch the actual JCode client and let JCode
     // perform its native server bootstrap. This avoids blocking the UI when a
     // manual `jcode serve` cannot bind under PM2/root, while still forcing JCode
     // to use PM2 Manager's safe runtime directory through env.
+    commandText = shellQuote(binaryPath);
+    label = "jcode";
     prelude = socketPath
       ? `Starting JCode directly with runtime socket ${socketPath}. If JCode needs its daemon, it will start it itself.`
       : "Starting JCode directly.";
@@ -1110,6 +1216,8 @@ async function createJcodeTerminalProcess(payload = {}) {
         args.push("--socket", socketPath);
       }
       args.push("connect");
+      commandText = [binaryPath, ...args].map(shellQuote).join(" ");
+      label = `jcode ${args.join(" ")}`;
     } else {
       // Do not kill the whole browser terminal just because the pre-started
       // server did not become ready. Fall back to the real JCode client so the
@@ -1121,8 +1229,11 @@ async function createJcodeTerminalProcess(payload = {}) {
           ? `Falling back to direct JCode launch with runtime socket ${socketPath}.`
           : "Falling back to direct JCode launch."
       ].filter(Boolean).join("\n");
+      commandText = shellQuote(binaryPath);
+      label = "jcode";
     }
   } else if (mode === "resume" && resumeName) {
+    const safeResumeName = resumeName.slice(0, 80);
     const server = await ensureJcodeServer(binaryPath, cwd, env);
     if (server.success) {
       prelude = server.message || "";
@@ -1130,31 +1241,45 @@ async function createJcodeTerminalProcess(payload = {}) {
       if (socketPath) {
         args.push("--socket", socketPath);
       }
-      args.push("--resume", resumeName.slice(0, 80));
+      args.push("--resume", safeResumeName);
+      commandText = [binaryPath, ...args].map(shellQuote).join(" ");
+      label = `jcode --resume ${safeResumeName}`;
     } else {
       prelude = [
         server.message,
         server.error,
-        `Falling back to direct JCode resume for ${resumeName.slice(0, 80)}.`
+        `Falling back to direct JCode resume for ${safeResumeName}.`
       ].filter(Boolean).join("\n");
-      args.push("--resume", resumeName.slice(0, 80));
+      commandText = `${shellQuote(binaryPath)} --resume ${shellQuote(safeResumeName)}`;
+      label = `jcode --resume ${safeResumeName}`;
     }
+  } else {
+    commandText = shellQuote(binaryPath);
+    label = "jcode";
+    prelude = socketPath ? `Starting JCode directly with runtime socket ${socketPath}.` : "Starting JCode directly.";
   }
 
-  let command = binaryPath;
-  let spawnArgs = args;
+  let command;
+  let spawnArgs;
   let pty = false;
-  let label = [binaryPath, ...args].join(" ");
 
   // JCode is a terminal UI. On Linux, util-linux `script` gives it a real pseudo-terminal
-  // without adding a native node-pty dependency to PM2 Manager.
+  // without adding a native node-pty dependency to PM2 Manager. The browser sends raw
+  // keystrokes into this PTY, so commands such as `jcode login` and password/API-key
+  // prompts work like a normal terminal session.
   const scriptPath = process.platform === "linux" ? await commandPath("script") : null;
   if (scriptPath) {
     pty = true;
     command = scriptPath;
-    const terminalCommand = [binaryPath, ...args].map(shellQuote).join(" ");
-    spawnArgs = ["-qfec", terminalCommand, "/dev/null"];
-    label = terminalCommand;
+    spawnArgs = ["-qfec", commandText, "/dev/null"];
+  } else if (requestedCommand) {
+    const shell = buildShellSpawn(commandText);
+    command = shell.command;
+    spawnArgs = shell.args;
+  } else {
+    command = binaryPath;
+    spawnArgs = args;
+    label = ["jcode", ...args].join(" ").trim() || "jcode";
   }
 
   try {
@@ -1172,13 +1297,15 @@ async function createJcodeTerminalProcess(payload = {}) {
       meta: {
         pid: child.pid,
         pty,
-        command: label,
+        command: label || commandText || "jcode",
         cwd,
         rows,
         cols,
-        mode,
+        mode: requestedCommand ? "command" : mode,
         prelude,
-        socketPath
+        socketPath,
+        customCommand: Boolean(requestedCommand && !isJcodeTerminalCommand(requestedCommand)),
+        operator: getJcodeOperatorInfo()
       }
     };
   } catch (error) {

@@ -489,24 +489,35 @@
   }
 
   .jcode-terminal-shell {
-    @apply overflow-hidden rounded-2xl border border-border/80 bg-black/40 shadow-inner;
+    @apply overflow-hidden rounded-2xl border border-border/80 bg-black/40 shadow-inner transition;
+  }
+
+  .jcode-terminal-shell.is-focused {
+    @apply border-success-500/60 ring-2 ring-success-500/20;
   }
 
   .jcode-terminal-toolbar {
-    @apply flex items-center justify-between gap-3 border-b border-white/10 bg-black/30 px-3 py-2 font-mono text-[11px] uppercase tracking-wide text-text-3;
+    @apply flex flex-wrap items-center gap-2 border-b border-white/10 bg-black/30 px-3 py-2 font-mono text-[11px] uppercase tracking-wide text-text-3;
+  }
+
+  .jcode-terminal-toolbar span {
+    @apply min-w-0 max-w-full truncate rounded-md bg-white/5 px-2 py-1;
   }
 
   .jcode-terminal-screen {
-    @apply h-[460px] overflow-auto p-3 font-mono text-xs leading-5 text-success-300;
+    @apply h-[520px] w-full resize-y overflow-auto border-0 p-3 font-mono text-xs leading-5 text-success-300 outline-none;
     background: #05070a;
+    caret-color: #86efac;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
-  .jcode-terminal-screen pre {
-    @apply min-h-full whitespace-pre-wrap break-words;
+  .jcode-terminal-screen::placeholder {
+    @apply text-text-3;
   }
 
-  .jcode-terminal-empty {
-    @apply flex h-full items-center justify-center rounded-xl border border-dashed border-border/70 bg-white/5 text-sm text-text-3;
+  .jcode-session-grid {
+    @apply grid gap-2 lg:grid-cols-[minmax(180px,0.75fr)_minmax(0,1.25fr)];
   }
 
   .jcode-terminal-input-row {

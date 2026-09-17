@@ -24,6 +24,11 @@ function emitSessionStatus(socket, session = null) {
     command: session?.command || null,
     cwd: session?.cwd || null,
     socketPath: session?.socketPath || null,
+    rows: session?.rows || null,
+    cols: session?.cols || null,
+    mode: session?.mode || null,
+    customCommand: Boolean(session?.customCommand),
+    operator: session?.operator || null,
     startedAt: session?.startedAt || null
   });
 }
@@ -97,6 +102,11 @@ function registerJcodeTerminal(io) {
         command: meta.command || "jcode",
         cwd: meta.cwd || null,
         socketPath: meta.socketPath || null,
+        rows: meta.rows || rows,
+        cols: meta.cols || cols,
+        mode: meta.mode || null,
+        customCommand: Boolean(meta.customCommand),
+        operator: meta.operator || null,
         startedAt: Date.now()
       };
       sessions.set(socket.id, session);

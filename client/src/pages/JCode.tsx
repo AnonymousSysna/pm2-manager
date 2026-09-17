@@ -38,6 +38,66 @@ function socketBaseUrl() {
   return import.meta.env.VITE_API_URL || window.location.origin;
 }
 
+const sessionCommandOptions = {
+  jcode: "jcode",
+  "login-openai-compatible": "jcode login --provider openai-compatible",
+  "login-openai": "jcode login --provider openai",
+  "login-claude": "jcode login --provider claude",
+  "auth-test": "jcode auth-test",
+  custom: ""
+};
+
+function terminalKeySequence(event) {
+  if (event.metaKey) {
+    return null;
+  }
+
+  if (event.ctrlKey && !event.altKey) {
+    const key = String(event.key || "").toLowerCase();
+    if (key === "v") {
+      return null;
+    }
+    if (key.length === 1 && key >= "a" && key <= "z") {
+      return String.fromCharCode(key.charCodeAt(0) - 96);
+    }
+    if (key === "[") return "\u001b";
+    if (key === "\\") return "\u001c";
+    if (key === "]") return "\u001d";
+    if (key === "^") return "\u001e";
+    if (key === "_") return "\u001f";
+  }
+
+  const specialKeys = {
+    Enter: "\r",
+    Backspace: "\u007f",
+    Tab: event.shiftKey ? "\u001b[Z" : "\t",
+    Escape: "\u001b",
+    ArrowUp: "\u001b[A",
+    ArrowDown: "\u001b[B",
+    ArrowRight: "\u001b[C",
+    ArrowLeft: "\u001b[D",
+    Home: "\u001b[H",
+    End: "\u001b[F",
+    Delete: "\u001b[3~",
+    PageUp: "\u001b[5~",
+    PageDown: "\u001b[6~"
+  };
+
+  if (Object.prototype.hasOwnProperty.call(specialKeys, event.key)) {
+    return specialKeys[event.key];
+  }
+
+  if (!event.ctrlKey && !event.altKey && event.key?.length === 1) {
+    return event.key;
+  }
+
+  if (event.altKey && !event.ctrlKey && event.key?.length === 1) {
+    return `\u001b${event.key}`;
+  }
+
+  return null;
+}
+
 function cleanTerminalChunk(value) {
   return String(value || "")
     .replace(/\x1B\][^\x07]*(?:\x07|\x1B\\)/g, "")
@@ -74,6 +134,10 @@ export default function JCode() {
   const [terminalMeta, setTerminalMeta] = useState(null);
   const [terminalOutput, setTerminalOutput] = useState("");
   const [terminalInput, setTerminalInput] = useState("");
+  const [sessionCommandPreset, setSessionCommandPreset] = useState("jcode");
+  const [customSessionCommand, setCustomSessionCommand] = useState("jcode");
+  const [sessionCwd, setSessionCwd] = useState("");
+  const [terminalFocused, setTerminalFocused] = useState(false);
   const socketRef = useRef(null);
   const terminalRef = useRef(null);
 
@@ -81,6 +145,14 @@ export default function JCode() {
   const gatewayRunning = Boolean(status?.gateway?.running);
   const terminalRunning = terminalState === "running";
   const terminalConnecting = terminalState === "connecting";
+  const operator = status?.operator || terminalMeta?.operator || null;
+  const customTerminalAllowed = Boolean(operator?.customCommandsAllowed);
+  const terminalCommand = useMemo(() => {
+    if (sessionCommandPreset === "custom") {
+      return customSessionCommand.trim() || "bash";
+    }
+    return sessionCommandOptions[sessionCommandPreset] || "jcode";
+  }, [customSessionCommand, sessionCommandPreset]);
 
   const jcodeProfileCommand = useMemo(() => {
     if (jcodeProvider !== "openai-compatible") {
@@ -128,6 +200,7 @@ export default function JCode() {
       if (nextStatus?.gateway?.port) {
         setGatewayPort(String(nextStatus.gateway.port));
       }
+      setSessionCwd((current) => current || nextStatus?.operator?.cwd || "");
     } catch (error) {
       toast.error(getErrorMessage(error, "Unable to load JCode status"));
     } finally {
@@ -175,16 +248,37 @@ export default function JCode() {
     }
   };
 
+  const estimateTerminalSize = () => {
+    const element = terminalRef.current;
+    if (!element) {
+      return { rows: 32, cols: 110 };
+    }
+    const cols = Math.max(60, Math.min(180, Math.floor(element.clientWidth / 8.5)));
+    const rows = Math.max(16, Math.min(60, Math.floor(element.clientHeight / 18)));
+    return { rows, cols };
+  };
+
+  const focusTerminal = () => {
+    window.requestAnimationFrame(() => {
+      terminalRef.current?.focus?.();
+    });
+  };
+
   const startTerminalSession = () => {
     if (!installed) {
       toast.error("Install JCode first");
       return;
     }
+    if (sessionCommandPreset === "custom" && !customTerminalAllowed) {
+      toast.error("Custom commands need PM2 Manager running as root or JCODE_ALLOW_CUSTOM_TERMINAL=1");
+      return;
+    }
     if (socketRef.current) {
-      socketRef.current.emit("jcode:terminal:start", { rows: 30, cols: 110, mode: "start" });
+      focusTerminal();
       return;
     }
 
+    const terminalSize = estimateTerminalSize();
     setTerminalOutput("");
     setTerminalMeta(null);
     setTerminalState("connecting");
@@ -196,7 +290,13 @@ export default function JCode() {
 
     socket.on("connect", () => {
       setTerminalState("connecting");
-      socket.emit("jcode:terminal:start", { rows: 30, cols: 110, mode: "start" });
+      socket.emit("jcode:terminal:start", {
+        ...terminalSize,
+        mode: "command",
+        command: terminalCommand,
+        cwd: sessionCwd.trim() || undefined
+      });
+      focusTerminal();
     });
 
     socket.on("connect_error", (error) => {
@@ -218,6 +318,9 @@ export default function JCode() {
     socket.on("jcode:terminal:status", (payload) => {
       setTerminalMeta(payload || null);
       setTerminalState(payload?.running ? "running" : "idle");
+      if (payload?.running) {
+        focusTerminal();
+      }
     });
 
     socket.on("jcode:terminal:output", (payload) => {
@@ -267,9 +370,35 @@ export default function JCode() {
     if (!terminalInput.trim()) {
       return;
     }
-    sendTerminalRaw(`${terminalInput}\n`);
+    sendTerminalRaw(`${terminalInput}\r`);
     setTerminalInput("");
+    focusTerminal();
   };
+
+  const handleTerminalKeyDown = (event) => {
+    if (!terminalRunning) {
+      return;
+    }
+    const sequence = terminalKeySequence(event);
+    if (!sequence) {
+      return;
+    }
+    event.preventDefault();
+    sendTerminalRaw(sequence);
+  };
+
+  const handleTerminalPaste = (event) => {
+    if (!terminalRunning) {
+      return;
+    }
+    const text = event.clipboardData?.getData("text") || "";
+    if (!text) {
+      return;
+    }
+    event.preventDefault();
+    sendTerminalRaw(text.replace(/\r?\n/g, "\r"));
+  };
+
 
   const startGateway = async () => {
     try {
@@ -359,32 +488,58 @@ export default function JCode() {
               <Code2 size={22} />
             </div>
             <div className="min-w-0">
-              <SubsectionTitle>Start a real JCode session inside the dashboard</SubsectionTitle>
+              <SubsectionTitle>JCode coding agent terminal</SubsectionTitle>
               <SupportingCopy>
-                Press Start session to launch the JCode server, then attach the terminal client here. Nothing starts until you press the button.
+                Start a session, click the black terminal, then type normally. It sends raw keys, paste, arrows, Enter, Ctrl+C, and Ctrl+D into the server PTY.
               </SupportingCopy>
               <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
                 <Badge tone={installed ? "success" : "warning"}>{installed ? status?.version || "Installed" : "Needs install"}</Badge>
                 <Badge tone={terminalRunning ? "success" : terminalConnecting ? "warning" : "neutral"}>{terminalRunning ? "Session live" : terminalConnecting ? "Connecting" : "No session"}</Badge>
                 {terminalMeta?.pty ? <Badge tone="success">PTY</Badge> : null}
+                {operator?.isRoot ? <Badge tone="warning">Running as root</Badge> : null}
+                {customTerminalAllowed ? <Badge tone="neutral">Custom commands</Badge> : null}
               </div>
             </div>
           </InsetPanel>
 
-          <InsetPanel padding="sm" className="space-y-2">
+          <InsetPanel padding="sm" className="space-y-3">
             <div className="flex items-center gap-2">
               <ShieldCheck className="text-success-400" size={18} />
-              <SubsectionTitle className="text-sm">Install first, then start a session</SubsectionTitle>
+              <SubsectionTitle className="text-sm">Choose what the terminal starts</SubsectionTitle>
             </div>
+            <div className="jcode-session-grid">
+              <label className="jcode-compact-field">
+                <span>Start command</span>
+                <Select value={sessionCommandPreset} onChange={(event) => setSessionCommandPreset(event.target.value)} disabled={terminalRunning || terminalConnecting}>
+                  <option value="jcode">JCode agent</option>
+                  <option value="login-openai-compatible">Login: OpenAI compatible</option>
+                  <option value="login-openai">Login: OpenAI / ChatGPT</option>
+                  <option value="login-claude">Login: Anthropic Claude</option>
+                  <option value="auth-test">Auth test</option>
+                  <option value="custom">Custom command</option>
+                </Select>
+              </label>
+              <label className="jcode-compact-field">
+                <span>Working folder</span>
+                <Input value={sessionCwd} onChange={(event) => setSessionCwd(event.target.value)} placeholder={operator?.cwd || "/root/pm2-manager"} disabled={terminalRunning || terminalConnecting} />
+              </label>
+            </div>
+            {sessionCommandPreset === "custom" ? (
+              <label className="jcode-compact-field">
+                <span>Custom command</span>
+                <Input value={customSessionCommand} onChange={(event) => setCustomSessionCommand(event.target.value)} placeholder="bash, jcode login --provider openai-compatible, npm run build" disabled={terminalRunning || terminalConnecting} />
+              </label>
+            ) : null}
             <p className="text-xs leading-5 text-text-3">
-              Install runs only after confirmation. Start session opens the real JCode client in the terminal below. JCode can start its own server if needed.
+              Command: <code>{terminalCommand}</code>
+              {sessionCommandPreset === "custom" && !customTerminalAllowed ? " · custom commands unlock only when PM2 Manager runs as root or JCODE_ALLOW_CUSTOM_TERMINAL=1." : ""}
             </p>
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant={installed ? "secondary" : "primary"} size="sm" disabled={loading || installing || installed} onClick={installJcode}>
                 <Power size={14} />
                 {installed ? "Installed" : installing ? "Installing..." : "Install JCode"}
               </Button>
-              <Button type="button" variant="primary" size="sm" disabled={!installed || terminalConnecting || terminalRunning} onClick={startTerminalSession}>
+              <Button type="button" variant="primary" size="sm" disabled={!installed || terminalConnecting || terminalRunning || (sessionCommandPreset === "custom" && !customTerminalAllowed)} onClick={startTerminalSession}>
                 <Play size={14} />
                 {terminalConnecting ? "Connecting..." : "Start session"}
               </Button>
@@ -396,25 +551,31 @@ export default function JCode() {
           </InsetPanel>
         </div>
 
-        <div className="jcode-terminal-shell mt-3">
+        <div className={`jcode-terminal-shell mt-3 ${terminalFocused ? "is-focused" : ""}`}>
           <div className="jcode-terminal-toolbar">
-            <span>{terminalMeta?.command || "jcode connect"}</span>
+            <span>{terminalMeta?.command || terminalCommand}</span>
+            <span>{terminalMeta?.cwd || sessionCwd || terminalState}</span>
             <span>{terminalMeta?.socketPath || (terminalMeta?.pid ? `PID ${terminalMeta.pid}` : terminalState)}</span>
           </div>
-          <div ref={terminalRef} className="jcode-terminal-screen" aria-live="polite">
-            {terminalOutput ? (
-              <pre>{terminalOutput}</pre>
-            ) : (
-              <div className="jcode-terminal-empty">
-                Click Start session to open JCode here.
-              </div>
-            )}
-          </div>
+          <textarea
+            ref={terminalRef}
+            className="jcode-terminal-screen"
+            value={terminalOutput}
+            onKeyDown={handleTerminalKeyDown}
+            onPaste={handleTerminalPaste}
+            onFocus={() => setTerminalFocused(true)}
+            onBlur={() => setTerminalFocused(false)}
+            onClick={focusTerminal}
+            readOnly
+            spellCheck={false}
+            aria-label="JCode interactive terminal"
+            placeholder={terminalRunning ? "Type here. Paste works. Enter sends to JCode." : "Click Start session to open JCode here."}
+          />
           <form className="jcode-terminal-input-row" onSubmit={sendTerminalInput}>
             <Input
               value={terminalInput}
               onChange={(event) => setTerminalInput(event.target.value)}
-              placeholder={terminalRunning ? "Type to JCode and press Enter" : "Start a session first"}
+              placeholder={terminalRunning ? "Optional quick-send command" : "Start a session first"}
               disabled={!terminalRunning}
             />
             <Button type="submit" variant="primary" size="sm" disabled={!terminalRunning || !terminalInput.trim()}>

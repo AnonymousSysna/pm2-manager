@@ -41,7 +41,7 @@ Use this before exposing PM2 Manager outside localhost.
 
 - Keep provider API keys out of PM2 Manager and configure them in JCode directly.
 - Use `jcode login` or `jcode provider add --api-key-env` instead of browser-stored secrets.
-- Use the JCode tab for install/status/gateway control, but keep high-risk coding decisions inside JCode sessions.
+- Use the JCode tab for install/status/gateway control and live JCode coding-agent sessions. The terminal sends raw browser keys into a server PTY; protect dashboard access like root shell access when PM2 Manager runs as root.
 
 ## Installer readiness
 
@@ -58,9 +58,9 @@ Use this before exposing PM2 Manager outside localhost.
 - Open the selected public port in the VPS firewall/security group.
 - Use a subdomain instead if you want standard HTTPS on port `443` without showing a port in the URL.
 
-- JCode browser terminal: install JCode first, then verify `/dashboard/jcode` starts/reuses the JCode server, attaches with `jcode connect`, accepts input, and stops cleanly on disconnect. The launcher should use PM2 Manager's writable `/tmp/pm2-manager-jcode-runtime-<uid>` runtime by default, remove stale sockets there, and avoid relying on `/run/user/<uid>` unless `JCODE_USE_XDG_RUNTIME_DIR=1` is explicitly set.
+- JCode browser terminal: install JCode first, then verify `/dashboard/jcode` starts the selected command (`jcode`, a login command, auth test, or allowed custom command), accepts direct typing, paste, arrows, Ctrl+C/Ctrl+D, and stops cleanly on disconnect. The launcher should use PM2 Manager's writable `/tmp/pm2-manager-jcode-runtime-<uid>` runtime by default, remove stale sockets there, and avoid relying on `/run/user/<uid>` unless `JCODE_USE_XDG_RUNTIME_DIR=1` is explicitly set.
 
 
 ### JCode terminal runtime note
 
-The JCode web terminal starts the real JCode client directly by default, with `JCODE_RUNTIME_DIR` and `XDG_RUNTIME_DIR` pointed at PM2 Manager's owned runtime folder. The older server-first attach path is still available internally, but failures now include captured `jcode serve` output and the UI includes **Repair runtime** for stale sockets or locks.
+The JCode web terminal starts the selected command inside a PTY with `JCODE_RUNTIME_DIR` and `XDG_RUNTIME_DIR` pointed at PM2 Manager's owned runtime folder. The default command is `jcode`, so JCode can bootstrap its own daemon naturally. Custom non-`jcode` commands are allowed only for root installs or when `JCODE_ALLOW_CUSTOM_TERMINAL=1` is deliberately set.
