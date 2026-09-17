@@ -776,52 +776,6 @@
   }
 }
 
-.git-pull-toast-body {
-  display: grid;
-  gap: 8px;
-  min-width: 260px;
-  max-width: 360px;
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.git-pull-toast-body p {
-  margin: 0;
-  color: rgb(var(--color-text-2));
-}
-
-.git-pull-toast-cwd {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  border-radius: 10px;
-  border: 1px solid rgb(var(--color-border) / 0.8);
-  background: rgb(var(--color-surface-2) / 0.78);
-  padding: 7px 9px;
-  color: rgb(var(--color-text-1));
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-}
-
-.git-pull-toast-files {
-  display: grid;
-  gap: 4px;
-  max-height: 112px;
-  overflow: auto;
-  border-radius: 10px;
-  border: 1px solid rgb(var(--color-warning-500) / 0.24);
-  background: rgb(var(--color-warning-500) / 0.12);
-  padding: 7px 9px;
-  color: rgb(var(--color-text-2));
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-}
-
-.git-pull-toast-files span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 @layer components {
   .process-main-card-topbar {
     @apply flex flex-col gap-2 border-b border-border/70 px-3 py-2.5 lg:flex-row lg:items-center lg:justify-between lg:px-4;

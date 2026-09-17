@@ -163,7 +163,7 @@ describe("Dashboard git pull from the process panel", () => {
     });
   });
 
-  it("asks for confirmation with the shared button styles when the tree is dirty", async () => {
+  it("asks for confirmation with design-system buttons when the tree is dirty", async () => {
     gitStatusMock.mockResolvedValue({
       success: true,
       data: {
@@ -183,12 +183,23 @@ describe("Dashboard git pull from the process panel", () => {
 
     const [title, options] = toastMock.warning.mock.calls[0];
     expect(title).toBe("Local changes in api");
+    expect(options.action).toBeUndefined();
     expect(toastMock.promise).not.toHaveBeenCalled();
     expect(gitPullMock).not.toHaveBeenCalled();
 
     render(options.description);
     const cancel = screen.getByRole("button", { name: "Cancel" });
-    expect(cancel).toHaveClass("rounded-xl");
-    expect(cancel.className).not.toMatch(/git-pull-toast-cancel/);
+    const accept = screen.getByRole("button", { name: "Accept pull" });
+    for (const button of [cancel, accept]) {
+      expect(button).toHaveClass("rounded-xl");
+      expect(button).not.toHaveClass("gooey-actionButton");
+      expect(button.className).not.toMatch(/git-pull-toast-cancel/);
+    }
+
+    await userEvent.click(accept);
+
+    await waitFor(() => {
+      expect(gitPullMock).toHaveBeenCalledWith("api", expect.objectContaining({ dirtyMode: "stash" }));
+    });
   });
 });

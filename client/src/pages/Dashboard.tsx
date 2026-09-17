@@ -15,6 +15,7 @@ import DependencyGraphPanel from "../components/dashboard/DependencyGraphPanel";
 import MetricsHistoryPanel from "../components/dashboard/MetricsHistoryPanel";
 import ThresholdAlertsPanel from "../components/dashboard/ThresholdAlertsPanel";
 import ProcessListPanel from "../components/dashboard/ProcessListPanel";
+import GitPullConfirmToastBody from "../components/dashboard/GitPullConfirmToastBody";
 import {
   DeployProcessModal,
   DotEnvDiffModal,
@@ -617,10 +618,6 @@ export default function Dashboard() {
   };
 
   const openGitPullConfirmation = (name, data = {}) => {
-    const dirtyFiles = Array.isArray(data.changedFiles) ? data.changedFiles : [];
-    const totalChanged = Number(data.totalChanged || dirtyFiles.length || 0);
-    const visibleFiles = dirtyFiles.slice(0, 5);
-    const hiddenCount = Math.max(0, totalChanged - visibleFiles.length);
     let toastId = null;
 
     const cancelPull = () => {
@@ -640,30 +637,7 @@ export default function Dashboard() {
     toastId = toast.warning(`Local changes in ${name}`, {
       duration: 60000,
       showProgress: true,
-      description: (
-        <div className="git-pull-toast-body">
-          <p>Stash local changes before pulling latest code.</p>
-          {data.cwd ? <span className="git-pull-toast-cwd">{data.cwd}</span> : null}
-          {visibleFiles.length > 0 ? (
-            <div className="git-pull-toast-files">
-              {visibleFiles.map((item, index) => (
-                <span key={`${item.path || item}-${index}`}>
-                  {item.status ? `${item.status} · ` : ""}{item.path || String(item)}
-                </span>
-              ))}
-              {hiddenCount > 0 ? <span>+{hiddenCount} more</span> : null}
-            </div>
-          ) : null}
-          <Button type="button" variant="secondary" size="sm" className="justify-self-start" onClick={cancelPull}>
-            Cancel
-          </Button>
-        </div>
-      ),
-      action: {
-        label: "Accept pull",
-        onClick: acceptPull,
-        successLabel: "Accepted"
-      }
+      description: <GitPullConfirmToastBody data={data} onCancel={cancelPull} onAccept={acceptPull} />
     });
   };
 
