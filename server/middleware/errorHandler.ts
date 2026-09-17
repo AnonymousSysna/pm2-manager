@@ -2,6 +2,9 @@ const { logger, serializeError } = require("../utils/logger");
 const { scrubUrl } = require("../utils/urlSafety");
 
 class AppError extends Error {
+  status: number;
+  expose: boolean;
+
   constructor(message, status = 500, expose = false) {
     super(message);
     this.name = "AppError";

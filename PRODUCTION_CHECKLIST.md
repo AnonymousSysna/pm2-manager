@@ -112,6 +112,21 @@ because everything in those files ships to the browser.
   assertion moves with it in the same change, so the suite keeps catching
   regressions instead of drifting out of date.
 
+## Type checking
+
+- `npm --prefix server run typecheck` is expected to be clean, and is the gate
+  for server changes. The client still carries a tracked backlog, so run its
+  typecheck on its own rather than through the root script: the root
+  `npm run typecheck` chains the two with `&&`, which means client errors stop
+  the run before the server is ever checked. New server errors are a
+  regression, not backlog.
+- Server helpers annotate what they return instead of leaving `new Promise(...)`
+  to infer `unknown`: PM2 process descriptions, command results, alert
+  channels, health checks, and process metadata each have a named interface.
+  That is what makes a typo such as `proc.pm2_env.portt` fail the build.
+- Module boundaries that are crossed with `require()` are typed structurally at
+  the use site, because `require` itself gives no type information.
+
 ## Recommended
 
 - Put the dashboard behind HTTPS.

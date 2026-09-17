@@ -9,7 +9,49 @@ const ALLOWED_TYPES = new Set(["webhook", "slack"]);
 const ALLOWED_SEVERITIES = new Set(["info", "warning", "danger"]);
 let writeQueue = Promise.resolve();
 
-function sanitizeDeliveryStats(input = {}) {
+interface DeliveryStatsInput {
+  lastFailureAt?: string | number | null;
+  lastSuccessAt?: string | number | null;
+  failedDeliveries?: number | string | null;
+  successfulDeliveries?: number | string | null;
+  lastError?: string | null;
+}
+
+interface AlertChannelInput {
+  id?: string | null;
+  name?: string | null;
+  type?: string | null;
+  url?: unknown;
+  enabled?: boolean | null;
+  minSeverity?: string | null;
+  deliveryStats?: DeliveryStatsInput | null;
+}
+
+interface DeliveryStats {
+  failedDeliveries: number;
+  successfulDeliveries: number;
+  lastFailureAt: string | null;
+  lastSuccessAt: string | null;
+  lastError: string | null;
+}
+
+interface AlertChannel {
+  id: string;
+  name: string;
+  type: string;
+  url: string;
+  enabled: boolean;
+  minSeverity: string;
+  deliveryStats: DeliveryStats;
+}
+
+interface AlertDeliveryRecord {
+  ts?: string | number | null;
+  success?: boolean | null;
+  error?: string | null;
+}
+
+function sanitizeDeliveryStats(input: DeliveryStatsInput = {}): DeliveryStats {
   const failureDate = input.lastFailureAt ? new Date(input.lastFailureAt) : null;
   const successDate = input.lastSuccessAt ? new Date(input.lastSuccessAt) : null;
   return {
@@ -135,7 +177,7 @@ function validateAlertChannelUrl(urlString) {
   return parsed.toString();
 }
 
-function sanitizeChannel(input = {}) {
+function sanitizeChannel(input: AlertChannelInput = {}): AlertChannel {
   const type = String(input.type || "webhook").trim().toLowerCase();
   if (!ALLOWED_TYPES.has(type)) {
     throw new Error("channel type must be webhook or slack");
@@ -201,9 +243,9 @@ function enqueueWrite(task) {
   return run;
 }
 
-async function listAlertChannels() {
+async function listAlertChannels(): Promise<AlertChannel[]> {
   const { data } = await loadStore();
-  const channels = [];
+  const channels: AlertChannel[] = [];
   for (const channel of data.channels || []) {
     try {
       channels.push(sanitizeChannel(channel));
@@ -249,7 +291,7 @@ async function removeAlertChannel(channelId) {
   });
 }
 
-async function recordAlertChannelDelivery(channelId, delivery = {}) {
+async function recordAlertChannelDelivery(channelId: string, delivery: AlertDeliveryRecord = {}) {
   const id = String(channelId || "").trim();
   if (!id) {
     return null;

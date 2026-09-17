@@ -66,8 +66,8 @@ function isLocalDevOrigin(origin) {
   }
 }
 
-function corsDeniedError(message) {
-  const error = new Error(message);
+function corsDeniedError(message: string) {
+  const error = new Error(message) as Error & { status?: number; expose?: boolean };
   error.status = 403;
   error.expose = true;
   return error;
@@ -93,11 +93,23 @@ function npmCommand() {
   return process.platform === "win32" ? "npm.cmd" : "npm";
 }
 
-function runHealthCommand(command, args, options = {}) {
+interface HealthCommandOptions {
+  cwd?: string;
+  timeoutMs?: number;
+}
+
+interface HealthCommandResult {
+  ok: boolean;
+  code: number | null;
+  timedOut: boolean;
+  output: string;
+}
+
+function runHealthCommand(command: string, args: string[], options: HealthCommandOptions = {}): Promise<HealthCommandResult> {
   const cwd = options.cwd || path.resolve(__dirname, "..");
   const timeoutMs = options.timeoutMs || HEALTHCHECK_TIMEOUT_MS;
 
-  return new Promise((resolve) => {
+  return new Promise<HealthCommandResult>((resolve) => {
     let output = "";
     let finished = false;
     const child = spawn(command, args, {

@@ -344,7 +344,26 @@ function buildHealthAlert(processName, severity, event, title, message, details 
   };
 }
 
-async function appendHealthCheckSample(processName, sample = {}, config = {}) {
+interface HealthCheckSample {
+  ts?: number | string;
+  skipped?: boolean;
+  reason?: string | null;
+  healthy?: boolean;
+  latencyMs?: number | string | null;
+  statusCode?: number | string | null;
+  protocol?: string | null;
+  port?: number | string | null;
+  path?: string | null;
+  processStatus?: string | null;
+}
+
+interface HealthCheckConfig {
+  successThreshold?: number | string | null;
+  failureThreshold?: number | string | null;
+  protocol?: string | null;
+}
+
+async function appendHealthCheckSample(processName: string, sample: HealthCheckSample = {}, config: HealthCheckConfig = {}) {
   const name = sanitizeProcessName(processName, "process name");
   const store = await loadStore();
   const now = Number(sample.ts || Date.now());

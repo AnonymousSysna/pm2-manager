@@ -122,6 +122,17 @@ async function assertSafeAlertTarget(target) {
   }
 }
 
+interface AlertDeliveryResult {
+  channelId: string;
+  success: boolean;
+  error?: string;
+}
+
+interface JsonRequestResult {
+  status: number;
+  body: string;
+}
+
 function shouldSend(channel, alert) {
   const channelLevel = SEVERITY_ORDER[channel.minSeverity] || 2;
   const alertLevel = SEVERITY_ORDER[String(alert.severity || "warning")] || 2;
@@ -136,7 +147,7 @@ async function requestJson(urlString, body) {
   }
   await assertSafeAlertTarget(target);
 
-  return new Promise((resolve, reject) => {
+  return new Promise<JsonRequestResult>((resolve, reject) => {
     const isHttps = target.protocol === "https:";
     const payload = JSON.stringify(body);
 
@@ -189,7 +200,7 @@ function toSlackText(alert) {
   return `PM2 alert: ${alert.processName} ${alert.metric}=${alert.value} threshold=${alert.threshold} severity=${alert.severity}`;
 }
 
-async function sendAlertNotifications(alerts = []) {
+async function sendAlertNotifications(alerts = []): Promise<AlertDeliveryResult[]> {
   if (!Array.isArray(alerts) || alerts.length === 0) {
     return [];
   }
@@ -199,7 +210,7 @@ async function sendAlertNotifications(alerts = []) {
     return [];
   }
 
-  const deliveries = [];
+  const deliveries: AlertDeliveryResult[] = [];
 
   for (const alert of alerts) {
     for (const channel of channels) {

@@ -80,13 +80,25 @@ function getPlatformName() {
   return "linux";
 }
 
-function runCommand(command, args, options = {}) {
+interface RunCommandOptions {
+  cwd?: string;
+  timeoutMs?: number;
+  env?: NodeJS.ProcessEnv;
+}
+
+interface RunCommandResult {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+function runCommand(command: string, args: string[], options: RunCommandOptions = {}): Promise<RunCommandResult> {
   const {
     cwd = process.cwd(),
     timeoutMs = COMMAND_TIMEOUT_MS,
     env
   } = options;
-  return new Promise((resolve, reject) => {
+  return new Promise<RunCommandResult>((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,
       env: env ? { ...process.env, ...env } : process.env,

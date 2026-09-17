@@ -503,7 +503,7 @@ function configFileField() {
   };
 }
 
-function sanitizeTarget(value, options = {}) {
+function sanitizeTarget(value, options: { allowAll?: boolean } = {}) {
   const allowAll = options.allowAll !== false;
   const target = String(value || "").trim();
   if (!target) {

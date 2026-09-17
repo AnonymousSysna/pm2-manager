@@ -82,6 +82,92 @@ const START_HEALTHCHECK_STABILITY_MS = Number.isFinite(Number(process.env.START_
   ? Math.max(1500, Math.floor(Number(process.env.START_HEALTHCHECK_STABILITY_MS)))
   : 3000;
 
+interface Pm2ProcessEnv {
+  status?: string;
+  name?: string;
+  pm_cwd?: string;
+  pm_exec_path?: string;
+  pm_uptime?: number;
+  restart_time?: number;
+  unstable_restarts?: number;
+  exit_code?: number | null;
+  cron_restart?: string;
+  pm_out_log_path?: string;
+  pm_err_log_path?: string;
+  args?: string | string[];
+  node_args?: string | string[];
+  exec_interpreter?: string;
+  exec_mode?: string;
+  instances?: number | string;
+  watch?: boolean | string[];
+  max_memory_restart?: string | number;
+  log_date_format?: string;
+  env?: Record<string, any>;
+}
+
+interface Pm2ProcessDescription {
+  name?: string;
+  pid?: number;
+  pm_id?: number;
+  monit?: { cpu?: number; memory?: number };
+  pm2_env?: Pm2ProcessEnv;
+  pm_exec_path?: string;
+}
+
+interface CommandResult {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+interface DetectCommandResult {
+  command: string;
+  args: string[];
+  code: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+interface DiskEntry {
+  mount: string;
+  filesystem: string;
+  totalBytes: number;
+  usedBytes: number;
+  freeBytes: number;
+  usedPercent: number;
+}
+
+interface ProcessStartResult {
+  processName: string;
+  cwd: string;
+  steps: any[];
+  baselineRestarts: number;
+  pm2: unknown;
+}
+
+interface PortBindingResult {
+  available: boolean;
+  code?: string;
+}
+
+interface ActorContextObject {
+  actor?: string;
+  ip?: string;
+  io?: any;
+  createOperationId?: string;
+}
+
+type ActorContextInput = string | ActorContextObject | null;
+
+interface ProcessEnvOptions {
+  replace?: boolean;
+  [key: string]: any;
+}
+
+interface CommandRunOptions {
+  env?: NodeJS.ProcessEnv;
+}
+
 function getDashboardProcessNames() {
   return new Set(
     [
@@ -286,7 +372,7 @@ const STATIC_SITE_CANDIDATES = [
  * @property {string} [error]
  */
 
-function normalizeActorContext(actorOrContext = "unknown") {
+function normalizeActorContext(actorOrContext: ActorContextInput = "unknown"): { actor: string; ip: string } {
   if (actorOrContext && typeof actorOrContext === "object") {
     return {
       actor: String(actorOrContext.actor || "unknown").trim() || "unknown",
@@ -329,15 +415,6 @@ function sanitizeGitRef(value, fieldName, { allowEmpty = false } = {}) {
     throw new ValidationError(`${fieldName} exceeds max length 200`, "invalid_option");
   }
   return normalized;
-}
-
-async function pathIsReadableFile(filePath) {
-  try {
-    const stat = await fs.promises.stat(filePath);
-    return stat.isFile();
-  } catch (_error) {
-    return false;
-  }
 }
 
 async function commandExists(command) {
@@ -460,8 +537,8 @@ async function waitForHealthyStart(processName, baselineRestarts = 0) {
   };
 }
 
-function checkPortBinding(port) {
-  return new Promise((resolve) => {
+function checkPortBinding(port: number): Promise<PortBindingResult> {
+  return new Promise<PortBindingResult>((resolve) => {
     const server = net.createServer();
     server.unref();
 
@@ -649,11 +726,11 @@ function getNpmInstallArgs({ includeDev = false } = {}) {
   return ["install", "--include=dev"];
 }
 
-function runCommand(command, args, cwd, options = {}) {
+function runCommand(command: string, args: string[], cwd: string, options: CommandRunOptions = {}): Promise<CommandResult> {
   const childEnv = options && typeof options === "object" && options.env
     ? { ...process.env, ...options.env }
     : process.env;
-  return new Promise((resolve, reject) => {
+  return new Promise<CommandResult>((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,
       env: childEnv,
@@ -744,7 +821,7 @@ function normalizeDiskEntries(entries = []) {
     .filter((item) => item.mount && item.totalBytes > 0);
 }
 
-async function readDiskUsage() {
+async function readDiskUsage(): Promise<DiskEntry[]> {
   if (process.platform === "win32") {
     const psScript = "Get-CimInstance Win32_LogicalDisk -Filter \"DriveType=3\" | Select-Object DeviceID,Size,FreeSpace | ConvertTo-Json -Compress";
     const psResult = await runCommand("powershell", ["-NoProfile", "-Command", psScript], process.cwd());
@@ -795,8 +872,8 @@ async function readDiskUsage() {
   return normalizeDiskEntries(entries);
 }
 
-function runDetectCommand(command, args) {
-  return new Promise((resolve, reject) => {
+function runDetectCommand(command: string, args: string[]): Promise<DetectCommandResult> {
+  return new Promise<DetectCommandResult>((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: process.cwd(),
       stdio: ["ignore", "pipe", "pipe"]
@@ -908,8 +985,8 @@ async function recordOperationNotification({
   }
 }
 
-function describeProcess(name) {
-  return new Promise((resolve, reject) => {
+function describeProcess(name: string): Promise<Pm2ProcessDescription | null> {
+  return new Promise<Pm2ProcessDescription | null>((resolve, reject) => {
     pm2.describe(name, (error, description) => {
       if (error) {
         reject(error);
@@ -951,7 +1028,7 @@ async function resolveDotEnvEditableDirectory(processName) {
   return { proc, cwd, allowedRoot };
 }
 
-function findPort(env = {}) {
+function findPort(env: Record<string, any> = {}) {
   return env.PORT || env.port || env.PM2_PORT || null;
 }
 
@@ -974,7 +1051,7 @@ async function findProcessByPort(port) {
     return null;
   }
 
-  const processes = await new Promise((resolve, reject) => {
+  const processes = await new Promise<Pm2ProcessDescription[]>((resolve, reject) => {
     pm2.list((error, list) => {
       if (error) {
         reject(error);
@@ -1335,7 +1412,7 @@ function collectInvalidDotEnvLines(content = "") {
   return invalid;
 }
 
-async function updateProcessEnv(name, envPatch = {}, options = {}, actorContext = "unknown") {
+async function updateProcessEnv(name: string, envPatch: Record<string, any> = {}, options: ProcessEnvOptions = {}, actorContext: ActorContextInput = "unknown") {
   const processName = sanitizeProcessName(name, "process name");
   const { actor, ip } = normalizeActorContext(actorContext);
   const replace = Boolean(options?.replace);
@@ -1350,7 +1427,7 @@ async function updateProcessEnv(name, envPatch = {}, options = {}, actorContext 
     const currentEnv = sanitizeEnvObject(proc.pm2_env?.env || {});
     const nextEnv = replace ? safePatch : { ...currentEnv, ...safePatch };
 
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       pm2.restart(
         {
           name: processName,
@@ -1445,7 +1522,7 @@ async function readProcessDotEnv(name) {
   return result;
 }
 
-async function updateProcessDotEnv(name, payload = {}, actorContext = "unknown") {
+async function updateProcessDotEnv(name: string, payload: Record<string, any> = {}, actorContext: ActorContextInput = "unknown") {
   const processName = sanitizeProcessName(name, "process name");
   const { actor, ip } = normalizeActorContext(actorContext);
   const valuesRaw = payload?.values || {};
@@ -1593,7 +1670,7 @@ async function deleteProcess(name, actorContext = "unknown") {
 /**
  * @param {CreateProcessConfig} config
  */
-async function createProcess(config, actorContext = "unknown") {
+async function createProcess(config: any, actorContext: ActorContextInput = "unknown") {
   const { actor, ip } = normalizeActorContext(actorContext);
   const io = actorContext && typeof actorContext === "object" ? actorContext.io : null;
   const createOperationId = actorContext && typeof actorContext === "object"
@@ -2033,7 +2110,7 @@ async function createProcess(config, actorContext = "unknown") {
           pm2: proc
         });
       });
-    }).then(async (started) => {
+    }).then(async (started: ProcessStartResult) => {
       const stepId = `pm2:healthcheck#${++createStepCounter}`;
       const baselineRestarts = Number(started?.baselineRestarts || 0);
       const healthStartedAt = Date.now();
@@ -2237,10 +2314,10 @@ async function readSystemResources() {
     const totalMemoryBytes = Number(os.totalmem() || 0);
     const freeMemoryBytes = Number(os.freemem() || 0);
     const usedMemoryBytes = Math.max(0, totalMemoryBytes - freeMemoryBytes);
-    const disks = await readDiskUsage().catch(() => []);
+    const disks: DiskEntry[] = await readDiskUsage().catch(() => []);
 
-    const diskTotalBytes = disks.reduce((sum, item) => sum + Number(item.totalBytes || 0), 0);
-    const diskFreeBytes = disks.reduce((sum, item) => sum + Number(item.freeBytes || 0), 0);
+    const diskTotalBytes = disks.reduce<number>((sum, item) => sum + Number(item.totalBytes || 0), 0);
+    const diskFreeBytes = disks.reduce<number>((sum, item) => sum + Number(item.freeBytes || 0), 0);
     const diskUsedBytes = Math.max(0, diskTotalBytes - diskFreeBytes);
 
     return {
@@ -2274,7 +2351,7 @@ async function readSystemResources() {
   }
 }
 
-async function updateProcessSchedule(name, payload = {}, actorContext = "unknown") {
+async function updateProcessSchedule(name: string, payload: Record<string, any> = {}, actorContext: ActorContextInput = "unknown") {
   const processName = sanitizeProcessName(name, "process name");
   const { actor, ip } = normalizeActorContext(actorContext);
 
@@ -2331,7 +2408,7 @@ async function updateProcessSchedule(name, payload = {}, actorContext = "unknown
   return result;
 }
 
-async function duplicateProcess(name, payload = {}, actorContext = "unknown") {
+async function duplicateProcess(name: string, payload: Record<string, any> = {}, actorContext: ActorContextInput = "unknown") {
   const sourceName = sanitizeProcessName(name, "process name");
   const { actor, ip } = normalizeActorContext(actorContext);
   const targetName = sanitizeProcessName(payload?.name, "duplicate process name");
@@ -2376,7 +2453,7 @@ async function duplicateProcess(name, payload = {}, actorContext = "unknown") {
       env: sanitizeEnvObject(envWithoutName)
     };
 
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       pm2.start(nextConfig, (error) => {
         if (error) {
           reject(error);
@@ -2489,7 +2566,7 @@ async function npmBuild(name) {
  * }} [options]
  * @param {string} [actor]
  */
-async function deployProcess(name, options = {}, actorContext = "unknown") {
+async function deployProcess(name: string, options: Record<string, any> = {}, actorContext: ActorContextInput = "unknown") {
   const processName = sanitizeProcessName(name, "process name");
   const { actor, ip } = normalizeActorContext(actorContext);
   let branch = "";
@@ -2573,7 +2650,7 @@ async function deployProcess(name, options = {}, actorContext = "unknown") {
       }
 
       if (restartMode === "reload") {
-        await new Promise((resolve, reject) => {
+        await new Promise<void>((resolve, reject) => {
           pm2.reload(processName, (error) => {
             if (error) {
               reject(error);
@@ -2584,7 +2661,7 @@ async function deployProcess(name, options = {}, actorContext = "unknown") {
         });
         steps.push({ label: "pm2:reload", success: true, durationMs: 0, output: "Process reloaded" });
       } else {
-        await new Promise((resolve, reject) => {
+        await new Promise<void>((resolve, reject) => {
           pm2.restart(processName, (error) => {
             if (error) {
               reject(error);
@@ -2775,7 +2852,7 @@ async function getGitStatusForProcess(name) {
   return result;
 }
 
-async function gitPullProcess(name, options = {}) {
+async function gitPullProcess(name: string, options: Record<string, any> = {}) {
   const processName = sanitizeProcessName(name, "process name");
   const dirtyMode = String(options?.dirtyMode || options?.allowDirty || "").trim().toLowerCase();
   const confirmed = options?.confirmed === true || options?.accept === true || dirtyMode === "stash";
@@ -2856,7 +2933,7 @@ async function gitPullProcess(name, options = {}) {
  * @param {{ targetCommit?: string, restartMode?: "restart"|"reload" }} [options]
  * @param {string|{actor?:string,ip?:string}} [actorContext]
  */
-async function rollbackProcess(name, options = {}, actorContext = "unknown") {
+async function rollbackProcess(name: string, options: Record<string, any> = {}, actorContext: ActorContextInput = "unknown") {
   const processName = sanitizeProcessName(name, "process name");
   const { actor, ip } = normalizeActorContext(actorContext);
   let targetCommit = "";
@@ -2926,7 +3003,7 @@ async function rollbackProcess(name, options = {}, actorContext = "unknown") {
       await runStep("git:reset", "git", ["reset", "--hard", resolvedTarget]);
 
       if (restartMode === "reload") {
-        await new Promise((resolve, reject) => {
+        await new Promise<void>((resolve, reject) => {
           pm2.reload(processName, (error) => {
             if (error) {
               reject(error);
@@ -2937,7 +3014,7 @@ async function rollbackProcess(name, options = {}, actorContext = "unknown") {
         });
         steps.push({ label: "pm2:reload", success: true, durationMs: 0, output: "Process reloaded" });
       } else {
-        await new Promise((resolve, reject) => {
+        await new Promise<void>((resolve, reject) => {
           pm2.restart(processName, (error) => {
             if (error) {
               reject(error);
@@ -3083,7 +3160,7 @@ async function getInterpreterCatalog() {
   };
 }
 
-async function installInterpreterRuntime(payload = {}) {
+async function installInterpreterRuntime(payload: Record<string, any> = {}) {
   const key = String(payload?.key || "").trim().toLowerCase();
   if (!key) {
     return invalid("key is required", "missing_interpreter_key");
@@ -3125,7 +3202,7 @@ async function getNodeRuntimeStatus() {
   };
 }
 
-async function installNodeRuntime(payload = {}) {
+async function installNodeRuntime(payload: Record<string, any> = {}) {
   const version = normalizeVersion(payload?.version);
   if (!version) {
     return invalid("version is required", "missing_version");

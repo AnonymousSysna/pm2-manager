@@ -164,8 +164,32 @@ function normalizeHealthPath(value) {
   return raw.startsWith("/") ? raw : `/${raw}`;
 }
 
+interface AlertChannelStatus {
+  id?: string;
+  name?: string;
+}
+
+interface HealthCheckSettings {
+  enabled?: boolean;
+  protocol?: string;
+  port?: number | null;
+  path?: string;
+  timeoutMs?: number;
+}
+
+interface ProcessMetaStatus {
+  healthCheck?: HealthCheckSettings;
+}
+
+interface HealthProbeResult {
+  healthy: boolean;
+  latencyMs: number;
+  statusCode: number | null;
+  reason: string | null;
+}
+
 function probeHttp(port, pathName, timeoutMs) {
-  return new Promise((resolve) => {
+  return new Promise<HealthProbeResult>((resolve) => {
     const startedAt = Date.now();
     let settled = false;
     const finish = (payload) => {
@@ -216,7 +240,7 @@ function probeHttp(port, pathName, timeoutMs) {
 }
 
 function probeTcp(port, timeoutMs) {
-  return new Promise((resolve) => {
+  return new Promise<HealthProbeResult>((resolve) => {
     const startedAt = Date.now();
     let settled = false;
     const socket = net.createConnection({
@@ -293,7 +317,9 @@ function registerPM2Monitor(io) {
     const failedDeliveries = deliveries.filter((item) => !item.success);
     if (failedDeliveries.length > 0) {
       const channels = await listAlertChannels().catch(() => []);
-      const channelMap = new Map(channels.map((channel) => [channel.id, channel]));
+      const channelMap = new Map<string, AlertChannelStatus>(
+        (channels as AlertChannelStatus[]).map((channel) => [String(channel.id || ""), channel])
+      );
       const deliveryNotifications = await Promise.all(
         failedDeliveries.map((failed) => {
           const channel = channelMap.get(failed.channelId);
@@ -436,7 +462,8 @@ function registerPM2Monitor(io) {
       trackPm2Operation("socket.healthSweep", true);
 
       const processMap = indexProcesses(processResult.data);
-      const enabledChecks = Object.entries(meta || {}).filter(([, item]) => item?.healthCheck?.enabled);
+      const metaMap = (meta || {}) as Record<string, ProcessMetaStatus>;
+      const enabledChecks = Object.entries(metaMap).filter(([, item]) => item?.healthCheck?.enabled);
       if (enabledChecks.length === 0) {
         return;
       }

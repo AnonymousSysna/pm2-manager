@@ -86,7 +86,38 @@ function normalizeHealthCheck(input) {
   };
 }
 
-function normalizeProcessMeta(name, meta = {}) {
+interface HealthCheckConfig {
+  enabled: boolean;
+  protocol: string;
+  port: number | null;
+  path: string;
+  intervalSec: number;
+  timeoutMs: number;
+  failureThreshold: number;
+  successThreshold: number;
+  gracePeriodSec: number;
+}
+
+interface AlertThresholds {
+  cpu: number | null;
+  memoryMB: number | null;
+}
+
+interface ProcessMeta {
+  group: string;
+  dependencies: string[];
+  alertThresholds: AlertThresholds;
+  healthCheck: HealthCheckConfig;
+}
+
+interface ProcessMetaInput {
+  group?: string | null;
+  dependencies?: unknown;
+  alertThresholds?: unknown;
+  healthCheck?: unknown;
+}
+
+function normalizeProcessMeta(name: string, meta: ProcessMetaInput = {}): ProcessMeta {
   const processName = sanitizeProcessName(name, "process name");
   const group = String(meta.group || "").trim().slice(0, 64);
   return {
@@ -132,9 +163,9 @@ async function saveStore(filePath, data) {
   await fs.promises.writeFile(filePath, payload, "utf8");
 }
 
-async function listProcessMeta() {
+async function listProcessMeta(): Promise<Record<string, ProcessMeta>> {
   const { data } = await loadStore();
-  const output = {};
+  const output: Record<string, ProcessMeta> = {};
 
   for (const [name, meta] of Object.entries(data.processes || {})) {
     try {
@@ -252,7 +283,7 @@ async function exportConfig() {
   };
 }
 
-async function importConfig(payload = {}) {
+async function importConfig(payload: Record<string, any> = {}) {
   const processes = payload.processes && typeof payload.processes === "object" ? payload.processes : {};
   const groups = payload.groups && typeof payload.groups === "object" ? payload.groups : {};
 

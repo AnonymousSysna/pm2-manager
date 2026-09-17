@@ -135,7 +135,7 @@ test("logout clears auth cookies even when the access token is expired", async (
     assert.equal(clearCookies.some((value) => value.startsWith("pm2_refresh=")), true);
     assert.equal(clearCookies.some((value) => value.startsWith("pm2_csrf=")), true);
   } finally {
-    await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     resetAuthSessionStore();
     restoreAuthEnvFilePaths();
     for (const [key, value] of Object.entries(originalEnv)) {
@@ -197,7 +197,7 @@ test("logout revokes an existing refresh token", async () => {
     assert.equal(refreshResponse.status, 401);
     assert.equal(refreshPayload.error, "Invalid refresh token");
   } finally {
-    await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     resetAuthSessionStore();
     restoreAuthEnvFilePaths();
     for (const [key, value] of Object.entries(originalEnv)) {
@@ -250,7 +250,7 @@ test("login keeps SameSite=Lax cookies for same-origin requests", async () => {
     assert.doesNotMatch(findSetCookie(setCookies, "pm2_session"), /SameSite=None/i);
     assert.match(findSetCookie(setCookies, "pm2_csrf"), /SameSite=Lax/i);
   } finally {
-    await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     resetAuthSessionStore();
     restoreAuthEnvFilePaths();
     for (const [key, value] of Object.entries(originalEnv)) {
@@ -307,7 +307,7 @@ test("login issues SameSite=None cookies for secure cross-origin requests", asyn
     assert.match(findSetCookie(setCookies, "pm2_refresh"), /SameSite=None/i);
     assert.match(findSetCookie(setCookies, "pm2_csrf"), /SameSite=None/i);
   } finally {
-    await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     resetAuthSessionStore();
     restoreAuthEnvFilePaths();
     for (const [key, value] of Object.entries(originalEnv)) {
@@ -391,7 +391,7 @@ test("change-password revokes old refresh tokens and reissues the current sessio
     assert.equal(mePayload.data?.authenticated, true);
     assert.equal(mePayload.data?.user?.username, "admin");
   } finally {
-    await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     resetAuthSessionStore();
     restoreAuthEnvFilePaths();
     for (const [key, value] of Object.entries(originalEnv)) {
@@ -463,7 +463,7 @@ test("change-password rejects weak or whitespace-padded passwords", async () => 
     assert.equal(paddedResponse.status, 400);
     assert.equal(paddedPayload.error, "New password cannot start or end with whitespace");
   } finally {
-    await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     resetAuthSessionStore();
     restoreAuthEnvFilePaths();
     for (const [key, value] of Object.entries(originalEnv)) {

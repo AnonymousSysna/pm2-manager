@@ -32,7 +32,19 @@ const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const ACTION_OUTPUT_LIMIT = 4000;
 const STARTUP_OUTPUT_LIMIT = 8000;
 
-function normalizeRunCommandOptions(timeoutOrOptions = COMMAND_TIMEOUT_MS) {
+interface RunCommandOptions {
+  cwd?: string;
+  timeoutMs?: number;
+}
+
+interface RunCommandResult {
+  code: number;
+  timedOut: boolean;
+  stdout: string;
+  stderr: string;
+}
+
+function normalizeRunCommandOptions(timeoutOrOptions: number | RunCommandOptions = COMMAND_TIMEOUT_MS): RunCommandOptions {
   if (typeof timeoutOrOptions === "number") {
     return {
       cwd: process.cwd(),
@@ -54,10 +66,10 @@ function normalizeRunCommandOptions(timeoutOrOptions = COMMAND_TIMEOUT_MS) {
   };
 }
 
-function runCommand(command, args, timeoutOrOptions = COMMAND_TIMEOUT_MS) {
+function runCommand(command: string, args: string[], timeoutOrOptions: number | RunCommandOptions = COMMAND_TIMEOUT_MS): Promise<RunCommandResult> {
   const { cwd, timeoutMs } = normalizeRunCommandOptions(timeoutOrOptions);
 
-  return new Promise((resolve, reject) => {
+  return new Promise<RunCommandResult>((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,
       stdio: ["ignore", "pipe", "pipe"]
@@ -117,7 +129,7 @@ function createPm2CliInvocation(pm2Args = [], platform = process.platform) {
   };
 }
 
-async function runPm2Cli(pm2Args = [], options = {}) {
+async function runPm2Cli(pm2Args: string[] = [], options: { outputLimit?: number; platform?: NodeJS.Platform; timeoutMs?: number } = {}) {
   const outputLimit = Number.isFinite(Number(options.outputLimit))
     ? Math.max(1, Math.floor(Number(options.outputLimit)))
     : ACTION_OUTPUT_LIMIT;
