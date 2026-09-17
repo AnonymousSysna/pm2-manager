@@ -394,6 +394,10 @@ export default function Logs() {
     downloadBlob(`pm2-logs-${Date.now()}.csv`, toCsv(visibleEntries), "text/csv;charset=utf-8");
   };
 
+  const closeExportMenu = (event) => {
+    event.currentTarget.closest("details")?.removeAttribute("open");
+  };
+
   return (
     <div className="space-y-4">
       <PageIntro
@@ -488,12 +492,31 @@ export default function Logs() {
             <Button type="button" size="sm" variant="secondary" onClick={() => setEntries([])}>
               Clear
             </Button>
-            <Button type="button" size="sm" variant="secondary" onClick={downloadTxt}>
-              TXT
-            </Button>
-            <Button type="button" size="sm" variant="secondary" onClick={downloadCsv}>
-              CSV
-            </Button>
+            <details className="logs-export-menu">
+              <summary aria-label="Open export options">Export</summary>
+              <div className="logs-export-menu-panel" role="menu" aria-label="Export logs">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={(event) => {
+                    downloadTxt();
+                    closeExportMenu(event);
+                  }}
+                >
+                  TXT file
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={(event) => {
+                    downloadCsv();
+                    closeExportMenu(event);
+                  }}
+                >
+                  CSV file
+                </button>
+              </div>
+            </details>
             <Button type="button" size="sm" variant="danger" onClick={() => setFlushConfirmOpen(true)} disabled={combinedView || !selected}>
               Flush
             </Button>
