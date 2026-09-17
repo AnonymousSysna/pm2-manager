@@ -505,15 +505,17 @@
   }
 
   .jcode-terminal-screen {
-    @apply h-[520px] w-full resize-y overflow-auto border-0 p-3 font-mono text-xs leading-5 text-success-300 outline-none;
+    @apply h-[520px] w-full resize-y overflow-hidden border-0 p-2 outline-none;
     background: #05070a;
-    caret-color: #86efac;
-    white-space: pre-wrap;
-    word-break: break-word;
   }
 
-  .jcode-terminal-screen::placeholder {
-    @apply text-text-3;
+  .jcode-terminal-screen .xterm {
+    height: 100%;
+    width: 100%;
+  }
+
+  .jcode-terminal-screen .xterm-viewport {
+    overflow-y: auto;
   }
 
   .jcode-session-grid {

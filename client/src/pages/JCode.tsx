@@ -1,6 +1,9 @@
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { io } from "socket.io-client";
+import { Terminal } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import "@xterm/xterm/css/xterm.css";
 import { Clipboard, Code2, ExternalLink, Play, Power, RefreshCw, ShieldCheck, Smartphone, StopCircle, TerminalSquare } from "lucide-react";
 import { jcode as jcodeApi } from "../api";
 import toast, { getErrorMessage } from "../lib/toast";
@@ -47,67 +50,6 @@ const sessionCommandOptions = {
   custom: ""
 };
 
-function terminalKeySequence(event) {
-  if (event.metaKey) {
-    return null;
-  }
-
-  if (event.ctrlKey && !event.altKey) {
-    const key = String(event.key || "").toLowerCase();
-    if (key === "v") {
-      return null;
-    }
-    if (key.length === 1 && key >= "a" && key <= "z") {
-      return String.fromCharCode(key.charCodeAt(0) - 96);
-    }
-    if (key === "[") return "\u001b";
-    if (key === "\\") return "\u001c";
-    if (key === "]") return "\u001d";
-    if (key === "^") return "\u001e";
-    if (key === "_") return "\u001f";
-  }
-
-  const specialKeys = {
-    Enter: "\r",
-    Backspace: "\u007f",
-    Tab: event.shiftKey ? "\u001b[Z" : "\t",
-    Escape: "\u001b",
-    ArrowUp: "\u001b[A",
-    ArrowDown: "\u001b[B",
-    ArrowRight: "\u001b[C",
-    ArrowLeft: "\u001b[D",
-    Home: "\u001b[H",
-    End: "\u001b[F",
-    Delete: "\u001b[3~",
-    PageUp: "\u001b[5~",
-    PageDown: "\u001b[6~"
-  };
-
-  if (Object.prototype.hasOwnProperty.call(specialKeys, event.key)) {
-    return specialKeys[event.key];
-  }
-
-  if (!event.ctrlKey && !event.altKey && event.key?.length === 1) {
-    return event.key;
-  }
-
-  if (event.altKey && !event.ctrlKey && event.key?.length === 1) {
-    return `\u001b${event.key}`;
-  }
-
-  return null;
-}
-
-function cleanTerminalChunk(value) {
-  return String(value || "")
-    .replace(/\x1B\][^\x07]*(?:\x07|\x1B\\)/g, "")
-    .replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "")
-    .replace(/\x1B[()][A-Za-z0-9]/g, "")
-    .replace(/\x00/g, "")
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n");
-}
-
 async function copyToClipboard(value, label = "Command") {
   try {
     await navigator.clipboard.writeText(value);
@@ -132,14 +74,16 @@ export default function JCode() {
   const [lastOutput, setLastOutput] = useState("");
   const [terminalState, setTerminalState] = useState("idle");
   const [terminalMeta, setTerminalMeta] = useState(null);
-  const [terminalOutput, setTerminalOutput] = useState("");
   const [terminalInput, setTerminalInput] = useState("");
   const [sessionCommandPreset, setSessionCommandPreset] = useState("jcode");
   const [customSessionCommand, setCustomSessionCommand] = useState("jcode");
   const [sessionCwd, setSessionCwd] = useState("");
   const [terminalFocused, setTerminalFocused] = useState(false);
   const socketRef = useRef(null);
+  const terminalHostRef = useRef(null);
   const terminalRef = useRef(null);
+  const fitAddonRef = useRef(null);
+  const terminalInputDisposableRef = useRef(null);
 
   const installed = Boolean(status?.installed);
   const gatewayRunning = Boolean(status?.gateway?.running);
@@ -176,12 +120,20 @@ export default function JCode() {
     ].join("\n");
   }, [jcodeEnvName, jcodeModel, jcodeProvider, jcodeProviderUrl]);
 
-  const appendTerminalOutput = (chunk) => {
-    const cleaned = cleanTerminalChunk(chunk);
-    if (!cleaned) {
+  const writeTerminalOutput = (chunk) => {
+    const text = String(chunk || "").replace(/\r?\n/g, "\r\n");
+    if (!text) {
       return;
     }
-    setTerminalOutput((prev) => `${prev}${cleaned}`.slice(-120000));
+    terminalRef.current?.write(text);
+  };
+
+  const fitTerminal = () => {
+    try {
+      fitAddonRef.current?.fit();
+    } catch (_error) {
+      // The terminal may not be visible yet.
+    }
   };
 
   const loadStatus = async () => {
@@ -213,10 +165,50 @@ export default function JCode() {
   }, []);
 
   useEffect(() => {
-    if (terminalRef.current) {
-      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+    const terminal = new Terminal({
+      cursorBlink: true,
+      convertEol: false,
+      fontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
+      fontSize: 13,
+      lineHeight: 1.25,
+      scrollback: 6000,
+      theme: {
+        background: "#05070a",
+        foreground: "#d1fae5",
+        cursor: "#86efac",
+        selectionBackground: "#2563eb66"
+      }
+    });
+    const fitAddon = new FitAddon();
+    terminal.loadAddon(fitAddon);
+    terminalRef.current = terminal;
+    fitAddonRef.current = fitAddon;
+
+    if (terminalHostRef.current) {
+      terminal.open(terminalHostRef.current);
+      fitTerminal();
+      terminal.writeln("Click Start session to open the real JCode terminal.");
     }
-  }, [terminalOutput]);
+
+    const onResize = () => {
+      fitTerminal();
+      if (socketRef.current && terminalRef.current) {
+        socketRef.current.emit("jcode:terminal:resize", {
+          rows: terminalRef.current.rows,
+          cols: terminalRef.current.cols
+        });
+      }
+    };
+    window.addEventListener("resize", onResize);
+
+    return () => {
+      window.removeEventListener("resize", onResize);
+      terminalInputDisposableRef.current?.dispose?.();
+      terminal.dispose();
+      terminalRef.current = null;
+      fitAddonRef.current = null;
+    };
+  }, []);
 
   useEffect(() => () => {
     if (socketRef.current) {
@@ -249,18 +241,19 @@ export default function JCode() {
   };
 
   const estimateTerminalSize = () => {
-    const element = terminalRef.current;
-    if (!element) {
-      return { rows: 32, cols: 110 };
+    fitTerminal();
+    if (terminalRef.current?.rows && terminalRef.current?.cols) {
+      return { rows: terminalRef.current.rows, cols: terminalRef.current.cols };
     }
-    const cols = Math.max(60, Math.min(180, Math.floor(element.clientWidth / 8.5)));
-    const rows = Math.max(16, Math.min(60, Math.floor(element.clientHeight / 18)));
+    const element = terminalHostRef.current;
+    const cols = Math.max(60, Math.min(180, Math.floor((element?.clientWidth || 935) / 8.5)));
+    const rows = Math.max(16, Math.min(60, Math.floor((element?.clientHeight || 520) / 18)));
     return { rows, cols };
   };
 
   const focusTerminal = () => {
     window.requestAnimationFrame(() => {
-      terminalRef.current?.focus?.();
+      terminalRef.current?.focus();
     });
   };
 
@@ -279,7 +272,7 @@ export default function JCode() {
     }
 
     const terminalSize = estimateTerminalSize();
-    setTerminalOutput("");
+    terminalRef.current?.reset();
     setTerminalMeta(null);
     setTerminalState("connecting");
     const socket = io(socketBaseUrl(), {
@@ -301,7 +294,7 @@ export default function JCode() {
 
     socket.on("connect_error", (error) => {
       setTerminalState("error");
-      appendTerminalOutput(`\nConnection error: ${error?.message || "socket failed"}\n`);
+      writeTerminalOutput(`\nConnection error: ${error?.message || "socket failed"}\n`);
     });
 
     socket.on("disconnect", (reason) => {
@@ -310,7 +303,7 @@ export default function JCode() {
         setTerminalState("idle");
         setTerminalMeta(null);
         if (reason && reason !== "io client disconnect") {
-          appendTerminalOutput(`\nSocket disconnected: ${reason}\n`);
+          writeTerminalOutput(`\nSocket disconnected: ${reason}\n`);
         }
       }
     });
@@ -324,20 +317,20 @@ export default function JCode() {
     });
 
     socket.on("jcode:terminal:output", (payload) => {
-      appendTerminalOutput(payload?.data || "");
+      writeTerminalOutput(payload?.data || "");
     });
 
     socket.on("jcode:terminal:error", (payload) => {
       const message = payload?.error || "JCode terminal error";
       setTerminalState("error");
-      appendTerminalOutput(`\n${message}\n`);
+      writeTerminalOutput(`\n${message}\n`);
       toast.error(message);
     });
 
     socket.on("jcode:terminal:exit", (payload) => {
       const code = payload?.code ?? "";
       const signal = payload?.signal ? ` signal=${payload.signal}` : "";
-      appendTerminalOutput(`\nJCode session ended${code !== "" && code !== null ? ` code=${code}` : ""}${signal}.\n`);
+      writeTerminalOutput(`\nJCode session ended${code !== "" && code !== null ? ` code=${code}` : ""}${signal}.\n`);
       setTerminalState("idle");
       setTerminalMeta(null);
       socket.disconnect();
@@ -365,6 +358,20 @@ export default function JCode() {
     socketRef.current.emit("jcode:terminal:input", { data });
   };
 
+  useEffect(() => {
+    terminalInputDisposableRef.current?.dispose?.();
+    terminalInputDisposableRef.current = null;
+    if (terminalRunning && terminalRef.current) {
+      terminalInputDisposableRef.current = terminalRef.current.onData((data) => {
+        socketRef.current?.emit("jcode:terminal:input", { data });
+      });
+    }
+    return () => {
+      terminalInputDisposableRef.current?.dispose?.();
+      terminalInputDisposableRef.current = null;
+    };
+  }, [terminalRunning]);
+
   const sendTerminalInput = (event?: FormEvent) => {
     event?.preventDefault();
     if (!terminalInput.trim()) {
@@ -374,31 +381,6 @@ export default function JCode() {
     setTerminalInput("");
     focusTerminal();
   };
-
-  const handleTerminalKeyDown = (event) => {
-    if (!terminalRunning) {
-      return;
-    }
-    const sequence = terminalKeySequence(event);
-    if (!sequence) {
-      return;
-    }
-    event.preventDefault();
-    sendTerminalRaw(sequence);
-  };
-
-  const handleTerminalPaste = (event) => {
-    if (!terminalRunning) {
-      return;
-    }
-    const text = event.clipboardData?.getData("text") || "";
-    if (!text) {
-      return;
-    }
-    event.preventDefault();
-    sendTerminalRaw(text.replace(/\r?\n/g, "\r"));
-  };
-
 
   const startGateway = async () => {
     try {
@@ -557,19 +539,14 @@ export default function JCode() {
             <span>{terminalMeta?.cwd || sessionCwd || terminalState}</span>
             <span>{terminalMeta?.socketPath || (terminalMeta?.pid ? `PID ${terminalMeta.pid}` : terminalState)}</span>
           </div>
-          <textarea
-            ref={terminalRef}
+          <div
+            ref={terminalHostRef}
             className="jcode-terminal-screen"
-            value={terminalOutput}
-            onKeyDown={handleTerminalKeyDown}
-            onPaste={handleTerminalPaste}
             onFocus={() => setTerminalFocused(true)}
             onBlur={() => setTerminalFocused(false)}
             onClick={focusTerminal}
-            readOnly
-            spellCheck={false}
+            role="application"
             aria-label="JCode interactive terminal"
-            placeholder={terminalRunning ? "Type here. Paste works. Enter sends to JCode." : "Click Start session to open JCode here."}
           />
           <form className="jcode-terminal-input-row" onSubmit={sendTerminalInput}>
             <Input
