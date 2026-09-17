@@ -7,9 +7,8 @@ import Button from "../components/ui/Button";
 import Field from "../components/ui/Field";
 import Input from "../components/ui/Input";
 import InsetPanel from "../components/ui/InsetPanel";
-import { ConfirmDialog } from "../components/ui/Modal";
+import Modal, { ConfirmDialog } from "../components/ui/Modal";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
-import Select from "../components/ui/Select";
 import Textarea from "../components/ui/Textarea";
 import { Eyebrow } from "../components/ui/Typography";
 
@@ -174,6 +173,7 @@ export default function AIOperator() {
   const [runningActionId, setRunningActionId] = useState("");
   const [sending, setSending] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [connectionModalOpen, setConnectionModalOpen] = useState(false);
 
   useEffect(() => {
     saveSettings(settings);
@@ -321,53 +321,100 @@ export default function AIOperator() {
         )}
       />
 
-      <section className="ai-setup-card">
-        <div className="ai-setup-head">
+      <section className="ai-connection-summary-card">
+        <div className="ai-connection-summary-main">
           <div className="min-w-0">
             <Eyebrow>Connection</Eyebrow>
             <h2 className="panel-heading mt-1">Provider, key, and run mode</h2>
           </div>
-          <div className="ai-setup-actions">
-            <Button type="button" size="sm" variant="secondary" onClick={testConnection} disabled={testing || !settings.apiKey || !settings.model || !settings.baseUrl}>
-              <KeyRound size={14} />
-              {testing ? "Testing" : "Test"}
-            </Button>
+          <div className="ai-connection-pills">
+            <Badge tone={connected ? "success" : "warning"}>{connected ? "Ready" : "Setup needed"}</Badge>
+            <Badge tone="neutral">{settings.provider === "anthropic" ? "Claude" : "OpenAI"}</Badge>
+            {settings.model ? <Badge tone="neutral">{settings.model}</Badge> : null}
+            <Badge tone={settings.executeMode === "plan" ? "neutral" : "warning"}>{settings.executeMode}</Badge>
           </div>
         </div>
-
-        <div className="ai-setup-grid">
-          <Field label="Provider" className="ai-provider-field">
-            <Select value={settings.provider} onChange={(event) => changeProvider(event.target.value)}>
-              <option value="openai-compatible">OpenAI compatible</option>
-              <option value="anthropic">Anthropic Claude</option>
-            </Select>
-          </Field>
-          <Field label="Provider URL" className="ai-url-field">
-            <Input value={settings.baseUrl} onChange={(event) => updateSetting("baseUrl", event.target.value)} placeholder="https://api.openai.com/v1" />
-          </Field>
-          <Field label="Model" className="ai-model-field">
-            <Input value={settings.model} onChange={(event) => updateSetting("model", event.target.value)} placeholder="gpt-4o-mini" />
-          </Field>
-          <Field label="API key" className="ai-key-field">
-            <Input type="password" value={settings.apiKey} onChange={(event) => updateSetting("apiKey", event.target.value)} placeholder="sk-..." autoComplete="off" />
-          </Field>
-          <Field label="Mode" className="ai-mode-field">
-            <Select value={settings.executeMode} onChange={(event) => updateSetting("executeMode", event.target.value)}>
-              <option value="plan">Plan only</option>
-              <option value="read">Auto checks</option>
-              <option value="write">Safe writes</option>
-            </Select>
-          </Field>
-          <label className="ai-remember-key">
-            <input
-              type="checkbox"
-              checked={settings.rememberKey}
-              onChange={(event) => updateSetting("rememberKey", event.target.checked)}
-            />
-            <span>Remember key</span>
-          </label>
+        <div className="ai-connection-summary-actions">
+          <Button type="button" size="sm" variant="outlinePrimary" onClick={() => setConnectionModalOpen(true)}>
+            <KeyRound size={14} />
+            Connection
+          </Button>
         </div>
       </section>
+
+      {connectionModalOpen ? (
+        <Modal
+          title="Connection"
+          description="Provider, key, and run mode"
+          size="md"
+          onClose={() => setConnectionModalOpen(false)}
+          className="ai-connection-dialog"
+          bodyClassName="ai-connection-modal-body"
+        >
+          <section className="ai-connection-modal-card">
+            <div className="ai-connection-modal-status">
+              <Badge tone={connected ? "success" : "warning"}>{connected ? "Ready" : "Setup"}</Badge>
+              <Badge tone="neutral">{settings.provider === "anthropic" ? "Claude" : "OpenAI"}</Badge>
+              {settings.model ? <Badge tone="neutral">{settings.model}</Badge> : null}
+            </div>
+
+            <div className="ai-connection-compact-stack">
+              <Field label="Provider" className="ai-provider-field ai-compact-field">
+                <div className="ai-segmented-control ai-segmented-control-tight" role="group" aria-label="AI provider">
+                  <button type="button" aria-pressed={settings.provider === "openai-compatible"} onClick={() => changeProvider("openai-compatible")}>
+                    OpenAI compatible
+                  </button>
+                  <button type="button" aria-pressed={settings.provider === "anthropic"} onClick={() => changeProvider("anthropic")}>
+                    Anthropic Claude
+                  </button>
+                </div>
+              </Field>
+
+              <div className="ai-connection-two-col">
+                <Field label="Provider URL" className="ai-compact-field">
+                  <Input className="ai-compact-input" value={settings.baseUrl} onChange={(event) => updateSetting("baseUrl", event.target.value)} placeholder="https://api.openai.com/v1" />
+                </Field>
+                <Field label="Model" className="ai-compact-field">
+                  <Input className="ai-compact-input" value={settings.model} onChange={(event) => updateSetting("model", event.target.value)} placeholder="gpt-4o-mini" />
+                </Field>
+              </div>
+
+              <Field label="API key" className="ai-compact-field">
+                <Input className="ai-compact-input" type="password" value={settings.apiKey} onChange={(event) => updateSetting("apiKey", event.target.value)} placeholder="sk-..." autoComplete="off" />
+              </Field>
+
+              <Field label="Mode" className="ai-mode-field ai-compact-field">
+                <div className="ai-segmented-control ai-segmented-control-three ai-segmented-control-tight" role="group" aria-label="AI run mode">
+                  <button type="button" aria-pressed={settings.executeMode === "plan"} onClick={() => updateSetting("executeMode", "plan")}>
+                    Plan only
+                  </button>
+                  <button type="button" aria-pressed={settings.executeMode === "read"} onClick={() => updateSetting("executeMode", "read")}>
+                    Auto checks
+                  </button>
+                  <button type="button" aria-pressed={settings.executeMode === "write"} onClick={() => updateSetting("executeMode", "write")}>
+                    Safe writes
+                  </button>
+                </div>
+              </Field>
+
+              <div className="ai-connection-action-row">
+                <label className="ai-remember-key ai-remember-key-compact">
+                  <input
+                    type="checkbox"
+                    checked={settings.rememberKey}
+                    onChange={(event) => updateSetting("rememberKey", event.target.checked)}
+                  />
+                  <span>Remember key</span>
+                </label>
+                <Button type="button" size="sm" variant="outlinePrimary" onClick={testConnection} disabled={testing || !settings.apiKey || !settings.model || !settings.baseUrl}>
+                  <KeyRound size={14} />
+                  {testing ? "Testing" : "Test"}
+                </Button>
+              </div>
+            </div>
+          </section>
+        </Modal>
+      ) : null}
 
       <section className="ai-workspace">
         <section className="ai-terminal-panel">

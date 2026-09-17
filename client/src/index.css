@@ -885,6 +885,27 @@
     @apply w-full min-w-0;
   }
 
+
+  .ai-connection-summary-card {
+    @apply page-panel grid gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center;
+  }
+
+  .ai-connection-summary-main {
+    @apply flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between;
+  }
+
+  .ai-connection-pills {
+    @apply flex min-w-0 flex-wrap items-center gap-1.5;
+  }
+
+  .ai-connection-summary-actions {
+    @apply flex shrink-0 items-center justify-start lg:justify-end;
+  }
+
+  .ai-connection-modal-body {
+    @apply py-3;
+  }
+
   .ai-setup-card {
     @apply page-panel p-3;
   }
@@ -927,6 +948,112 @@
 
   .ai-remember-key input {
     @apply shrink-0;
+  }
+
+
+  .ai-setup-card-modal {
+    @apply border-border/70 bg-surface-2/40 shadow-none;
+  }
+
+  .ai-setup-grid-modal {
+    @apply mt-0 md:grid-cols-6 lg:grid-cols-6;
+  }
+
+  .ai-setup-grid-modal .ai-provider-field,
+  .ai-setup-grid-modal .ai-url-field,
+  .ai-setup-grid-modal .ai-mode-field {
+    @apply md:col-span-6 lg:col-span-6 xl:col-span-6;
+  }
+
+  .ai-setup-grid-modal .ai-model-field,
+  .ai-setup-grid-modal .ai-key-field {
+    @apply md:col-span-3 lg:col-span-3 xl:col-span-3;
+  }
+
+  .ai-setup-grid-modal .ai-remember-key {
+    @apply md:col-span-6 lg:col-span-6 xl:col-span-6;
+  }
+
+  .ai-segmented-control {
+    @apply grid gap-1 rounded-xl border border-border/70 bg-bg/60 p-1 sm:grid-cols-2;
+  }
+
+  .ai-segmented-control-three {
+    @apply sm:grid-cols-3;
+  }
+
+  .ai-segmented-control button {
+    @apply min-h-9 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold text-text-3 transition hover:bg-surface/70 hover:text-text-1;
+  }
+
+  .ai-segmented-control button[aria-pressed="true"] {
+    @apply bg-surface text-text-1 shadow-sm ring-1 ring-brand-500/20;
+  }
+
+  .ai-connection-dialog {
+    @apply max-w-xl rounded-2xl p-3;
+  }
+
+  .ai-connection-dialog .panel-heading {
+    @apply text-base;
+  }
+
+  .ai-connection-dialog .panel-muted {
+    @apply text-xs;
+  }
+
+  .ai-connection-modal-body {
+    @apply py-2;
+  }
+
+  .ai-connection-modal-card {
+    @apply rounded-xl border border-border/70 bg-surface-2/50 p-2.5 shadow-none;
+  }
+
+  .ai-connection-modal-status {
+    @apply mb-2 flex min-w-0 flex-wrap items-center gap-1.5;
+  }
+
+  .ai-connection-compact-stack {
+    @apply grid gap-2;
+  }
+
+  .ai-connection-two-col {
+    @apply grid gap-2 md:grid-cols-2;
+  }
+
+  .ai-key-row {
+    @apply grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end;
+  }
+
+  .ai-key-row-input {
+    @apply min-w-0;
+  }
+
+  .ai-compact-field {
+    @apply space-y-1;
+  }
+
+  .ai-compact-field label,
+  .ai-compact-field > label,
+  .ai-compact-field > label > span {
+    @apply text-xs;
+  }
+
+  .ai-compact-input {
+    @apply min-h-9 rounded-lg px-2.5 py-1.5 text-xs;
+  }
+
+  .ai-segmented-control-tight {
+    @apply gap-1 rounded-lg p-1;
+  }
+
+  .ai-segmented-control-tight button {
+    @apply min-h-8 rounded-md px-2 py-1 text-[11px];
+  }
+
+  .ai-remember-key-compact {
+    @apply min-h-9 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs md:min-w-[136px];
   }
 
   .ai-workspace {
@@ -1395,5 +1522,32 @@
     .pm2-command-actions {
       justify-content: flex-start;
     }
+  }
+}
+
+@layer components {
+  .ai-connection-dialog {
+    width: min(100%, 34rem);
+  }
+
+  .ai-connection-dialog > div:first-child {
+    padding-bottom: 0.5rem;
+    gap: 0.5rem;
+  }
+
+  .ai-connection-dialog > div:last-child {
+    padding-top: 0.5rem;
+  }
+
+  .ai-connection-action-row {
+    @apply flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between;
+  }
+
+  .ai-connection-action-row .ai-remember-key-compact {
+    @apply flex-1 sm:flex-none;
+  }
+
+  .ai-connection-action-row button {
+    @apply shrink-0;
   }
 }

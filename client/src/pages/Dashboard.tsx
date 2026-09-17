@@ -44,6 +44,82 @@ function durationLabel(ms) {
   return `${minutes}m`;
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForDashboardReadyAfterDeferredAction(timeoutMs = 70000) {
+  const started = Date.now();
+  let lastError = null;
+
+  // Give PM2 a moment to perform deferred self-actions before checking readiness.
+  await sleep(1800);
+
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const response = await fetch(`/ready?_=${Date.now()}`, {
+        cache: "no-store",
+        credentials: "same-origin"
+      });
+      if (response.ok) {
+        return true;
+      }
+      lastError = new Error(`Readiness returned ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+
+    await sleep(1500);
+  }
+
+  throw new Error(lastError?.message || "Dashboard did not become ready again");
+}
+
+
+function formatTaskDuration(ms) {
+  const value = Number(ms || 0);
+  if (!Number.isFinite(value) || value <= 0) {
+    return "just now";
+  }
+  const seconds = Math.max(1, Math.round(value / 1000));
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remaining = seconds % 60;
+  return remaining > 0 ? `${minutes}m ${remaining}s` : `${minutes}m`;
+}
+
+function taskResultDescription(result) {
+  const data = result?.data || {};
+  const rows = [
+    data.command ? `Command: ${data.command}` : "",
+    data.cwd ? `Path: ${data.cwd}` : "",
+    data.durationMs ? `Finished in ${formatTaskDuration(data.durationMs)}` : ""
+  ].filter(Boolean);
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="task-toast-body">
+      {rows.map((row) => (
+        <span key={row}>{row}</span>
+      ))}
+    </div>
+  );
+}
+
+function taskErrorDescription(error, fallback = "Check the process logs for details.") {
+  const message = getErrorMessage(error, fallback);
+  return (
+    <div className="task-toast-body">
+      <span>{message}</span>
+    </div>
+  );
+}
+
 const SENSITIVE_ENV_KEY_PATTERN = /(pass(word)?|secret|token|api[_-]?key|private|credential|auth|pwd)/i;
 
 function isSensitiveEnvKey(key) {
@@ -502,18 +578,25 @@ export default function Dashboard() {
       }[action] || action;
 
       if (action === "gitPull") {
-        const result = await handlers[action](name);
+        const result = await toast.promise(
+          handlers[action](name).then((response) => {
+            if (!response.success && !response?.data?.requiresConfirmation) {
+              throw new Error(response.error || "Failed to git pull");
+            }
+            return response;
+          }),
+          {
+            loading: `Git pull running for ${name}...`,
+            success: `Git pull finished for ${name}`,
+            error: (error) => getErrorMessage(error, "Failed to git pull")
+          }
+        );
+
         if (result?.data?.requiresConfirmation) {
           openGitPullConfirmation(name, result.data);
           return false;
         }
 
-        if (!result.success) {
-          toast.error(result.error || "Failed to git pull");
-          return false;
-        }
-
-        toast.success(`Git pull completed for ${name}`);
         refreshCatalog();
         if (selectedProcess?.name === name) {
           const latest = processes.find((item) => item.name === name) || selectedProcess;
@@ -522,19 +605,58 @@ export default function Dashboard() {
         return true;
       }
 
-      await toast.promise(
-        handlers[action](name).then((result) => {
-          if (!result.success) {
-            throw new Error(result.error || `Failed to ${action}`);
-          }
-          return result;
-        }),
-        {
-          loading: `${actionLabel} in progress...`,
-          success: `${actionLabel} completed for ${name}`,
-          error: (error) => getErrorMessage(error, `Failed to ${action}`)
+      const actionRequest = handlers[action](name).then(async (result) => {
+        if (!result.success) {
+          throw new Error(result.error || `Failed to ${action}`);
         }
-      );
+
+        if (result?.data?.deferred) {
+          await waitForDashboardReadyAfterDeferredAction();
+        }
+
+        return result;
+      });
+
+      if (action === "npmBuild" || action === "npmInstall") {
+        await toast.promise(
+          actionRequest,
+          {
+            loading: `${actionLabel} running for ${name}...`,
+            success: (result) => `${actionLabel} finished for ${name}`,
+            error: (error) => getErrorMessage(error, `${actionLabel} failed for ${name}`)
+          },
+          {
+            preset: "smooth",
+            showProgress: true,
+            description: {
+              loading: (
+                <div className="task-toast-body">
+                  <span>Waiting for npm to return.</span>
+                  <span>This toast updates only when the server returns done or error.</span>
+                </div>
+              ),
+              success: (result) => taskResultDescription(result),
+              error: (error) => taskErrorDescription(error, "Open logs for the full npm output.")
+            },
+            action: {
+              error: {
+                label: "Open logs",
+                onClick: () => navigate(`/dashboard/logs?process=${encodeURIComponent(name)}`),
+                successLabel: "Opening"
+              }
+            }
+          }
+        );
+      } else {
+        await toast.promise(
+          actionRequest,
+          {
+            loading: `${actionLabel} running for ${name}...`,
+            success: `${actionLabel} finished for ${name}`,
+            error: (error) => getErrorMessage(error, `Failed to ${action}`)
+          }
+        );
+      }
       refreshCatalog();
       if (selectedProcess?.name === name) {
         const latest = processes.find((item) => item.name === name) || selectedProcess;
@@ -556,13 +678,24 @@ export default function Dashboard() {
     if (action === "gitPull") {
       try {
         setLoadingAction((prev) => ({ ...prev, [`${name}:gitPullCheck`]: true }));
-        const statusResult = await processApi.gitStatus(name);
-        if (statusResult?.success && statusResult.data?.dirty) {
+        const statusResult = await toast.promise(
+          processApi.gitStatus(name).then((response) => {
+            if (!response.success) {
+              throw new Error(response.error || "Unable to check Git changes");
+            }
+            return response;
+          }),
+          {
+            loading: `Checking Git changes for ${name}...`,
+            success: `Git check finished for ${name}`,
+            error: (error) => getErrorMessage(error, "Unable to check Git changes")
+          }
+        );
+        if (statusResult?.data?.dirty) {
           openGitPullConfirmation(name, statusResult.data);
           return false;
         }
-      } catch (error) {
-        toast.error(getErrorMessage(error, "Unable to check Git changes"));
+      } catch (_error) {
         return false;
       } finally {
         setLoadingAction((prev) => ({ ...prev, [`${name}:gitPullCheck`]: false }));
@@ -729,15 +862,24 @@ export default function Dashboard() {
 
     try {
       const result = await toast.promise(
-        processApi.bulkAction(action, names).then((response) => {
+        processApi.bulkAction(action, names).then(async (response) => {
           if (!response || (!response.success && !response.data)) {
             throw new Error(response?.error || `Failed to ${action} selected processes`);
           }
+
+          const mayRestartDashboard = action === "restart" && names.some((item) => (
+            String(item || "").toLowerCase().includes("pm2-dashboard") ||
+            String(item || "").toLowerCase().includes("pm2-manager")
+          ));
+          if (mayRestartDashboard) {
+            await waitForDashboardReadyAfterDeferredAction();
+          }
+
           return response;
         }),
         {
           loading: `${actionLabel} ${names.length} process${names.length === 1 ? "" : "es"}...`,
-          success: `${actionLabel} request finished`,
+          success: `${actionLabel} finished`,
           error: (error) => getErrorMessage(error, `Failed to ${action} selected processes`)
         }
       );

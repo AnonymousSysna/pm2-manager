@@ -16,14 +16,22 @@ const toast = {
     const promise =
       typeof promiseOrFactory === "function"
         ? Promise.resolve().then(promiseOrFactory)
-        : promiseOrFactory;
+        : Promise.resolve(promiseOrFactory);
 
-    return gooeyToast.promise(promise, {
-      loading: messages?.loading || "Working...",
-      success: messages?.success || "Completed",
-      error: messages?.error || ((error) => getErrorMessage(error)),
-      ...(options || {})
-    });
+    // Goey returns a toast handle/id for some versions. Dashboard actions need the
+    // actual async result so buttons stay busy until the server finishes.
+    try {
+      gooeyToast.promise(promise, {
+        loading: messages?.loading || "Working...",
+        success: messages?.success || "Completed",
+        error: messages?.error || ((error) => getErrorMessage(error)),
+        ...(options || {})
+      });
+    } catch (_error) {
+      // Never let a notification failure break the operation itself.
+    }
+
+    return promise;
   }
 };
 
