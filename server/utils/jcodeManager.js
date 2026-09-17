@@ -2,6 +2,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const net = require("net");
+const http = require("http");
 const { spawn } = require("child_process");
 const permissionHints = require("./permissionHints.js");
 const withPermissionHint = typeof permissionHints?.withPermissionHint === "function"
@@ -11,6 +12,45 @@ const withPermissionHint = typeof permissionHints?.withPermissionHint === "funct
 const COMMAND_TIMEOUT_MS = Number.isFinite(Number(process.env.COMMAND_TIMEOUT_MS))
   ? Math.max(5000, Math.floor(Number(process.env.COMMAND_TIMEOUT_MS)))
   : 5 * 60 * 1000;
+
+let ptyLibrary = null;
+let ptyLibraryChecked = false;
+let ptyLibraryError = null;
+
+// jcode is a full-screen terminal UI: it needs a real pseudo-terminal, not plain
+// pipes. Without a PTY it cannot enter raw mode, so `/login` prompts and the chat
+// composer silently swallow input. node-pty provides ConPTY on Windows and
+// forkpty on Linux/macOS, so the browser terminal can host the genuine TUI.
+function loadPtyLibrary() {
+  if (ptyLibraryChecked) {
+    return ptyLibrary;
+  }
+  ptyLibraryChecked = true;
+
+  if (isTruthy(process.env.JCODE_DISABLE_PTY)) {
+    ptyLibraryError = "Disabled by JCODE_DISABLE_PTY";
+    return null;
+  }
+
+  try {
+    // eslint-disable-next-line global-require
+    ptyLibrary = require("node-pty");
+  } catch (error) {
+    ptyLibrary = null;
+    ptyLibraryError = error?.message || String(error);
+  }
+
+  return ptyLibrary;
+}
+
+function getPtyAvailability() {
+  const library = loadPtyLibrary();
+  return {
+    available: Boolean(library),
+    backend: library ? "node-pty" : null,
+    error: library ? null : ptyLibraryError
+  };
+}
 
 const INSTALL_TIMEOUT_MS = Number.isFinite(Number(process.env.JCODE_INSTALL_TIMEOUT_MS))
   ? Math.max(30_000, Math.floor(Number(process.env.JCODE_INSTALL_TIMEOUT_MS)))
@@ -489,6 +529,97 @@ function sanitizeOutput(value) {
 }
 
 
+function getJcodeConfigPath() {
+  const homeDir = getHomeDir();
+  if (!homeDir) {
+    return null;
+  }
+  return path.join(process.env.JCODE_HOME || path.join(homeDir, ".jcode"), "config.toml");
+}
+
+// The gateway (HTTP /health, POST /pair, ws /ws) is opt-in through
+// [gateway] enabled = true in the JCode config, so PM2 Manager has to read the
+// real config instead of assuming the daemon exposes it.
+function readJcodeGatewayConfig() {
+  const configPath = getJcodeConfigPath();
+  if (!configPath) {
+    return { configPath: null, enabled: false, port: null, bindAddr: null };
+  }
+
+  let raw = "";
+  try {
+    raw = fs.readFileSync(configPath, "utf8");
+  } catch (_error) {
+    return { configPath, enabled: false, port: null, bindAddr: null };
+  }
+
+  const result = { configPath, enabled: false, port: null, bindAddr: null };
+  let inGatewaySection = false;
+  for (const rawLine of raw.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+    const section = line.match(/^\[([^\]]+)\]$/);
+    if (section) {
+      inGatewaySection = section[1].trim() === "gateway";
+      continue;
+    }
+    if (!inGatewaySection) {
+      continue;
+    }
+    const entry = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/);
+    if (!entry) {
+      continue;
+    }
+    const key = entry[1];
+    const value = entry[2].trim().replace(/^["']|["']$/g, "");
+    if (key === "enabled") {
+      result.enabled = isTruthy(value);
+    } else if (key === "port") {
+      const port = Number(value);
+      result.port = Number.isInteger(port) ? port : null;
+    } else if (key === "bind_addr") {
+      result.bindAddr = value || null;
+    }
+  }
+
+  return result;
+}
+
+function probeGatewayHttp(port, timeoutMs = 1200) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (result) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(result);
+    };
+
+    const request = http.get(
+      { host: "127.0.0.1", port, path: "/health", timeout: Math.max(250, timeoutMs) },
+      (response) => {
+        let body = "";
+        response.on("data", (chunk) => {
+          body += chunk.toString("utf8").slice(0, 2000);
+        });
+        response.on("end", () => {
+          finish({ reachable: true, statusCode: response.statusCode || null, body });
+        });
+      }
+    );
+    request.on("timeout", () => {
+      request.destroy();
+      finish({ reachable: false, statusCode: null, body: "" });
+    });
+    request.on("error", () => {
+      finish({ reachable: false, statusCode: null, body: "" });
+    });
+  });
+}
+
 function getJcodeOperatorInfo() {
   let user = null;
   let uid = null;
@@ -522,9 +653,29 @@ async function getJcodeStatus() {
   const binaryPath = await resolveJcodeBinary();
   const installed = Boolean(binaryPath);
   const state = await readState();
+  const ptyAvailability = getPtyAvailability();
+  const ptyInfo = {
+    ptySupported: ptyAvailability.available,
+    backend: ptyAvailability.available
+      ? ptyAvailability.backend
+      : process.platform === "linux"
+        ? "script-pty"
+        : "pipes",
+    error: ptyAvailability.error || null
+  };
   const gatewayPid = Number(state.gatewayPid || 0) || null;
-  const gatewayRunning = gatewayPid ? isPidRunning(gatewayPid) : false;
-  const gatewayPort = normalizePort(state.gatewayPort || process.env.JCODE_GATEWAY_PORT || 7643);
+  const gatewayConfig = readJcodeGatewayConfig();
+  const gatewayPort = normalizePort(
+    process.env.JCODE_GATEWAY_PORT || gatewayConfig.port || state.gatewayPort || 7643
+  );
+  const gatewayProbe = await probeGatewayHttp(gatewayPort, Number(process.env.JCODE_GATEWAY_PROBE_TIMEOUT_MS) || 800);
+  const gatewayPidRunning = gatewayPid ? isPidRunning(gatewayPid) : false;
+  const gatewayRunning = gatewayProbe.reachable || gatewayPidRunning;
+  const gatewayHint = gatewayProbe.reachable
+    ? null
+    : gatewayConfig.enabled
+      ? `The JCode gateway is enabled in ${gatewayConfig.configPath}, but nothing answered on port ${gatewayPort}. Restart the JCode server (jcode server reload) so it binds the gateway.`
+      : `The JCode gateway is disabled. Set [gateway] enabled = true in ${gatewayConfig.configPath} and restart the JCode server (jcode server reload).`;
 
   let version = null;
   if (installed) {
@@ -551,9 +702,14 @@ async function getJcodeStatus() {
       installSupported: ["linux", "macos", "windows"].includes(platform),
       gateway: {
         running: gatewayRunning,
-        pid: gatewayRunning ? gatewayPid : null,
+        reachable: gatewayProbe.reachable,
+        pid: gatewayPidRunning ? gatewayPid : null,
         port: gatewayPort,
-        url: getGatewayUrl(gatewayPort)
+        url: getGatewayUrl(gatewayPort),
+        configPath: gatewayConfig.configPath,
+        configEnabled: gatewayConfig.enabled,
+        bindAddr: gatewayConfig.bindAddr,
+        hint: gatewayHint
       },
       runtime: {
         dir: process.platform === "win32" ? null : getJcodeRuntimeDir(withJcodePathEnv()),
@@ -566,6 +722,7 @@ async function getJcodeStatus() {
             : "pm2-manager-default"
       },
       operator: getJcodeOperatorInfo(),
+      terminal: ptyInfo,
       lastAction: state.lastAction || null,
       lastOutput: state.lastOutput || ""
     },
@@ -663,7 +820,7 @@ async function startJcodeGateway(payload = {}) {
   }
 
   const currentState = await readState();
-  if (currentState.gatewayPid && isPidRunning(currentState.gatewayPid)) {
+  if (status.data?.gateway?.reachable) {
     return {
       success: true,
       data: {
@@ -674,7 +831,20 @@ async function startJcodeGateway(payload = {}) {
     };
   }
 
-  const port = normalizePort(payload.port || process.env.JCODE_GATEWAY_PORT || 7643);
+  const port = normalizePort(
+    payload.port || process.env.JCODE_GATEWAY_PORT || status.data?.gateway?.port || 7643
+  );
+  const gatewayConfig = readJcodeGatewayConfig();
+  if (!gatewayConfig.enabled) {
+    // Starting a daemon cannot expose the gateway while [gateway] enabled = false,
+    // so report the real blocker instead of launching a process that cannot work.
+    return {
+      success: false,
+      data: null,
+      error: `The JCode gateway is disabled. Set [gateway] enabled = true in ${gatewayConfig.configPath} and restart the JCode server (jcode server reload), then reload this page.`
+    };
+  }
+
   const serverName = String(payload.serverName || process.env.JCODE_SERVER_NAME || "pm2-manager").trim() || "pm2-manager";
   const binaryPath = await resolveJcodeBinary();
   if (!binaryPath) {
@@ -686,6 +856,7 @@ async function startJcodeGateway(payload = {}) {
   }
 
   const args = ["serve", "--server-name", serverName];
+  let stdout = "";
   const child = spawn(binaryPath, args, {
     cwd: process.env.JCODE_WORKING_DIR || process.cwd(),
     env: withJcodePathEnv({
@@ -693,35 +864,55 @@ async function startJcodeGateway(payload = {}) {
       JCODE_GATEWAY_PORT: String(port)
     }),
     detached: true,
-    stdio: "ignore",
+    stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true
+  });
+  child.stdout?.on("data", (chunk) => {
+    stdout = `${stdout}${chunk.toString("utf8")}`.slice(-2000);
+  });
+  child.stderr?.on("data", (chunk) => {
+    stdout = `${stdout}${chunk.toString("utf8")}`.slice(-2000);
   });
   child.on("error", () => {
     // The status endpoint will surface failures on the next refresh.
   });
   child.unref();
 
+  // Give the daemon a moment to bind, then report what actually happens.
+  let reachable = false;
+  for (let attempt = 0; attempt < 12 && !reachable; attempt += 1) {
+    await sleep(250);
+    reachable = (await probeGatewayHttp(port, 500)).reachable;
+  }
+
   const nextState = {
     ...currentState,
-    gatewayPid: child.pid,
+    gatewayPid: reachable && isPidRunning(child.pid) ? child.pid : null,
     gatewayPort: port,
     lastAction: {
       action: "start-gateway",
-      ok: true,
+      ok: reachable,
       at: Date.now()
     },
-    lastOutput: `Started jcode serve with PID ${child.pid}`
+    lastOutput: reachable
+      ? `Started jcode serve with PID ${child.pid} on port ${port}`
+      : `jcode serve PID ${child.pid} did not answer on port ${port}. ${stdout.trim()}`
   };
   await writeState(nextState);
 
   const nextStatus = await getJcodeStatus();
   return {
-    success: true,
+    success: reachable,
     data: {
       alreadyRunning: false,
       status: nextStatus.data
     },
-    error: null
+    error: reachable
+      ? null
+      : `The gateway did not answer on port ${port}. ${
+          stdout.trim() ||
+          "Another JCode server may already own the runtime socket; restart it with 'jcode server reload'."
+        }`
   };
 }
 
@@ -729,6 +920,8 @@ async function stopJcodeGateway() {
   const state = await readState();
   const pid = Number(state.gatewayPid || 0);
   if (!pid || !isPidRunning(pid)) {
+    const status = await getJcodeStatus();
+    const externallyOwned = Boolean(status.data?.gateway?.reachable);
     const nextState = {
       ...state,
       gatewayPid: null,
@@ -737,14 +930,17 @@ async function stopJcodeGateway() {
         ok: true,
         at: Date.now()
       },
-      lastOutput: "JCode gateway was not running"
+      lastOutput: externallyOwned
+        ? "JCode gateway is served by a JCode server that PM2 Manager did not start"
+        : "JCode gateway was not running"
     };
     await writeState(nextState);
     return {
       success: true,
       data: {
         stopped: false,
-        status: (await getJcodeStatus()).data
+        externallyOwned,
+        status: status.data
       },
       error: null
     };
@@ -1138,6 +1334,105 @@ function resolveTerminalCwd(value) {
   }
 }
 
+// `jcode login --provider openai` style invocations can be spawned directly
+// instead of through a shell, which keeps exit codes and signal handling clean.
+// Quoted arguments are ambiguous to split safely, so those fall back to a shell.
+function parseJcodeInvocation(commandText) {
+  const normalized = String(commandText || "").trim();
+  if (!isJcodeTerminalCommand(normalized) || /["']/.test(normalized)) {
+    return null;
+  }
+  return normalized.split(/\s+/).filter(Boolean).slice(1);
+}
+
+// Uniform handle the socket bridge drives, whether the process is backed by a
+// real pseudo-terminal (node-pty) or the legacy pipe/`script` bridge.
+function createPtySession(ptyProcess) {
+  return {
+    kind: "pty",
+    backend: "node-pty",
+    pid: ptyProcess.pid,
+    pty: true,
+    write(data) {
+      try {
+        ptyProcess.write(data);
+      } catch (_error) {
+        // The PTY may already be closed.
+      }
+    },
+    resize(cols, rows) {
+      try {
+        ptyProcess.resize(cols, rows);
+      } catch (_error) {
+        // Resizing after exit is a no-op.
+      }
+    },
+    kill() {
+      try {
+        ptyProcess.kill();
+      } catch (_error) {
+        // Already exited.
+      }
+    },
+    onData(handler) {
+      ptyProcess.onData(handler);
+    },
+    onError() {
+      // node-pty surfaces failures through onExit.
+    },
+    onExit(handler) {
+      ptyProcess.onExit(({ exitCode, signal }) => handler(exitCode ?? null, signal ?? null));
+    }
+  };
+}
+
+function createChildProcessSession(child, { pty = false, backend = "pipes" } = {}) {
+  return {
+    kind: "child",
+    backend,
+    pid: child.pid,
+    pty,
+    write(data) {
+      try {
+        child.stdin?.write(data);
+      } catch (_error) {
+        // The child may have exited.
+      }
+    },
+    resize() {
+      // Pipe-backed sessions cannot be resized after spawn.
+    },
+    kill() {
+      try {
+        if (!child.killed) {
+          child.kill("SIGTERM");
+        }
+      } catch (_error) {
+        // Best-effort cleanup.
+      }
+    },
+    forceKill() {
+      try {
+        if (!child.killed) {
+          child.kill("SIGKILL");
+        }
+      } catch (_error) {
+        // Windows does not support SIGKILL; best effort only.
+      }
+    },
+    onData(handler) {
+      child.stdout?.on("data", (chunk) => handler(chunk.toString("utf8")));
+      child.stderr?.on("data", (chunk) => handler(chunk.toString("utf8")));
+    },
+    onError(handler) {
+      child.on("error", handler);
+    },
+    onExit(handler) {
+      child.on("close", (code, signal) => handler(code, signal || null));
+    }
+  };
+}
+
 async function createJcodeTerminalProcess(payload = {}) {
   const binaryPath = await resolveJcodeBinary();
   if (!binaryPath) {
@@ -1259,14 +1554,65 @@ async function createJcodeTerminalProcess(payload = {}) {
     prelude = socketPath ? `Starting JCode directly with runtime socket ${socketPath}.` : "Starting JCode directly.";
   }
 
+  // Preferred path: a real pseudo-terminal. jcode is a full-screen TUI, so this is
+  // what makes `/login` prompts, slash commands, chat input, arrow keys, and resize
+  // work in the browser exactly like a native terminal.
+  const ptyLibrary = loadPtyLibrary();
+  if (ptyLibrary) {
+    let target = null;
+    if (requestedCommand) {
+      const directArgs = parseJcodeInvocation(requestedCommand);
+      target = directArgs ? { command: binaryPath, args: directArgs } : buildShellSpawn(commandText);
+    } else {
+      target = { command: binaryPath, args };
+    }
+
+    try {
+      const ptyProcess = ptyLibrary.spawn(target.command, target.args, {
+        name: "xterm-256color",
+        cols,
+        rows,
+        cwd,
+        env: { ...env, TERM: "xterm-256color" },
+        conptyInheritCursor: false
+      });
+
+      return {
+        success: true,
+        session: createPtySession(ptyProcess),
+        error: null,
+        meta: {
+          pid: ptyProcess.pid,
+          pty: true,
+          backend: "node-pty",
+          command: label || commandText || "jcode",
+          cwd,
+          rows,
+          cols,
+          mode: requestedCommand ? "command" : mode,
+          prelude,
+          socketPath,
+          customCommand: Boolean(requestedCommand && !isJcodeTerminalCommand(requestedCommand)),
+          operator: getJcodeOperatorInfo()
+        }
+      };
+    } catch (error) {
+      // Fall through to the legacy bridge so the operator still gets a session and
+      // a visible reason instead of a dead terminal.
+      prelude = [
+        prelude,
+        `PTY launch failed (${error?.message || "unknown error"}); falling back to the pipe bridge.`
+      ].filter(Boolean).join("\n");
+    }
+  }
+
   let command;
   let spawnArgs;
   let pty = false;
 
-  // JCode is a terminal UI. On Linux, util-linux `script` gives it a real pseudo-terminal
-  // without adding a native node-pty dependency to PM2 Manager. The browser sends raw
-  // keystrokes into this PTY, so commands such as `jcode login` and password/API-key
-  // prompts work like a normal terminal session.
+  // Legacy bridge for hosts without node-pty. On Linux, util-linux `script` still
+  // gives the child a real pseudo-terminal; everywhere else this degrades to pipes,
+  // where interactive TUIs cannot render or accept input.
   const scriptPath = process.platform === "linux" ? await commandPath("script") : null;
   if (scriptPath) {
     pty = true;
@@ -1292,11 +1638,12 @@ async function createJcodeTerminalProcess(payload = {}) {
 
     return {
       success: true,
-      child,
+      session: createChildProcessSession(child, { pty, backend: pty ? "script-pty" : "pipes" }),
       error: null,
       meta: {
         pid: child.pid,
         pty,
+        backend: pty ? "script-pty" : "pipes",
         command: label || commandText || "jcode",
         cwd,
         rows,
@@ -1311,7 +1658,7 @@ async function createJcodeTerminalProcess(payload = {}) {
   } catch (error) {
     return {
       success: false,
-      child: null,
+      session: null,
       error: error?.message || "Unable to start JCode terminal"
     };
   }
@@ -1327,5 +1674,6 @@ module.exports = {
   withJcodePathEnv,
   createJcodeTerminalProcess,
   getJcodeRuntimeDir,
-  getJcodeSocketPath
+  getJcodeSocketPath,
+  getPtyAvailability
 };

@@ -4,6 +4,12 @@ const { logger } = require("../utils/logger");
 const MAX_INPUT_CHARS = 12000;
 const sessions = new Map();
 
+// PTY payloads are already CRLF-terminated, but bridge/system lines are not, so
+// every message the client renders uses explicit CRLF to stay column aligned.
+function toTerminalText(value) {
+  return String(value || "").replace(/\r?\n/g, "\r\n");
+}
+
 function normalizeInput(value) {
   return String(value || "").slice(0, MAX_INPUT_CHARS);
 }
@@ -21,6 +27,7 @@ function emitSessionStatus(socket, session = null) {
     running: Boolean(session),
     pid: session?.pid || null,
     pty: Boolean(session?.pty),
+    backend: session?.backend || null,
     command: session?.command || null,
     cwd: session?.cwd || null,
     socketPath: session?.socketPath || null,
@@ -33,6 +40,17 @@ function emitSessionStatus(socket, session = null) {
   });
 }
 
+function emitOutput(socket, data, stream = "pty") {
+  if (!data) {
+    return;
+  }
+  socket.emit("jcode:terminal:output", {
+    stream,
+    data: String(data),
+    timestamp: Date.now()
+  });
+}
+
 function stopSession(socket, reason = "stopped") {
   const session = sessions.get(socket.id);
   if (!session) {
@@ -41,19 +59,15 @@ function stopSession(socket, reason = "stopped") {
   }
 
   sessions.delete(socket.id);
+
+  const handle = session.handle;
   try {
-    if (!session.child.killed) {
-      session.child.kill("SIGTERM");
-      setTimeout(() => {
-        try {
-          if (!session.child.killed) {
-            session.child.kill("SIGKILL");
-          }
-        } catch (_error) {
-          // Best-effort cleanup.
-        }
-      }, 1500).unref?.();
-    }
+    handle.kill();
+    const forceKill = typeof handle.forceKill === "function"
+      ? () => handle.forceKill()
+      // PTY children close with the terminal; a second kill is harmless.
+      : () => handle.kill();
+    setTimeout(forceKill, 1500).unref?.();
   } catch (_error) {
     // Process may already be gone.
   }
@@ -69,22 +83,22 @@ function stopSession(socket, reason = "stopped") {
 
 function registerJcodeTerminal(io) {
   io.on("connection", (socket) => {
-    socket.on("jcode:terminal:start", async (payload = {}) => {
+    socket.on("jcode:terminal:start", async (payload: any = {}) => {
       const existing = sessions.get(socket.id);
       if (existing) {
         emitSessionStatus(socket, existing);
         return;
       }
 
-      const rows = normalizeSize(payload?.rows, 30, 12, 80);
-      const cols = normalizeSize(payload?.cols, 100, 40, 240);
+      const rows = normalizeSize(payload?.rows, 30, 12, 200);
+      const cols = normalizeSize(payload?.cols, 100, 20, 400);
       const result = await createJcodeTerminalProcess({
         ...payload,
         rows,
         cols
       });
 
-      if (!result.success || !result.child) {
+      if (!result.success || !result.session) {
         socket.emit("jcode:terminal:error", {
           error: result.error || "Unable to start JCode session",
           timestamp: Date.now()
@@ -93,12 +107,13 @@ function registerJcodeTerminal(io) {
         return;
       }
 
-      const child = result.child;
+      const handle = result.session;
       const meta = result.meta || {};
       const session = {
-        child,
-        pid: meta.pid || child.pid,
+        handle,
+        pid: meta.pid || handle.pid,
         pty: Boolean(meta.pty),
+        backend: meta.backend || handle.backend || null,
         command: meta.command || "jcode",
         cwd: meta.cwd || null,
         socketPath: meta.socketPath || null,
@@ -112,36 +127,22 @@ function registerJcodeTerminal(io) {
       sessions.set(socket.id, session);
 
       if (meta.prelude) {
-        socket.emit("jcode:terminal:output", {
-          stream: "system",
-          data: `${meta.prelude}\n`,
-          timestamp: Date.now()
-        });
+        emitOutput(socket, `${toTerminalText(meta.prelude)}\r\n`, "system");
       }
-      socket.emit("jcode:terminal:output", {
-        stream: "system",
-        data: `Connected to ${session.command}${session.pty ? " through a server PTY" : ""}.\n`,
-        timestamp: Date.now()
-      });
+      emitOutput(
+        socket,
+        toTerminalText(
+          `Connected to ${session.command} through a ${session.backend || "server"} terminal.\r\n`
+        ),
+        "system"
+      );
       emitSessionStatus(socket, session);
 
-      child.stdout?.on("data", (chunk) => {
-        socket.emit("jcode:terminal:output", {
-          stream: "stdout",
-          data: chunk.toString("utf8"),
-          timestamp: Date.now()
-        });
+      handle.onData((chunk) => {
+        emitOutput(socket, chunk, "pty");
       });
 
-      child.stderr?.on("data", (chunk) => {
-        socket.emit("jcode:terminal:output", {
-          stream: "stderr",
-          data: chunk.toString("utf8"),
-          timestamp: Date.now()
-        });
-      });
-
-      child.on("error", (error) => {
+      handle.onError?.((error) => {
         logger.error("jcode_terminal_error", { error: error?.message || String(error) });
         socket.emit("jcode:terminal:error", {
           error: error?.message || "JCode terminal error",
@@ -149,9 +150,9 @@ function registerJcodeTerminal(io) {
         });
       });
 
-      child.on("close", (code, signal) => {
+      handle.onExit((code, signal) => {
         const current = sessions.get(socket.id);
-        if (current?.child === child) {
+        if (current?.handle === handle) {
           sessions.delete(socket.id);
         }
         socket.emit("jcode:terminal:exit", {
@@ -163,31 +164,23 @@ function registerJcodeTerminal(io) {
       });
     });
 
-    socket.on("jcode:terminal:input", (payload = {}) => {
+    socket.on("jcode:terminal:input", (payload: any = {}) => {
       const session = sessions.get(socket.id);
       const data = normalizeInput(payload?.data);
       if (!session || !data) {
         return;
       }
-      try {
-        session.child.stdin?.write(data);
-      } catch (error) {
-        socket.emit("jcode:terminal:error", {
-          error: error?.message || "Unable to send input to JCode",
-          timestamp: Date.now()
-        });
-      }
+      session.handle.write(data);
     });
 
-    socket.on("jcode:terminal:resize", (payload = {}) => {
+    socket.on("jcode:terminal:resize", (payload: any = {}) => {
       const session = sessions.get(socket.id);
       if (!session) {
         return;
       }
-      // The lightweight PTY wrapper cannot resize after spawn, but keeping the event
-      // means the browser side can grow without breaking the live session.
-      session.rows = normalizeSize(payload?.rows, 30, 12, 80);
-      session.cols = normalizeSize(payload?.cols, 100, 40, 240);
+      session.rows = normalizeSize(payload?.rows, session.rows || 30, 12, 200);
+      session.cols = normalizeSize(payload?.cols, session.cols || 100, 20, 400);
+      session.handle.resize(session.cols, session.rows);
     });
 
     socket.on("jcode:terminal:stop", () => {

@@ -8,6 +8,7 @@ import { Clipboard, Code2, ExternalLink, Play, Power, RefreshCw, ShieldCheck, Sm
 import { jcode as jcodeApi } from "../api";
 import toast, { getErrorMessage } from "../lib/toast";
 import Badge from "../components/ui/Badge";
+import Banner from "../components/ui/Banner";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
 import InsetPanel from "../components/ui/InsetPanel";
@@ -121,10 +122,12 @@ export default function JCode() {
   }, [jcodeEnvName, jcodeModel, jcodeProvider, jcodeProviderUrl]);
 
   const writeTerminalOutput = (chunk) => {
-    const text = String(chunk || "").replace(/\r?\n/g, "\r\n");
+    const text = String(chunk || "");
     if (!text) {
       return;
     }
+    // The server bridge normalizes line endings and forwards raw PTY bytes, so
+    // writing verbatim keeps ANSI escapes and cursor moves intact.
     terminalRef.current?.write(text);
   };
 
@@ -199,9 +202,19 @@ export default function JCode() {
         });
       }
     };
+
+    // The panel is resizable (and collapses on small screens), so a ResizeObserver
+    // keeps the PTY dimensions in sync with what xterm actually renders.
+    const resizeObserver = typeof ResizeObserver === "function"
+      ? new ResizeObserver(() => onResize())
+      : null;
+    if (resizeObserver && terminalHostRef.current) {
+      resizeObserver.observe(terminalHostRef.current);
+    }
     window.addEventListener("resize", onResize);
 
     return () => {
+      resizeObserver?.disconnect();
       window.removeEventListener("resize", onResize);
       terminalInputDisposableRef.current?.dispose?.();
       terminal.dispose();
@@ -294,7 +307,7 @@ export default function JCode() {
 
     socket.on("connect_error", (error) => {
       setTerminalState("error");
-      writeTerminalOutput(`\nConnection error: ${error?.message || "socket failed"}\n`);
+      writeTerminalOutput(`\r\nConnection error: ${error?.message || "socket failed"}\r\n`);
     });
 
     socket.on("disconnect", (reason) => {
@@ -303,7 +316,7 @@ export default function JCode() {
         setTerminalState("idle");
         setTerminalMeta(null);
         if (reason && reason !== "io client disconnect") {
-          writeTerminalOutput(`\nSocket disconnected: ${reason}\n`);
+          writeTerminalOutput(`\r\nSocket disconnected: ${reason}\r\n`);
         }
       }
     });
@@ -312,7 +325,18 @@ export default function JCode() {
       setTerminalMeta(payload || null);
       setTerminalState(payload?.running ? "running" : "idle");
       if (payload?.running) {
-        focusTerminal();
+        // Fit and report the real geometry once the PTY is live, so jcode lays the
+        // TUI out for the exact panel size the user is looking at.
+        window.requestAnimationFrame(() => {
+          fitTerminal();
+          if (terminalRef.current) {
+            socket.emit("jcode:terminal:resize", {
+              rows: terminalRef.current.rows,
+              cols: terminalRef.current.cols
+            });
+          }
+          focusTerminal();
+        });
       }
     });
 
@@ -323,14 +347,14 @@ export default function JCode() {
     socket.on("jcode:terminal:error", (payload) => {
       const message = payload?.error || "JCode terminal error";
       setTerminalState("error");
-      writeTerminalOutput(`\n${message}\n`);
+      writeTerminalOutput(`\r\n${message}\r\n`);
       toast.error(message);
     });
 
     socket.on("jcode:terminal:exit", (payload) => {
       const code = payload?.code ?? "";
       const signal = payload?.signal ? ` signal=${payload.signal}` : "";
-      writeTerminalOutput(`\nJCode session ended${code !== "" && code !== null ? ` code=${code}` : ""}${signal}.\n`);
+      writeTerminalOutput(`\r\nJCode session ended${code !== "" && code !== null ? ` code=${code}` : ""}${signal}.\r\n`);
       setTerminalState("idle");
       setTerminalMeta(null);
       socket.disconnect();
@@ -477,7 +501,7 @@ export default function JCode() {
               <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
                 <Badge tone={installed ? "success" : "warning"}>{installed ? status?.version || "Installed" : "Needs install"}</Badge>
                 <Badge tone={terminalRunning ? "success" : terminalConnecting ? "warning" : "neutral"}>{terminalRunning ? "Session live" : terminalConnecting ? "Connecting" : "No session"}</Badge>
-                {terminalMeta?.pty ? <Badge tone="success">PTY</Badge> : null}
+                {terminalMeta?.pty ? <Badge tone="success">{terminalMeta?.backend || "PTY"}</Badge> : null}
                 {operator?.isRoot ? <Badge tone="warning">Running as root</Badge> : null}
                 {customTerminalAllowed ? <Badge tone="neutral">Custom commands</Badge> : null}
               </div>
@@ -533,6 +557,15 @@ export default function JCode() {
           </InsetPanel>
         </div>
 
+        {status && status.terminal?.ptySupported === false ? (
+          <Banner tone="warning" icon={<ShieldCheck size={16} />} className="mt-3">
+            No pseudo-terminal on this server, so interactive JCode prompts such as <code>/login</code> cannot
+            receive keystrokes. Install the server dependency with{" "}
+            <code>npm --prefix server install node-pty</code> and restart PM2 Manager.
+            {status.terminal?.error ? ` (${status.terminal.error})` : ""}
+          </Banner>
+        ) : null}
+
         <div className={`jcode-terminal-shell mt-3 ${terminalFocused ? "is-focused" : ""}`}>
           <div className="jcode-terminal-toolbar">
             <span>{terminalMeta?.command || terminalCommand}</span>
@@ -574,6 +607,18 @@ export default function JCode() {
             <SubsectionTitle>Gateway</SubsectionTitle>
             <SupportingCopy size="xs">Start JCode serve, open the gateway, or pair a device.</SupportingCopy>
           </div>
+
+          <div className="flex flex-wrap gap-1.5 text-xs">
+            <Badge tone={gatewayRunning ? "success" : "neutral"}>
+              {gatewayRunning ? (status?.gateway?.reachable ? "Listening" : "Process tracked") : "Stopped"}
+            </Badge>
+            {status?.gateway?.port ? <Badge tone="neutral">port {status.gateway.port}</Badge> : null}
+            {status?.gateway?.configEnabled ? <Badge tone="neutral">config enabled</Badge> : <Badge tone="warning">config disabled</Badge>}
+          </div>
+
+          {status?.gateway && !status.gateway.reachable && status.gateway.hint ? (
+            <Banner tone="warning" icon={<ShieldCheck size={16} />}>{status.gateway.hint}</Banner>
+          ) : null}
 
           <div className="grid gap-2 md:grid-cols-[1fr_140px]">
             <label className="jcode-compact-field">
