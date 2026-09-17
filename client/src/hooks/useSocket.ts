@@ -18,6 +18,9 @@ export function SocketProvider({ children }) {
   const [monitorError, setMonitorError] = useState("");
   const [connected, setConnected] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
+  // Timestamp of the last process snapshot or delta, so surfaces can say how old
+  // the visible data is when live updates stop.
+  const [processesUpdatedAt, setProcessesUpdatedAt] = useState(null);
   const [pollInterval, setPollInterval] = useState(readPollInterval());
 
   useEffect(() => {
@@ -60,6 +63,7 @@ export function SocketProvider({ children }) {
     const handleProcessesUpdate = (data) => {
       if (Array.isArray(data)) {
         setProcesses(data);
+        setProcessesUpdatedAt(Date.now());
       }
     };
     const handleProcessesDelta = (payload) => {
@@ -77,6 +81,7 @@ export function SocketProvider({ children }) {
         }
         return Array.from(index.values());
       });
+      setProcessesUpdatedAt(Date.now());
     };
     const handleProcessLog = (payload) => {
       if (!payload?.processName) {
@@ -147,6 +152,7 @@ export function SocketProvider({ children }) {
           return;
         }
         setProcesses(result.data);
+        setProcessesUpdatedAt(Date.now());
       } catch (_error) {
         // Socket updates remain the primary source; ignore fallback polling errors.
       }
@@ -171,9 +177,20 @@ export function SocketProvider({ children }) {
       createStepEvents,
       monitorError,
       connected,
-      reconnecting
+      reconnecting,
+      processesUpdatedAt
     }),
-    [processes, logsByProcess, alerts, notifications, createStepEvents, monitorError, connected, reconnecting]
+    [
+      processes,
+      logsByProcess,
+      alerts,
+      notifications,
+      createStepEvents,
+      monitorError,
+      connected,
+      reconnecting,
+      processesUpdatedAt
+    ]
   );
 
   return createElement(SocketContext.Provider, { value }, children);

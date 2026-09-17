@@ -61,6 +61,23 @@ because everything in those files ships to the browser.
   spaces. Tabs, newlines, and shell metacharacters are rejected before the value
   reaches PM2's scheduler.
 
+## Connection and freshness states
+
+- The shell badge and status strip come from one derived state in
+  `client/src/hooks/connectionState.ts`: `Live`, `Reconnecting`, or `Offline`. The
+  decision is pure, so it is tested without a socket or a clock
+  (`client/src/hooks/connectionState.test.ts`).
+- A browser with no network is reported as offline with "changes cannot be
+  saved", which is different from a reachable browser that cannot reach the
+  server ("actions are still sent"). Collapsing both into "Offline" made users
+  retry saves that could not possibly succeed.
+- Once the visible process data is older than 10s while the socket is down, the
+  strip appends "Showing data from 4m ago", so stale numbers are never mistaken
+  for live ones. The age only re-derives on a 5s timer while the connection is
+  unhealthy, so a healthy session does not re-render for a clock tick.
+- Copy comes from the shared `Banner` and `Badge` primitives, so the shell and
+  any page surface cannot disagree about what a status means.
+
 ## Recommended
 
 - Put the dashboard behind HTTPS.

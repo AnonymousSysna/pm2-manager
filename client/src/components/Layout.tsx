@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Activity, Bell, Code2, Globe, History, Menu, Plus, Puzzle, ScrollText, Settings, LogOut, Moon, Sun, X, TerminalSquare } from "lucide-react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useSocket } from "../hooks/useSocket";
+import { useConnectionState } from "../hooks/useConnectionState";
 import { auth } from "../api";
 import ErrorBoundary from "./ErrorBoundary";
-import Badge from "./ui/Badge";
+import { ConnectionBadge, ConnectionBanner } from "./ConnectionStatus";
 import Button from "./ui/Button";
 import NavItem from "./ui/NavItem";
 import { Eyebrow } from "./ui/Typography";
@@ -82,7 +82,7 @@ function NavLinks({ pathname, groups, onNavigate }) {
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { connected, reconnecting } = useSocket();
+  const connection = useConnectionState();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [theme, setTheme] = useState(localStorage.getItem("pm2_theme") === "light" ? "light" : "dark");
 
@@ -104,9 +104,9 @@ export default function Layout() {
 
   return (
     <div className="app-shell">
-      {reconnecting && (
-        <div className="sticky top-0 z-40 border-b border-warning-500/40 bg-warning-500/10 px-4 py-2 text-center text-sm text-warning-300">
-          Reconnecting. Live updates paused.
+      {connection.message && (
+        <div className="sticky top-0 z-40 px-4 pt-2" role="status">
+          <ConnectionBanner />
         </div>
       )}
       <header className="app-header">
@@ -131,9 +131,7 @@ export default function Layout() {
             >
               {theme === "light" ? <Moon size={16} /> : <Sun size={16} />}
             </Button>
-            <Badge tone={connected ? "success" : reconnecting ? "warning" : "danger"}>
-              {connected ? "Live" : reconnecting ? "Reconnecting" : "Offline"}
-            </Badge>
+            <ConnectionBadge />
           </div>
         </div>
       </header>

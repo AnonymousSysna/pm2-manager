@@ -252,7 +252,7 @@ function isSensitiveEnvKey(key) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { processes, alerts, monitorError, reconnecting } = useSocket();
+  const { processes, alerts, monitorError } = useSocket();
   const [loadingAction, setLoadingAction] = useState({});
   const [query, setQuery] = useState("");
   const [selectedProcess, setSelectedProcess] = useState(null);
@@ -1414,7 +1414,6 @@ export default function Dashboard() {
         )}
       />
 
-      {reconnecting && <Banner tone="warning">Reconnecting. Live process updates are temporarily paused.</Banner>}
       {monitorError && <Banner tone="danger">Monitor error: {monitorError}</Banner>}
 
       <OperationsOverviewPanel
