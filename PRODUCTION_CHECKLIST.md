@@ -187,8 +187,35 @@ because everything in those files ships to the browser.
 - Configure at least one alert channel before relying on the dashboard for production monitoring.
 - Run `npm run verify` before deploying changes when dependencies are installed.
 
+## Critical path payload
+
+- `npm run check:bundle` builds the client and measures every chunk the browser
+  must fetch before the first paint: the scripts `dist/index.html` references
+  plus everything they reach with a static import. It fails above 120 kB gzip,
+  and fails when a reachable chunk carries a dependency that has to stay
+  deferred (the toast stack, which vendors sonner and motion).
+- The measured total is 100.3 kB gzip, down from 157.2 kB. The budget leaves room
+  for features and none for the 57 kB regression, which is otherwise invisible in
+  review: one static `import "goey-toast"` puts it all back.
+- Dynamic imports are deliberately not counted, because they are a fetch on
+  demand. `goey-toast` is 60 kB gzip and no longer eager, so
+  `client/src/lib/toast.ts` queues any call made while it is still arriving and
+  replays it once loaded. `goey-toast/styles.css` stays a static import, since
+  the toaster renders before the module resolves and must not flash unstyled.
+- The rule for a heavy dependency: it is on the critical path only if the first
+  paint needs it. A toast cannot appear before the user does something.
+
 ## Accessibility
 
+- Every control on a rendered page has an accessible name.
+  `client/src/test/accessibleName.ts` defines what counts (`aria-label`,
+  `aria-labelledby`, a real `<label>`, or visible content for buttons and
+  links; a placeholder or a title is not a name) and
+  `client/src/pages/pages.accessibleNames.test.tsx` renders seven pages, each
+  with a control floor so a page that stopped rendering cannot pass vacuously.
+- Names describe the target, not the widget: "More actions for api-server" and
+  "Select api-server", not "More" and "Select". A screen reader listing the
+  controls on the overview would otherwise read a column of identical labels.
 - `npm run check:contrast` audits every text/background pair from the design
   tokens in `client/src/index.css` for both themes. It is part of `npm run
   verify`, so a token change that lowers small-text contrast below WCAG AA
