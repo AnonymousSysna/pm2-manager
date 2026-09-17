@@ -1,6 +1,18 @@
 import Button from "../ui/Button";
 
-export default function GitPullConfirmToastBody({ data = {}, onCancel, onAccept }) {
+type GitPullConfirmData = {
+  changedFiles?: unknown;
+  totalChanged?: number | string | null;
+  cwd?: string | null;
+};
+
+type GitPullConfirmToastBodyProps = {
+  data?: GitPullConfirmData;
+  onCancel?: () => void;
+  onAccept?: () => void;
+};
+
+export default function GitPullConfirmToastBody({ data = {}, onCancel, onAccept }: GitPullConfirmToastBodyProps) {
   const dirtyFiles = Array.isArray(data.changedFiles) ? data.changedFiles : [];
   const totalChanged = Number(data.totalChanged || dirtyFiles.length || 0);
   const visibleFiles = dirtyFiles.slice(0, 5);

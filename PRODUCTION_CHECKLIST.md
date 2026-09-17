@@ -123,12 +123,15 @@ because everything in those files ships to the browser.
 
 ## Type checking
 
-- `npm --prefix server run typecheck` is expected to be clean, and is the gate
-  for server changes. The client still carries a tracked backlog, so run its
-  typecheck on its own rather than through the root script: the root
-  `npm run typecheck` chains the two with `&&`, which means client errors stop
-  the run before the server is ever checked. New server errors are a
-  regression, not backlog.
+- `npm run typecheck` is expected to be clean for both projects, and is the
+  gate for every change. Both backlogs are cleared (server 190 -> 0, client
+  176 -> 0), so a new error is a regression rather than noise.
+- `npm --prefix client run typecheck:test` additionally type-checks the test
+  files, which the default client config excludes.
+- Client types are load-bearing in two places: the design-system props
+  (`components/ui`) and the live data layer (`sync/`). Both were untyped or
+  inferred before, which is how a dropped prop or a malformed socket payload
+  went unnoticed.
 - Server helpers annotate what they return instead of leaving `new Promise(...)`
   to infer `unknown`: PM2 process descriptions, command results, alert
   channels, health checks, and process metadata each have a named interface.

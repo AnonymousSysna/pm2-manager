@@ -95,7 +95,7 @@ function healthTone(state) {
 
 export default function ProcessDetailModal({ process, onClose, onAction, onViewDeployHistory, onOpenLogs }) {
   const [tab, setTab] = useState("Summary");
-  const [loadingAction, setLoadingAction] = useState({});
+  const [loadingAction, setLoadingAction] = useState<Record<string, boolean>>({});
   const [metricsPoints, setMetricsPoints] = useState([]);
   const [healthReport, setHealthReport] = useState({ points: [], summary: null });
   const [metricsLoading, setMetricsLoading] = useState(false);

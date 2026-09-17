@@ -101,7 +101,7 @@ export default function Settings() {
     } catch {}
   };
 
-  const runAction = (label, fn, confirmText) => {
+  const runAction = (label, fn, confirmText = "") => {
     if (confirmText) {
       setPendingAction({ label, fn, confirmText });
       return;

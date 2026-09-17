@@ -50,7 +50,7 @@ const pageTitleMap = {
   "/dashboard/caddy": "Caddy Proxy"
 };
 
-function NavLinks({ pathname, groups, onNavigate }) {
+function NavLinks({ pathname, groups, onNavigate = undefined }) {
   return (
     <nav className="space-y-3">
       {groups.map((group) => (

@@ -2,12 +2,13 @@ import DataLoadError from "../DataLoadError";
 import Select from "../ui/Select";
 import { PanelHeader } from "../ui/PageLayout";
 
-function toPath(points, width, height, accessor) {
+/** `accessor` turns a sample into the plotted number; the guards keep a bad sample out of the path maths. */
+function toPath(points: any[], width: number, height: number, accessor: (point: any) => number) {
   if (!Array.isArray(points) || points.length === 0) {
     return "";
   }
 
-  const values = points.map(accessor);
+  const values: number[] = points.map((point) => Number(accessor(point))).filter(Number.isFinite);
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min || 1;

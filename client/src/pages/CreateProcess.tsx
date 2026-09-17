@@ -1022,7 +1022,7 @@ function ModeButton({ active, onClick, children }) {
   );
 }
 
-function StepBadge({ active, done, children }) {
+function StepBadge({ active, done = false, children }) {
   return (
     <span
       className={[

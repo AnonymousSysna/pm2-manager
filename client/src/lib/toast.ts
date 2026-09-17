@@ -23,7 +23,7 @@ const toast = {
   show: (title, options = undefined) => gooeyToast(String(title), options),
   dismiss: (idOrFilter) => gooeyToast.dismiss(idOrFilter),
   update: (id, options) => gooeyToast.update(id, options),
-  promise: (promiseOrFactory, messages, options) => {
+  promise: (promiseOrFactory, messages, options = undefined) => {
     const promise =
       typeof promiseOrFactory === "function"
         ? Promise.resolve().then(promiseOrFactory)

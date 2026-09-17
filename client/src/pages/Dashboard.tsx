@@ -75,7 +75,7 @@ function withTimeout(promise, timeoutMs, message = "Operation timed out") {
   let timer;
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(() => {
-      const error = new Error(message);
+      const error = new Error(message) as Error & { code?: string };
       error.code = "TIMEOUT";
       reject(error);
     }, timeoutMs);
@@ -203,7 +203,22 @@ function taskErrorDescription(error, fallback = "Check the process logs for deta
   );
 }
 
-async function runVisibleActionProgress(work, messages, options = {}) {
+type ProgressMessages = {
+  loading?: string;
+  timeout?: string;
+  success?: string | ((result: any) => string);
+  error?: string | ((error: any) => string);
+};
+
+type ProgressOptions = {
+  timeoutMs?: number;
+  loadingDescription?: any;
+  successDescription?: any;
+  errorDescription?: any;
+  errorAction?: any;
+};
+
+async function runVisibleActionProgress(work: () => any, messages: ProgressMessages = {}, options: ProgressOptions = {}) {
   const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Math.max(5000, Number(options.timeoutMs)) : 90000;
   const loadingText = messages?.loading || "Working...";
   let toastId = null;
@@ -555,7 +570,8 @@ export default function Dashboard() {
     const edges = [];
     const seen = new Set();
 
-    Object.entries(processMeta || {}).forEach(([processName, meta]) => {
+    const metaEntries = Object.entries(processMeta || {}) as Array<[string, { dependencies?: unknown }]>;
+    metaEntries.forEach(([processName, meta]) => {
       const dependencies = Array.isArray(meta?.dependencies) ? meta.dependencies : [];
       dependencies.forEach((dependencyName) => {
         const from = String(processName || "").trim();
