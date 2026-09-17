@@ -624,3 +624,11 @@ https://your-domain.example:8000
 ```
 
 To avoid port collision, the app listens internally on the next port, normally `127.0.0.1:8001`, and Caddy proxies the public TLS address `https://your-domain.example:8000` to that internal app port. Leave the domain prompt blank to skip the public HTTPS setup.
+
+### Direct dashboard routes
+
+The server serves the built React app for `/`, `/dashboard`, and nested dashboard routes when `client/dist/index.html` exists. API routes remain under `/api` and `/api/v1`.
+
+### Local TypeScript setup
+
+Run `npm run setup` from the repository root after cloning. This installs the root, client, and server dependencies so VS Code can resolve `vite/client`, Vitest, Testing Library, and Node type definitions.

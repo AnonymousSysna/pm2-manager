@@ -1,3 +1,4 @@
+const fs = require("fs");
 const path = require("path");
 const http = require("http");
 const { spawn } = require("child_process");
@@ -262,23 +263,46 @@ v1.use("/system", systemRoutes);
 app.use("/api/v1", v1);
 app.use("/api", v1);
 
-if (process.env.NODE_ENV === "production") {
-  const distPath = path.resolve(__dirname, "../client/dist");
-  app.use(express.static(distPath));
+const clientDistPath = path.resolve(__dirname, "../client/dist");
+const clientIndexPath = path.join(clientDistPath, "index.html");
 
-  app.get("*", (req, res, next) => {
-    if (
-      req.path.startsWith("/api/") ||
-      req.path.startsWith("/socket.io/") ||
-      req.path === "/health" ||
-      req.path === "/ready"
-    ) {
-      next();
-      return;
-    }
-    res.sendFile(path.join(distPath, "index.html"));
-  });
+function shouldServeClientRoute(req) {
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    return false;
+  }
+
+  const routePath = String(req.path || "");
+  if (
+    routePath.startsWith("/api") ||
+    routePath.startsWith("/socket.io") ||
+    routePath === "/health" ||
+    routePath === "/ready" ||
+    routePath === "/metrics"
+  ) {
+    return false;
+  }
+
+  const accept = String(req.headers.accept || "");
+  return routePath === "/" || routePath.startsWith("/dashboard") || accept.includes("text/html");
 }
+
+if (fs.existsSync(clientIndexPath)) {
+  app.use(express.static(clientDistPath, { index: false }));
+}
+
+app.get("*", (req, res, next) => {
+  if (!shouldServeClientRoute(req)) {
+    next();
+    return;
+  }
+
+  if (!fs.existsSync(clientIndexPath)) {
+    next();
+    return;
+  }
+
+  res.sendFile(clientIndexPath);
+});
 
 const io = new Server(server, {
   cors: {
