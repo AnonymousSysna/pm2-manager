@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bot, Copy, KeyRound, Play, Send, Wrench, Zap } from "lucide-react";
+import { Bot, CheckCircle2, Copy, KeyRound, Play, Send, TerminalSquare, Wrench, Zap } from "lucide-react";
 import { aiOperator, processes as processApi } from "../api";
 import toast, { getErrorMessage } from "../lib/toast";
 import Badge from "../components/ui/Badge";
@@ -29,10 +29,10 @@ const providerBaseUrls = {
 };
 
 const suggestedPrompts = [
-  "Diagnose current dashboard",
-  "Fix build error",
-  "Check missing assets",
-  "Repair env and restart"
+  "Fix the dashboard 404 after login",
+  "Repair missing assets after deploy",
+  "Find why PM2 keeps restarting",
+  "Fix Git pull blocked by local changes"
 ];
 
 const criticalActions = ["delete", "kill-daemon", "resurrect", "startup", "unstartup", "send-signal", "update-daemon"];
@@ -51,7 +51,10 @@ const statusTone = {
   planned: "neutral",
   needs_confirmation: "warning",
   rejected: "danger",
-  failed: "danger"
+  failed: "danger",
+  done: "success",
+  running: "info",
+  blocked: "warning"
 };
 
 function loadSettings() {
@@ -84,9 +87,9 @@ function summarizeAction(action) {
   const payload = action?.payload && typeof action.payload === "object" ? action.payload : {};
   const entries = Object.entries(payload)
     .filter(([, value]) => value !== undefined && value !== null && String(value) !== "")
-    .slice(0, 4)
+    .slice(0, 3)
     .map(([key, value]) => `${key}: ${String(value)}`);
-  return entries.length ? entries.join(" · ") : "No input";
+  return entries.length ? entries.join(" · ") : "Ready to run";
 }
 
 function stringifyOutput(value) {
@@ -99,13 +102,17 @@ function stringifyOutput(value) {
   }
 }
 
+function formatStatus(value) {
+  return String(value || "planned").replace(/_/g, " ");
+}
+
 function MessageBubble({ message }) {
   const mine = message.role === "user";
   return (
     <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
       <div className={`message-bubble ${mine ? "message-bubble-user" : "message-bubble-ai"}`}>
         <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-3">
-          {mine ? "You" : "AI"}
+          {mine ? "You" : "Agent"}
         </div>
         <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
       </div>
@@ -135,7 +142,7 @@ function ExecutionCard({ execution }) {
   return (
     <InsetPanel padding="sm" className="ai-execution-card">
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-        <Badge tone={statusTone[execution.status] || "neutral"}>{String(execution.status || "planned").replace(/_/g, " ")}</Badge>
+        <Badge tone={statusTone[execution.status] || "neutral"}>{formatStatus(execution.status)}</Badge>
         <Badge tone={riskTone[execution.risk] || "neutral"}>{execution.risk || "unknown"}</Badge>
         <span className="min-w-0 truncate text-sm font-medium text-text-1">{execution.label || execution.actionId}</span>
       </div>
@@ -156,12 +163,43 @@ function CompactMetric({ label, value }) {
   );
 }
 
+function AgentThoughts({ thoughts = [] }) {
+  return (
+    <div className="ai-agent-stack">
+      {thoughts.length ? thoughts.map((thought, index) => (
+        <InsetPanel key={`${thought}-${index}`} padding="sm" className="ai-agent-thought-row">
+          <CheckCircle2 size={14} className="shrink-0 text-success-500" />
+          <span className="min-w-0 text-xs font-medium text-text-2">{thought}</span>
+        </InsetPanel>
+      )) : <InsetPanel padding="sm" className="text-sm text-text-3">No agent notes.</InsetPanel>}
+    </div>
+  );
+}
+
+function AgentLogs({ logs = [] }) {
+  return (
+    <div className="ai-agent-stack">
+      {logs.length ? logs.map((log, index) => (
+        <InsetPanel key={`${log.title || log.step || "log"}-${index}`} padding="sm" className="ai-agent-log-row">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <Badge tone={statusTone[log.status] || (log.level === "error" ? "danger" : log.level === "warning" ? "warning" : "neutral")}>{log.status || log.level || "info"}</Badge>
+            <span className="min-w-0 truncate text-sm font-semibold text-text-1">{log.title || log.step || "Agent log"}</span>
+          </div>
+          {log.message ? <p className="text-xs text-text-3">{log.message}</p> : null}
+          {log.command ? <code className="block truncate rounded-md border border-border/70 bg-bg/50 px-2 py-1 text-[11px] text-text-3">{log.command}</code> : null}
+          {log.output ? <Textarea readOnly value={log.output} className="min-h-[70px] font-mono text-xs" /> : null}
+        </InsetPanel>
+      )) : <InsetPanel padding="sm" className="text-sm text-text-3">No logs.</InsetPanel>}
+    </div>
+  );
+}
+
 export default function AIOperator() {
   const [settings, setSettings] = useState(loadSettings);
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      content: "Ready."
+      content: "Describe the issue. I’ll spawn an agent run."
     }
   ]);
   const [prompt, setPrompt] = useState("");
@@ -171,12 +209,11 @@ export default function AIOperator() {
   const [lastExecutions, setLastExecutions] = useState([]);
   const [lastUsage, setLastUsage] = useState(null);
   const [lastSupportContext, setLastSupportContext] = useState(null);
+  const [agentRun, setAgentRun] = useState(null);
   const [pendingAction, setPendingAction] = useState(null);
   const [runningActionId, setRunningActionId] = useState("");
-  const [sending, setSending] = useState(false);
+  const [spawning, setSpawning] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [diagnosing, setDiagnosing] = useState(false);
-  const [working, setWorking] = useState(false);
   const [connectionModalOpen, setConnectionModalOpen] = useState(false);
 
   useEffect(() => {
@@ -204,8 +241,7 @@ export default function AIOperator() {
     };
   }, []);
 
-  const busy = sending || diagnosing || working;
-  const canSend = prompt.trim() && !busy;
+  const canSpawn = prompt.trim().length >= 8 && !spawning;
   const connected = Boolean(settings.baseUrl.trim() && settings.model.trim() && settings.apiKey.trim());
 
   const updateSetting = (name, value) => {
@@ -238,90 +274,67 @@ export default function AIOperator() {
     }
   };
 
-  const runOperatorPrompt = async (text, modeOverride = settings.executeMode) => {
-    const trimmed = String(text || "").trim();
-    if (!trimmed || sending) return;
+  const spawnAgent = async (event) => {
+    event?.preventDefault?.();
+    const task = prompt.trim();
+    if (spawning) return;
+    if (task.length < 8) {
+      toast.error("Explain the task first");
+      return;
+    }
 
-    const userMessage = { role: "user", content: trimmed };
+    const userMessage = { role: "user", content: task };
     const nextMessages = [...messages, userMessage];
     setMessages(nextMessages);
     setPrompt("");
-    setSending(true);
-    if (modeOverride === "write") setWorking(true);
+    setSpawning(true);
     setLastActions([]);
     setLastExecutions([]);
+    setAgentRun({
+      status: "running",
+      task,
+      thoughts: ["Agent spawned from your request."],
+      logs: [{ level: "info", title: "Starting", message: "Collecting dashboard evidence." }]
+    });
 
     try {
       const result = await toast.promise(
-        () => aiOperator.chat({
+        () => aiOperator.agentRun({
+          task,
           provider: settings.provider,
           baseUrl: settings.baseUrl,
           apiKey: settings.apiKey,
           model: settings.model,
-          executeMode: modeOverride,
+          executeMode: settings.executeMode,
           messages: nextMessages.filter((message) => ["user", "assistant"].includes(message.role)),
           context: { processes }
         }),
         {
-          loading: modeOverride === "write" ? "AI working..." : modeOverride === "read" ? "AI checking..." : "AI planning...",
-          success: modeOverride === "write" ? "AI finished the safe work" : "AI response ready",
-          error: (error) => getErrorMessage(error, "AI request failed")
+          loading: settings.executeMode === "write" ? "Agent working..." : settings.executeMode === "read" ? "Agent checking..." : "Agent planning...",
+          success: "Agent finished",
+          error: (error) => getErrorMessage(error, "Agent failed")
         }
       );
       const data = result.data || {};
-      const assistantMessage = { role: "assistant", content: data.reply || "I prepared a response." };
+      const assistantMessage = { role: "assistant", content: data.reply || "Agent run finished." };
       setMessages((prev) => [...prev, assistantMessage]);
       setLastActions(data.actions || []);
       setLastExecutions(data.executions || []);
       setLastUsage(data.usage || null);
       setLastSupportContext(data.supportContext || null);
-      if ((data.executions || []).some((item) => ["executed", "accepted"].includes(item.status))) {
-        toast.success("AI completed approved work");
-      }
+      setAgentRun(data.agentRun || null);
     } catch (error) {
-      const message = getErrorMessage(error, "AI request failed");
+      const message = getErrorMessage(error, "Agent failed");
       setMessages((prev) => [...prev, { role: "assistant", content: message }]);
+      setAgentRun((prev) => ({
+        ...(prev || {}),
+        status: "failed",
+        thoughts: [...(prev?.thoughts || []), "Agent stopped because the request failed."],
+        logs: [...(prev?.logs || []), { level: "error", title: "Agent failed", message }]
+      }));
       toast.error(message);
     } finally {
-      setSending(false);
-      setWorking(false);
-    }
-  };
-
-  const sendPrompt = async (event) => {
-    event?.preventDefault?.();
-    if (!canSend) return;
-    await runOperatorPrompt(prompt, settings.executeMode);
-  };
-
-  const workNow = async () => {
-    if (busy) return;
-    await runOperatorPrompt("Diagnose and apply safe fixes.", "write");
-  };
-
-  const diagnoseNow = async () => {
-    if (diagnosing || sending) return;
-    setDiagnosing(true);
-    setLastActions([]);
-    setLastExecutions([]);
-    try {
-      const result = await toast.promise(
-        () => aiOperator.diagnose({ messages, processes }),
-        {
-          loading: "Checking dashboard...",
-          success: "Diagnosis ready",
-          error: (error) => getErrorMessage(error, "Diagnosis failed")
-        }
-      );
-      const data = result.data || {};
-      setLastActions(data.actions || []);
-      setLastExecutions(data.executions || []);
-      setLastSupportContext(data.supportContext || null);
-      setMessages((prev) => [...prev, { role: "assistant", content: data.reply || "I checked the dashboard." }]);
-    } catch (error) {
-      toast.error(getErrorMessage(error, "Diagnosis failed"));
-    } finally {
-      setDiagnosing(false);
+      setSpawning(false);
     }
   };
 
@@ -376,36 +389,29 @@ export default function AIOperator() {
     <div className="ai-page compact-page-stack">
       <PageIntro
         title="AI Operator"
-        actions={(
-          <>
-            <Badge tone={connected ? "success" : "warning"}>{connected ? "Ready" : "Setup needed"}</Badge>
-            <Button type="button" size="sm" onClick={workNow} disabled={busy}>
-              <Zap size={14} />
-              {working ? "Working" : "Auto repair"}
-            </Button>
-            <Button type="button" size="sm" variant="outlinePrimary" onClick={diagnoseNow} disabled={busy}>
-              <Wrench size={14} />
-              {diagnosing ? "Checking" : "Diagnose"}
-            </Button>
-            <Button type="button" size="sm" variant="secondary" onClick={copyTranscript} disabled={busy}>
-              <Copy size={14} />
-              Copy
-            </Button>
-          </>
-        )}
+        actions={(<>
+          <Badge tone={connected ? "success" : "warning"}>{connected ? "Ready" : "Local agent"}</Badge>
+          <Button type="button" size="sm" variant="outlinePrimary" onClick={() => setConnectionModalOpen(true)}>
+            <KeyRound size={14} />
+            Connection
+          </Button>
+          <Button type="button" size="sm" variant="secondary" onClick={copyTranscript} disabled={spawning}>
+            <Copy size={14} />
+            Copy
+          </Button>
+        </>)}
       />
 
       <section className="ai-connection-summary-card">
         <div className="ai-connection-summary-main">
           <div className="min-w-0">
-            <Eyebrow>Connection</Eyebrow>
-            <h2 className="panel-heading mt-1">Connection</h2>
+            <Eyebrow>Agent mode</Eyebrow>
+            <h2 className="panel-heading mt-1">Interactive worker</h2>
           </div>
           <div className="ai-connection-pills">
-            <Badge tone={connected ? "success" : "warning"}>{connected ? "Ready" : "Setup needed"}</Badge>
+            <Badge tone={settings.executeMode === "write" ? "warning" : "neutral"}>{settings.executeMode}</Badge>
             <Badge tone="neutral">{settings.provider === "anthropic" ? "Claude" : "OpenAI"}</Badge>
             {settings.model ? <Badge tone="neutral">{settings.model}</Badge> : null}
-            <Badge tone={settings.executeMode === "plan" ? "neutral" : "warning"}>{settings.executeMode}</Badge>
           </div>
         </div>
         <div className="ai-connection-summary-actions">
@@ -419,7 +425,6 @@ export default function AIOperator() {
       {connectionModalOpen ? (
         <Modal
           title="Connection"
-          description="Connection"
           size="md"
           onClose={() => setConnectionModalOpen(false)}
           className="ai-connection-dialog"
@@ -427,7 +432,7 @@ export default function AIOperator() {
         >
           <section className="ai-connection-modal-card">
             <div className="ai-connection-modal-status">
-              <Badge tone={connected ? "success" : "warning"}>{connected ? "Ready" : "Setup"}</Badge>
+              <Badge tone={connected ? "success" : "warning"}>{connected ? "Ready" : "Local agent"}</Badge>
               <Badge tone="neutral">{settings.provider === "anthropic" ? "Claude" : "OpenAI"}</Badge>
               {settings.model ? <Badge tone="neutral">{settings.model}</Badge> : null}
             </div>
@@ -435,12 +440,8 @@ export default function AIOperator() {
             <div className="ai-connection-compact-stack">
               <Field label="Provider" className="ai-provider-field ai-compact-field">
                 <div className="ai-segmented-control ai-segmented-control-tight" role="group" aria-label="AI provider">
-                  <button type="button" aria-pressed={settings.provider === "openai-compatible"} onClick={() => changeProvider("openai-compatible")}>
-                    OpenAI compatible
-                  </button>
-                  <button type="button" aria-pressed={settings.provider === "anthropic"} onClick={() => changeProvider("anthropic")}>
-                    Anthropic Claude
-                  </button>
+                  <button type="button" aria-pressed={settings.provider === "openai-compatible"} onClick={() => changeProvider("openai-compatible")}>OpenAI compatible</button>
+                  <button type="button" aria-pressed={settings.provider === "anthropic"} onClick={() => changeProvider("anthropic")}>Anthropic Claude</button>
                 </div>
               </Field>
 
@@ -459,25 +460,15 @@ export default function AIOperator() {
 
               <Field label="Mode" className="ai-mode-field ai-compact-field">
                 <div className="ai-segmented-control ai-segmented-control-three ai-segmented-control-tight" role="group" aria-label="AI run mode">
-                  <button type="button" aria-pressed={settings.executeMode === "plan"} onClick={() => updateSetting("executeMode", "plan")}>
-                    Plan only
-                  </button>
-                  <button type="button" aria-pressed={settings.executeMode === "read"} onClick={() => updateSetting("executeMode", "read")}>
-                    Auto checks
-                  </button>
-                  <button type="button" aria-pressed={settings.executeMode === "write"} onClick={() => updateSetting("executeMode", "write")}>
-                    Safe writes
-                  </button>
+                  <button type="button" aria-pressed={settings.executeMode === "plan"} onClick={() => updateSetting("executeMode", "plan")}>Plan only</button>
+                  <button type="button" aria-pressed={settings.executeMode === "read"} onClick={() => updateSetting("executeMode", "read")}>Auto checks</button>
+                  <button type="button" aria-pressed={settings.executeMode === "write"} onClick={() => updateSetting("executeMode", "write")}>Safe writes</button>
                 </div>
               </Field>
 
               <div className="ai-connection-action-row">
                 <label className="ai-remember-key ai-remember-key-compact">
-                  <input
-                    type="checkbox"
-                    checked={settings.rememberKey}
-                    onChange={(event) => updateSetting("rememberKey", event.target.checked)}
-                  />
+                  <input type="checkbox" checked={settings.rememberKey} onChange={(event) => updateSetting("rememberKey", event.target.checked)} />
                   <span>Remember key</span>
                 </label>
                 <Button type="button" size="sm" variant="outlinePrimary" onClick={testConnection} disabled={testing || !settings.apiKey || !settings.model || !settings.baseUrl}>
@@ -490,82 +481,81 @@ export default function AIOperator() {
         </Modal>
       ) : null}
 
-      <section className="ai-workspace">
-        <section className="ai-terminal-panel">
-          <PanelHeader
-            title="Terminal"
-            actions={<Badge tone={settings.executeMode === "plan" ? "neutral" : "warning"}>{settings.executeMode}</Badge>}
-          />
+      <section className="ai-workspace ai-agent-workspace">
+        <section className="ai-terminal-panel ai-agent-terminal-panel">
+          <PanelHeader title="Agent task" actions={<Badge tone={settings.executeMode === "write" ? "warning" : "neutral"}>{settings.executeMode}</Badge>} />
 
           <div className="operator-messages ai-message-window">
             {messages.map((message, index) => <MessageBubble key={`${message.role}-${index}`} message={message} />)}
-            {sending ? (
+            {spawning ? (
               <div className="flex items-center gap-2 text-sm text-text-3">
                 <Bot size={16} className="animate-pulse" />
-                Working...
+                Agent running...
               </div>
             ) : null}
           </div>
 
           <div className="ai-prompt-strip">
             {suggestedPrompts.map((item) => (
-              <button key={item} type="button" className="prompt-chip" onClick={() => setPrompt(item)}>
-                {item}
-              </button>
+              <button key={item} type="button" className="prompt-chip" onClick={() => setPrompt(item)} disabled={spawning}>{item}</button>
             ))}
           </div>
 
-          <form onSubmit={sendPrompt} className="ai-prompt-form">
+          <form onSubmit={spawnAgent} className="ai-prompt-form ai-agent-prompt-form">
             <Textarea
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
-              placeholder="Ask AI"
+              placeholder="Explain the error or task"
               className="ai-prompt-input resize-y"
             />
-            <Button type="submit" disabled={!canSend} className="ai-send-button">
-              {settings.executeMode === "plan" ? <Send size={14} /> : <Zap size={14} />}
-              {sending ? "Working" : settings.executeMode === "write" ? "Ask + work" : connected ? settings.executeMode === "plan" ? "Ask" : "Ask + checks" : "Diagnose"}
+            <Button type="submit" disabled={!canSpawn} className="ai-send-button">
+              <Zap size={14} />
+              {spawning ? "Running" : "Spawn agent"}
             </Button>
           </form>
         </section>
 
-        <aside className="ai-right-rail">
+        <aside className="ai-right-rail ai-agent-rail">
           <section className="ai-side-card">
-            <PanelHeader title="Context" />
+            <PanelHeader title="Run state" />
             <div className="ai-context-grid">
               <CompactMetric label="Processes" value={processes.length} />
               <CompactMetric label="Issues" value={lastSupportContext?.issues?.length ?? "—"} />
-              <CompactMetric label="Mode" value={settings.executeMode} />
+              <CompactMetric label="Status" value={agentRun?.status || "Idle"} />
             </div>
-            {lastSupportContext?.issues?.length ? (
-              <div className="ai-evidence-list">
-                {lastSupportContext.issues.slice(0, 3).map((issue) => (
-                  <InsetPanel key={issue.id} padding="sm" className="ai-evidence-row">
-                    <Badge tone={issue.severity === "danger" ? "danger" : issue.severity === "warning" ? "warning" : "neutral"}>{issue.severity}</Badge>
-                    <span className="truncate text-xs font-medium text-text-2">{issue.title}</span>
-                  </InsetPanel>
+          </section>
+
+          <section className="ai-side-card ai-queue-card">
+            <PanelHeader title="Thoughts" actions={<TerminalSquare size={15} className="text-text-3" />} />
+            <AgentThoughts thoughts={agentRun?.thoughts || []} />
+          </section>
+
+          <section className="ai-side-card ai-queue-card">
+            <PanelHeader title="Logs" actions={<Wrench size={15} className="text-text-3" />} />
+            <AgentLogs logs={agentRun?.logs || []} />
+          </section>
+
+          {lastActions.length ? (
+            <section className="ai-side-card ai-queue-card">
+              <PanelHeader title="Manual actions" />
+              <div className="ai-card-list">
+                {lastActions.map((action, index) => (
+                  <PlannedActionCard key={`${action.actionId}-${index}`} action={action} onRun={runAction} running={runningActionId === action.actionId} />
                 ))}
               </div>
-            ) : null}
-          </section>
+            </section>
+          ) : null}
 
-          <section className="ai-side-card ai-queue-card">
-            <PanelHeader title="Prepared actions" />
-            <div className="ai-card-list">
-              {lastActions.length > 0 ? lastActions.map((action, index) => (
-                <PlannedActionCard key={`${action.actionId}-${index}`} action={action} onRun={runAction} running={runningActionId === action.actionId} />
-              )) : <InsetPanel padding="sm" className="text-sm text-text-3">No actions.</InsetPanel>}
-            </div>
-          </section>
-
-          <section className="ai-side-card ai-queue-card">
-            <PanelHeader title="Execution log" />
-            <div className="ai-card-list">
-              {lastExecutions.length > 0 ? lastExecutions.map((execution, index) => (
-                <ExecutionCard key={`${execution.actionId}-${index}`} execution={execution} />
-              )) : <InsetPanel padding="sm" className="text-sm text-text-3">No runs.</InsetPanel>}
-            </div>
-          </section>
+          {lastExecutions.length ? (
+            <section className="ai-side-card ai-queue-card">
+              <PanelHeader title="Execution" />
+              <div className="ai-card-list">
+                {lastExecutions.map((execution, index) => (
+                  <ExecutionCard key={`${execution.actionId}-${index}`} execution={execution} />
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           {lastUsage ? (
             <section className="ai-side-card">

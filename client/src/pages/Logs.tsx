@@ -443,66 +443,72 @@ export default function Logs() {
         </Banner>
       )}
 
-      <section className="page-panel grid gap-2 md:grid-cols-2 xl:grid-cols-6">
-        <Select value={selected} onChange={(e) => setSelected(e.target.value)} className="w-full" disabled={combinedView}>
-          <option value="">Select process</option>
-          {processOptions.map((proc) => (
-            <option key={proc.name} value={proc.name}>
-              {proc.name}
-            </option>
-          ))}
-        </Select>
+      <section className="page-panel logs-control-panel">
+        <div className="logs-control-grid">
+          <Select value={selected} onChange={(e) => setSelected(e.target.value)} className="logs-compact-control logs-process-select" disabled={combinedView}>
+            <option value="">Select process</option>
+            {processOptions.map((proc) => (
+              <option key={proc.name} value={proc.name}>
+                {proc.name}
+              </option>
+            ))}
+          </Select>
 
-        <Select value={lineCount} onChange={(e) => setLineCount(Number(e.target.value))} className="w-full">
-          {[50, 100, 200, 500].map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </Select>
+          <Select value={lineCount} onChange={(e) => setLineCount(Number(e.target.value))} className="logs-compact-control logs-count-select">
+            {[50, 100, 200, 500].map((value) => (
+              <option key={value} value={value}>
+                {value} lines
+              </option>
+            ))}
+          </Select>
 
-        <Input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="Search logs" className="w-full xl:col-span-2" />
-
-        <div className="flex flex-wrap gap-1">
-          {[
-            ["stdout", "stdout"],
-            ["stderr", "stderr"],
-            ["both", "both"]
-          ].map(([key, label]) => (
-            <Button key={key} type="button" onClick={() => setFilter(key)} variant={filter === key ? "success" : "secondary"}>
-              {label}
-            </Button>
-          ))}
+          <Input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="Search logs" className="logs-compact-control logs-search-input" />
         </div>
 
-        <label className="flex items-center gap-2 text-sm text-text-2">
-          <Checkbox checked={combinedView} onChange={(e) => setCombinedView(e.target.checked)} />
-          Combined view
-        </label>
+        <div className="logs-action-row">
+          <div className="logs-filter-group" role="group" aria-label="Log stream filter">
+            {[
+              ["both", "All"],
+              ["stdout", "Out"],
+              ["stderr", "Err"]
+            ].map(([key, label]) => (
+              <Button key={key} type="button" size="sm" onClick={() => setFilter(key)} variant={filter === key ? "success" : "secondary"}>
+                {label}
+              </Button>
+            ))}
+          </div>
 
-        <Button type="button" variant="danger" onClick={() => setFlushConfirmOpen(true)} disabled={combinedView || !selected}>
-          Flush Logs
-        </Button>
-        <Button type="button" variant="secondary" onClick={() => setEntries([])}>
-          Clear View
-        </Button>
-        <Button type="button" variant="secondary" onClick={downloadTxt}>
-          Download .txt
-        </Button>
-        <Button type="button" variant="secondary" onClick={downloadCsv}>
-          Download .csv
-        </Button>
-        <Button type="button" variant="secondary" onClick={() => setRefreshNonce((value) => value + 1)}>
-          Refresh Logs
-        </Button>
+          <label className="logs-combined-toggle">
+            <Checkbox checked={combinedView} onChange={(e) => setCombinedView(e.target.checked)} />
+            Combined
+          </label>
+
+          <div className="logs-action-buttons">
+            <Button type="button" size="sm" variant="secondary" onClick={() => setRefreshNonce((value) => value + 1)}>
+              Refresh
+            </Button>
+            <Button type="button" size="sm" variant="secondary" onClick={() => setEntries([])}>
+              Clear
+            </Button>
+            <Button type="button" size="sm" variant="secondary" onClick={downloadTxt}>
+              TXT
+            </Button>
+            <Button type="button" size="sm" variant="secondary" onClick={downloadCsv}>
+              CSV
+            </Button>
+            <Button type="button" size="sm" variant="danger" onClick={() => setFlushConfirmOpen(true)} disabled={combinedView || !selected}>
+              Flush
+            </Button>
+          </div>
+        </div>
       </section>
 
       {combinedView && (
-        <section className="page-panel">
-          <PanelHeader title="Combined Targets (up to 12)" className="mb-2" />
-          <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
+        <section className="page-panel logs-target-panel">
+          <PanelHeader title="Targets" className="mb-2" />
+          <div className="logs-target-grid">
             {processOptions.map((proc) => (
-              <label key={proc.name} className="flex items-center gap-2 text-text-2">
+              <label key={proc.name} className="logs-target-chip">
                 <Checkbox
                   checked={combinedTargets.includes(proc.name)}
                   onChange={(e) => {
@@ -514,11 +520,11 @@ export default function Logs() {
                     });
                   }}
                 />
-                {proc.name}
+                <span className="truncate">{proc.name}</span>
               </label>
             ))}
           </div>
-          <div className="mt-2 flex gap-2">
+          <div className="logs-target-actions">
             <Button type="button" size="sm" variant="secondary" onClick={() => setCombinedTargets([])}>
               Use all
             </Button>
@@ -528,7 +534,7 @@ export default function Logs() {
               variant="secondary"
               onClick={() => setCombinedTargets(processOptions.map((item) => item.name).slice(0, 12))}
             >
-              Select first 12
+              First 12
             </Button>
           </div>
         </section>
@@ -544,41 +550,51 @@ export default function Logs() {
         />
       )}
 
-      <section ref={containerRef} className="h-log-viewer overflow-y-auto rounded-xl border border-border bg-surface p-3 font-mono text-sm sm:p-4 sm:text-base">
-        <PanelHeader title="Log Stream" className="mb-3 font-sans" />
-        {!selected && !combinedView && (
-          <div className="flex h-full flex-col items-center justify-center text-text-3">
-            <Terminal size={36} />
-            <p className="mt-2">Select a process to view logs</p>
+      <section className="page-panel logs-stream-panel">
+        <div className="logs-stream-header">
+          <PanelHeader title="Log Stream" className="font-sans" />
+          <div className="logs-stream-meta">
+            <span>{visibleEntries.length} lines</span>
+            <span>{combinedView ? "Combined" : selected || "No process"}</span>
+            <StatusText tone={connected ? "success" : "warning"}>{connected ? "live" : "offline"}</StatusText>
           </div>
-        )}
+        </div>
 
-        {(selected || combinedView) && visibleEntries.length === 0 && (
-          <>
-            {logsLoading && <LogsViewerSkeleton />}
-            {!logsLoading && hasActiveFilter && entries.length > 0 && <p className="text-text-3">No matches.</p>}
-            {!logsLoading && (!hasActiveFilter || entries.length === 0) && <p className="text-text-3">Waiting for logs.</p>}
-          </>
-        )}
-
-        {visibleEntries.map((entry, index) => {
-          const levelTone = {
-            error: "danger",
-            warn: "warning",
-            info: "info",
-            debug: "neutral",
-            plain: entry.type === "stderr" ? "warning" : "success"
-          }[entry.level || "plain"];
-
-          return (
-            <div key={`${entry.timestamp}-${index}-${entry.processName || "p"}`} className="mb-1">
-              <span className="mr-2 text-text-3">[{new Date(entry.timestamp).toLocaleTimeString()}]</span>
-              <span className="mr-2 text-xs text-brand-400">{entry.processName || "-"}</span>
-              <StatusText tone={levelTone} className="mr-2 text-xs uppercase">{entry.level || "plain"}</StatusText>
-              <StatusText tone={levelTone}>{entry.data}</StatusText>
+        <div ref={containerRef} className="logs-stream-body">
+          {!selected && !combinedView && (
+            <div className="logs-empty-state">
+              <Terminal size={28} />
+              <p>Select a process.</p>
             </div>
-          );
-        })}
+          )}
+
+          {(selected || combinedView) && visibleEntries.length === 0 && (
+            <>
+              {logsLoading && <LogsViewerSkeleton />}
+              {!logsLoading && hasActiveFilter && entries.length > 0 && <p className="text-text-3">No matches.</p>}
+              {!logsLoading && (!hasActiveFilter || entries.length === 0) && <p className="text-text-3">Waiting.</p>}
+            </>
+          )}
+
+          {visibleEntries.map((entry, index) => {
+            const levelTone = {
+              error: "danger",
+              warn: "warning",
+              info: "info",
+              debug: "neutral",
+              plain: entry.type === "stderr" ? "warning" : "success"
+            }[entry.level || "plain"];
+
+            return (
+              <div key={`${entry.timestamp}-${index}-${entry.processName || "p"}`} className="logs-line">
+                <span className="logs-line-time">{new Date(entry.timestamp).toLocaleTimeString()}</span>
+                <span className="logs-line-process">{entry.processName || "-"}</span>
+                <StatusText tone={levelTone} className="logs-line-level">{entry.level || "plain"}</StatusText>
+                <StatusText tone={levelTone} className="logs-line-message">{entry.data}</StatusText>
+              </div>
+            );
+          })}
+        </div>
       </section>
     </div>
   );

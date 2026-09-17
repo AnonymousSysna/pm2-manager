@@ -227,7 +227,8 @@ export const aiOperator = {
   diagnose: (payload: Record<string, unknown> = {}) => api.post<ApiResult<any>>("/api/v1/ai/diagnose", payload).then(unwrap),
   runAction: (actionId: string, payload: Record<string, unknown> = {}, acknowledge = "") =>
     api.post<ApiResult<any>>("/api/v1/ai/actions/run", { actionId, payload, acknowledge }, { validateStatus: (status) => status < 600 }).then(unwrap),
-  chat: (payload: Record<string, unknown>) => api.post<ApiResult<any>>("/api/v1/ai/chat", payload).then(unwrap)
+  chat: (payload: Record<string, unknown>) => api.post<ApiResult<any>>("/api/v1/ai/chat", payload).then(unwrap),
+  agentRun: (payload: Record<string, unknown>) => api.post<ApiResult<any>>("/api/v1/ai/agent/run", payload).then(unwrap)
 };
 
 export const alerts = {
