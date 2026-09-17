@@ -48,7 +48,12 @@ export default function MetricsHistoryPanel({
       <PanelHeader
         title="Resource Trends"
       />
-      <Select value={chartProcess} onChange={(e) => onChartProcessChange(e.target.value)} className="w-full">
+      <Select
+        value={chartProcess}
+        onChange={(e) => onChartProcessChange(e.target.value)}
+        aria-label="Process to chart"
+        className="w-full"
+      >
         {processes.map((proc) => (
           <option key={proc.name} value={proc.name}>
             {proc.name}

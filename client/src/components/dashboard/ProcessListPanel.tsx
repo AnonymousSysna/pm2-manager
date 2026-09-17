@@ -91,6 +91,7 @@ export default function ProcessListPanel({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search processes"
+            aria-label="Search processes"
             className="process-search-input"
           />
         </div>
@@ -99,7 +100,11 @@ export default function ProcessListPanel({
       <div className="process-table-scroll">
         <div className="process-list-header" role="row">
           <div>
-            <Checkbox checked={allSelected} onChange={(event) => toggleSelectAllFiltered(event.target.checked)} />
+            <Checkbox
+              checked={allSelected}
+              aria-label="Select all processes"
+              onChange={(event) => toggleSelectAllFiltered(event.target.checked)}
+            />
           </div>
           <div>Process</div>
           <div>Status</div>
@@ -143,7 +148,11 @@ function ProcessRow({
   return (
     <article className="process-one-line-row">
       <div className="process-select-cell">
-        <Checkbox checked={selected} onChange={(event) => controls.toggleSelected(proc.name, event.target.checked)} />
+        <Checkbox
+          checked={selected}
+          aria-label={`Select ${proc.name}`}
+          onChange={(event) => controls.toggleSelected(proc.name, event.target.checked)}
+        />
       </div>
 
       <div className="process-name-cell">
@@ -343,6 +352,7 @@ function RowActions({ item, controls, actionMenu }) {
         size="sm"
         variant="secondary"
         className="process-row-more"
+        aria-label={`More actions for ${proc.name}`}
         aria-expanded={isMenuOpen}
         onClick={() => actionMenu?.setOpenActionMenu?.(isMenuOpen ? "" : menuKey)}
       >
