@@ -91,10 +91,6 @@ vi.mock("../components/dashboard/DependencyGraphPanel", () => ({
   default: () => <div>Dependencies</div>
 }));
 
-vi.mock("../components/dashboard/ThresholdAlertsPanel", () => ({
-  __esModule: true,
-  default: () => <div>Threshold Alerts</div>
-}));
 
 vi.mock("../components/dashboard/ProcessListPanel", () => ({
   __esModule: true,

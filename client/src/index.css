@@ -728,12 +728,6 @@
     @apply h-full min-w-0 p-3;
   }
 
-  @media (min-width: 1024px) {
-    .dashboard-support-grid > .page-panel:nth-child(3):last-child {
-      grid-column: 1 / -1;
-    }
-  }
-
   .dashboard-insight-grid {
     @apply grid gap-3 xl:grid-cols-2;
   }

@@ -25,7 +25,9 @@ function buildAttentionItems({ alerts = [], processes = [], monitoringSummary = 
         processName,
         tone: alert.severity === "danger" ? "danger" : "warning",
         label: `${alert.metric} ${alert.value} / ${alert.threshold}`,
-        detail: alert.ts ? new Date(alert.ts).toLocaleTimeString() : "Recent alert"
+        detail: alert.message
+          ? `${alert.message} at ${alert.ts ? new Date(alert.ts).toLocaleTimeString() : "recent"}`
+          : alert.ts ? new Date(alert.ts).toLocaleTimeString() : "Recent alert"
       });
     });
 

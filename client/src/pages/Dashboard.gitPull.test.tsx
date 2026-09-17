@@ -88,7 +88,6 @@ vi.mock("../components/dashboard/OperationsOverviewPanel", () => ({ __esModule: 
 vi.mock("../components/dashboard/SetupChecklistPanel", () => ({ __esModule: true, default: () => null }));
 vi.mock("../components/dashboard/SystemResourcesPanel", () => ({ __esModule: true, default: () => null }));
 vi.mock("../components/dashboard/DependencyGraphPanel", () => ({ __esModule: true, default: () => null }));
-vi.mock("../components/dashboard/ThresholdAlertsPanel", () => ({ __esModule: true, default: () => null }));
 vi.mock("../components/dashboard/MetricsHistoryPanel", () => ({ __esModule: true, default: () => null }));
 vi.mock("../components/dashboard/DashboardModals", () => ({
   DeployProcessModal: () => null,

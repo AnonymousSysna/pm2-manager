@@ -14,7 +14,6 @@ import SetupChecklistPanel from "../components/dashboard/SetupChecklistPanel";
 import SystemResourcesPanel from "../components/dashboard/SystemResourcesPanel";
 import DependencyGraphPanel from "../components/dashboard/DependencyGraphPanel";
 import MetricsHistoryPanel from "../components/dashboard/MetricsHistoryPanel";
-import ThresholdAlertsPanel from "../components/dashboard/ThresholdAlertsPanel";
 import ProcessListPanel from "../components/dashboard/ProcessListPanel";
 import GitPullConfirmToastBody from "../components/dashboard/GitPullConfirmToastBody";
 import {
@@ -1476,7 +1475,6 @@ export default function Dashboard() {
         />
 
         <div className="dashboard-support-grid">
-          <ThresholdAlertsPanel alerts={alerts} onOpenLogs={openLogsForProcess} />
           <SystemResourcesPanel systemResources={systemResources} bytesToGB={bytesToGB} />
           {!checklist.dismissed && (
             <SetupChecklistPanel
