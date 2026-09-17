@@ -7,6 +7,7 @@ const cors = require("cors");
 const { Server } = require("socket.io");
 const crypto = require("crypto");
 const { logger } = require("./utils/logger");
+const { createGracefulShutdown } = require("./utils/gracefulShutdown");
 const { normalizeOrigin, scrubUrl } = require("./utils/urlSafety");
 const { assertEnvironmentReady, getEnvironmentReport } = require("./utils/envGuard");
 const { securityHeaders } = require("./middleware/securityHeaders");
@@ -442,25 +443,14 @@ server.keepAliveTimeout = 65_000;
 server.headersTimeout = 70_000;
 server.requestTimeout = Math.max(310_000, Number(process.env.COMMAND_TIMEOUT_MS || 300000) + 10_000);
 
-function shutdown(signal) {
-  logger.info("server_shutdown_started", { signal });
-  server.close((error) => {
-    if (error) {
-      logger.error("server_shutdown_failed", { signal, error: logger.serializeError(error) });
-      process.exit(1);
-      return;
-    }
-    logger.info("server_shutdown_complete", { signal });
-    process.exit(0);
-  });
+const gracefulShutdown = createGracefulShutdown({
+  server,
+  io,
+  logger
+});
 
-  const forceTimer = setTimeout(() => {
-    logger.error("server_shutdown_forced", { signal });
-    process.exit(1);
-  }, 10_000);
-  if (typeof forceTimer.unref === "function") {
-    forceTimer.unref();
-  }
+function shutdown(signal) {
+  gracefulShutdown.handle(signal);
 }
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));

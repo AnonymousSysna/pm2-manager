@@ -224,6 +224,28 @@ because everything in those files ships to the browser.
   messages; `-500` and `-600` are for borders, fills, and solid button
   backgrounds. Mixing them up is what makes status text unreadable in one theme.
 
+## Restarts and shutdown
+
+- `server/utils/gracefulShutdown.ts` owns the sequence: disconnect socket
+  clients, `server.close()`, close idle keep-alive sockets, close still-busy ones
+  after 4s, then exit 0 on a clean close or 1 if the close failed or 10s elapsed.
+  A second signal (the operator pressing Ctrl+C twice, or PM2 escalating) exits 1
+  immediately instead of starting another drain.
+- The order is the whole point. `server.close()` waits for every open connection
+  to end on its own, and a dashboard tab holds a websocket open, so closing only
+  the HTTP listener never finished: measured against a real socket.io server,
+  with no client it closed in 1ms, and with one websocket open it was still
+  waiting at 8s until the force timeout ended the restart with exit 1. It now
+  completes in ~1ms, logging `server_shutdown_started`, `server_sockets_closed`,
+  `server_shutdown_complete`, and no `server_shutdown_forced`.
+- `server/tests/gracefulShutdown.test.ts` covers the clean close, a failing and a
+  throwing close, the drain-then-force timers, signal escalation, and a server
+  without the optional connection helpers.
+- An unhandled rejection is logged and the process keeps serving; an uncaught
+  exception drains and exits, because the request that threw has left the process
+  in an unknown state. `npm run preflight` refuses to start without `PM2_USER`,
+  `PM2_PASS_HASH`, `JWT_SECRET`, and `METRICS_TOKEN`.
+
 ## Operational safety
 
 - Use the dashboard triage order: attention first, then logs, then action.
