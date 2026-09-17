@@ -176,7 +176,7 @@ You do not need Caddy for the base app to run.
 
 Coding-agent workflows now run through **JCode**. The dashboard no longer ships a separate assistant page or internal chat endpoint.
 
-Use `Extensions` to install JCode. After installation, open the `JCode` tab to control status, gateway start/stop, pairing, provider command building, and basic checks. PM2 Manager does not store provider API keys; JCode manages provider access through its own login, provider profiles, or environment variables.
+Use `Extensions` to install JCode. After installation, open the `JCode` tab to start a live browser terminal session, control status, gateway start/stop, pairing, provider command building, and basic checks. PM2 Manager does not store provider API keys; JCode manages provider access through its own login, provider profiles, or environment variables. If a stale Unix socket exists but refuses connections, PM2 Manager removes that stale `jcode.sock`, starts a fresh JCode server, and then attaches the terminal.
 
 ## Updating an Existing Install
 

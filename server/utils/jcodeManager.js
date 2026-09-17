@@ -1,6 +1,7 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const net = require("net");
 const { spawn } = require("child_process");
 const permissionHints = require("./permissionHints.js");
 const withPermissionHint = typeof permissionHints?.withPermissionHint === "function"
@@ -102,32 +103,103 @@ function getJcodeSocketPath(env = process.env) {
   return runtimeDir ? path.join(runtimeDir, "jcode.sock") : null;
 }
 
-function isSocketReady(socketPath) {
+function getSocketState(socketPath) {
   if (!socketPath) {
-    return false;
+    return { exists: false, socket: false };
   }
 
   try {
     const stat = fs.statSync(socketPath);
-    return typeof stat.isSocket === "function" ? stat.isSocket() : stat.isFile();
+    return {
+      exists: true,
+      socket: typeof stat.isSocket === "function" ? stat.isSocket() : stat.isFile()
+    };
   } catch (_error) {
-    return false;
+    return { exists: false, socket: false };
   }
+}
+
+function isSocketReady(socketPath) {
+  return getSocketState(socketPath).socket;
 }
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function probeUnixSocket(socketPath, timeoutMs = 1000) {
+  if (!socketPath || process.platform === "win32") {
+    return Promise.resolve({ accepting: false, errorCode: "unsupported" });
+  }
+
+  const state = getSocketState(socketPath);
+  if (!state.exists) {
+    return Promise.resolve({ accepting: false, errorCode: "missing" });
+  }
+  if (!state.socket) {
+    return Promise.resolve({ accepting: false, errorCode: "not-socket" });
+  }
+
+  return new Promise((resolve) => {
+    const client = net.createConnection({ path: socketPath });
+    let settled = false;
+    const finish = (result) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      try {
+        client.destroy();
+      } catch (_error) {
+        // Best-effort cleanup for a probe-only connection.
+      }
+      resolve(result);
+    };
+
+    const timer = setTimeout(() => {
+      finish({ accepting: false, errorCode: "timeout" });
+    }, Math.max(250, timeoutMs));
+
+    client.once("connect", () => finish({ accepting: true, errorCode: null }));
+    client.once("error", (error) => {
+      finish({ accepting: false, errorCode: error?.code || "connect-failed" });
+    });
+  });
+}
+
+async function removeStaleJcodeSocket(socketPath, reason = "stale") {
+  const state = getSocketState(socketPath);
+  if (!state.socket) {
+    return false;
+  }
+
+  try {
+    await fs.promises.unlink(socketPath);
+    const nextState = await readState();
+    nextState.lastAction = {
+      action: "remove-stale-terminal-socket",
+      ok: true,
+      at: Date.now()
+    };
+    nextState.lastOutput = `Removed stale JCode socket ${socketPath} (${reason})`;
+    await writeState(nextState);
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
 async function waitForJcodeSocket(socketPath, timeoutMs = 12_000) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
-    if (isSocketReady(socketPath)) {
+    const probe = await probeUnixSocket(socketPath, 500);
+    if (probe.accepting) {
       return true;
     }
     await sleep(250);
   }
-  return isSocketReady(socketPath);
+  return (await probeUnixSocket(socketPath, 500)).accepting;
 }
 
 function getJcodeCandidateDirs() {
@@ -667,13 +739,31 @@ async function ensureJcodeServer(binaryPath, cwd, env) {
   }
 
   const socketPath = getJcodeSocketPath(env);
-  if (isSocketReady(socketPath)) {
+  const existingProbe = await probeUnixSocket(socketPath, 1000);
+  let staleSocketMessage = "";
+  if (existingProbe.accepting) {
     return {
       success: true,
       started: false,
       socketPath,
-      message: `Using JCode server socket ${socketPath}.`
+      message: `Using healthy JCode server socket ${socketPath}.`
     };
+  }
+
+  if (getSocketState(socketPath).socket) {
+    const removed = await removeStaleJcodeSocket(socketPath, existingProbe.errorCode || "connection-refused");
+    staleSocketMessage = removed
+      ? `Removed stale JCode socket ${socketPath} (${existingProbe.errorCode || "not accepting connections"}).`
+      : `JCode socket ${socketPath} was not accepting connections, but PM2 Manager could not remove it.`;
+    if (!removed) {
+      return {
+        success: false,
+        started: false,
+        socketPath,
+        message: staleSocketMessage,
+        error: `${staleSocketMessage} Stop any old jcode process or remove the socket manually, then try again.`
+      };
+    }
   }
 
   const serverName = String(process.env.JCODE_SERVER_NAME || "pm2-manager").trim() || "pm2-manager";
@@ -701,7 +791,7 @@ async function ensureJcodeServer(binaryPath, cwd, env) {
     },
     lastOutput: ready
       ? `Started JCode server PID ${child.pid} at ${socketPath}`
-      : `JCode server PID ${child.pid} did not create ${socketPath} before timeout`
+      : `JCode server PID ${child.pid} did not accept connections at ${socketPath} before timeout`
   };
   await writeState(nextState);
 
@@ -710,8 +800,8 @@ async function ensureJcodeServer(binaryPath, cwd, env) {
       success: false,
       started: true,
       socketPath,
-      message: "",
-      error: `JCode server did not become ready. Expected socket: ${socketPath}`
+      message: staleSocketMessage,
+      error: `JCode server did not accept connections. Expected socket: ${socketPath}`
     };
   }
 
@@ -719,7 +809,9 @@ async function ensureJcodeServer(binaryPath, cwd, env) {
     success: true,
     started: true,
     socketPath,
-    message: `Started JCode server PID ${child.pid} at ${socketPath}.`
+    message: [staleSocketMessage, `Started JCode server PID ${child.pid} at ${socketPath}.`]
+      .filter(Boolean)
+      .join("\n")
   };
 }
 
