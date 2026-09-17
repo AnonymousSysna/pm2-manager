@@ -4,7 +4,6 @@ const http = require("http");
 const { spawn } = require("child_process");
 const express = require("express");
 const cors = require("cors");
-const dotenv = require("dotenv");
 const { Server } = require("socket.io");
 const crypto = require("crypto");
 const { logger } = require("./utils/logger");
@@ -15,9 +14,13 @@ const { errorHandler, notFoundHandler } = require("./middleware/errorHandler");
 const { metricsMiddleware, renderMetrics } = require("./middleware/metrics");
 const { verifyCsrf } = require("./middleware/csrf");
 const { createRateLimiter } = require("./middleware/rateLimit");
+const { loadEnvironmentFiles } = require("./utils/envLoad");
 
-dotenv.config({ path: path.resolve(__dirname, ".env") });
-dotenv.config({ path: path.resolve(__dirname, "../.env") });
+const envFiles = loadEnvironmentFiles({
+  serverDir: __dirname,
+  rootDir: path.resolve(__dirname, "..")
+});
+logger.debug("environment_files_loaded", { nodeEnv: envFiles.nodeEnv, files: envFiles.loaded });
 
 const environmentReport = assertEnvironmentReady();
 if (environmentReport.warnings.length > 0) {

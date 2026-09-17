@@ -6,3 +6,22 @@ client/dist/
 .gitignore
 npm-cli/
 AGENTS.md
+
+# Local environment files. These hold PM2_PASS_HASH, JWT_SECRET and
+# METRICS_TOKEN, and the app writes PM2_PASS_HASH back on password change.
+.env
+.env.*
+!.env.example
+client/.env
+client/.env.*
+!client/.env.example
+
+# Runtime state written by the server (history, alert channels, logs).
+logs/*.log
+logs/*.jsonl
+logs/alert-channels.json
+logs/metrics-history.json
+logs/jcode-extension.runtime.json
+
+# Managed project space (PROJECTS_ROOT).
+apps/

@@ -1,29 +1,24 @@
 const fs = require("fs");
 const path = require("path");
+const { buildProcessEnv } = require("./scripts/env-file");
 
 const appRoot = __dirname;
 const serverRoot = path.join(appRoot, "server");
 const envPath = path.join(appRoot, ".env");
 
-function parseEnvFile(filePath) {
-  if (!fs.existsSync(filePath)) return {};
-  const values = {};
-  const content = fs.readFileSync(filePath, "utf8");
-  for (const rawLine of content.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) continue;
-    const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
-    if (!match) continue;
-    let value = match[2].trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-    values[match[1]] = value;
-  }
-  return values;
-}
+// Same precedence as server/utils/envLoad.ts: .env.<NODE_ENV> wins over .env,
+// and real process env still wins over everything PM2 injects here.
+const { nodeEnv, values: fileEnv } = buildProcessEnv({
+  appRoot,
+  serverRoot,
+  nodeEnv: process.env.NODE_ENV || "production"
+});
 
-const fileEnv = parseEnvFile(envPath);
+if (!fs.existsSync(envPath)) {
+  console.warn(
+    `[pm2] No ${envPath} found. Run "npm run env:bootstrap" so the app never starts with placeholder credentials.`
+  );
+}
 
 module.exports = {
   apps: [
@@ -37,7 +32,7 @@ module.exports = {
       exec_mode: "fork",
       env: {
         ...fileEnv,
-        NODE_ENV: "production",
+        NODE_ENV: nodeEnv,
         PM2_MANAGER_PROCESS_NAME: "pm2-dashboard"
       },
       watch: false,

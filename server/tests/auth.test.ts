@@ -22,6 +22,27 @@ function makeTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
+// Password changes persist PM2_PASS_HASH through the auth router's env file list.
+// Point that list at the test temp dir so a test run never writes (or creates) the
+// real .env next to the repository.
+const ORIGINAL_AUTH_ENV_FILE_PATHS = [...authRouter.AUTH_ENV_FILE_PATHS];
+function useTemporaryAuthEnvFile(tempDir) {
+  const envPath = path.join(tempDir, ".env");
+  authRouter.AUTH_ENV_FILE_PATHS.splice(
+    0,
+    authRouter.AUTH_ENV_FILE_PATHS.length,
+    envPath
+  );
+  return envPath;
+}
+function restoreAuthEnvFilePaths() {
+  authRouter.AUTH_ENV_FILE_PATHS.splice(
+    0,
+    authRouter.AUTH_ENV_FILE_PATHS.length,
+    ...ORIGINAL_AUTH_ENV_FILE_PATHS
+  );
+}
+
 function readCookieJar(setCookies = []) {
   return setCookies.reduce((acc, value) => {
     const [pair] = String(value || "").split(";", 1);
@@ -79,6 +100,7 @@ test("logout clears auth cookies even when the access token is expired", async (
     AUTH_SESSION_STORE_PATH: process.env.AUTH_SESSION_STORE_PATH
   };
   const tempDir = makeTempDir("pm2-manager-auth-");
+  const authEnvPath = useTemporaryAuthEnvFile(tempDir);
   process.env.JWT_SECRET = "test-jwt-secret";
   process.env.COOKIE_SECURE = "false";
   process.env.AUDIT_TRAIL_PATH = path.join(tempDir, "audit.jsonl");
@@ -115,6 +137,7 @@ test("logout clears auth cookies even when the access token is expired", async (
   } finally {
     await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     resetAuthSessionStore();
+    restoreAuthEnvFilePaths();
     for (const [key, value] of Object.entries(originalEnv)) {
       if (value === undefined) {
         delete process.env[key];
@@ -137,6 +160,7 @@ test("logout revokes an existing refresh token", async () => {
     PM2_PASS_HASH: process.env.PM2_PASS_HASH
   };
   const tempDir = makeTempDir("pm2-manager-auth-");
+  const authEnvPath = useTemporaryAuthEnvFile(tempDir);
   process.env.JWT_SECRET = "test-jwt-secret";
   process.env.COOKIE_SECURE = "false";
   process.env.AUDIT_TRAIL_PATH = path.join(tempDir, "audit.jsonl");
@@ -175,6 +199,7 @@ test("logout revokes an existing refresh token", async () => {
   } finally {
     await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     resetAuthSessionStore();
+    restoreAuthEnvFilePaths();
     for (const [key, value] of Object.entries(originalEnv)) {
       if (value === undefined) {
         delete process.env[key];
@@ -198,6 +223,7 @@ test("login keeps SameSite=Lax cookies for same-origin requests", async () => {
     PM2_PASS_HASH: process.env.PM2_PASS_HASH
   };
   const tempDir = makeTempDir("pm2-manager-auth-");
+  const authEnvPath = useTemporaryAuthEnvFile(tempDir);
   process.env.JWT_SECRET = "test-jwt-secret";
   process.env.COOKIE_SECURE = "false";
   delete process.env.COOKIE_SAME_SITE;
@@ -226,6 +252,7 @@ test("login keeps SameSite=Lax cookies for same-origin requests", async () => {
   } finally {
     await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     resetAuthSessionStore();
+    restoreAuthEnvFilePaths();
     for (const [key, value] of Object.entries(originalEnv)) {
       if (value === undefined) {
         delete process.env[key];
@@ -249,6 +276,7 @@ test("login issues SameSite=None cookies for secure cross-origin requests", asyn
     PM2_PASS_HASH: process.env.PM2_PASS_HASH
   };
   const tempDir = makeTempDir("pm2-manager-auth-");
+  const authEnvPath = useTemporaryAuthEnvFile(tempDir);
   process.env.JWT_SECRET = "test-jwt-secret";
   delete process.env.COOKIE_SECURE;
   delete process.env.COOKIE_SAME_SITE;
@@ -281,6 +309,7 @@ test("login issues SameSite=None cookies for secure cross-origin requests", asyn
   } finally {
     await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     resetAuthSessionStore();
+    restoreAuthEnvFilePaths();
     for (const [key, value] of Object.entries(originalEnv)) {
       if (value === undefined) {
         delete process.env[key];
@@ -303,6 +332,7 @@ test("change-password revokes old refresh tokens and reissues the current sessio
     PM2_PASS_HASH: process.env.PM2_PASS_HASH
   };
   const tempDir = makeTempDir("pm2-manager-auth-");
+  const authEnvPath = useTemporaryAuthEnvFile(tempDir);
   process.env.JWT_SECRET = "test-jwt-secret";
   process.env.COOKIE_SECURE = "false";
   process.env.AUDIT_TRAIL_PATH = path.join(tempDir, "audit.jsonl");
@@ -334,6 +364,7 @@ test("change-password revokes old refresh tokens and reissues the current sessio
 
     assert.equal(changePasswordResponse.status, 200);
     assert.equal(changePasswordPayload.success, true);
+    assert.match(fs.readFileSync(authEnvPath, "utf8"), /^PM2_PASS_HASH=/m);
     assert.ok(rotatedCookieJar.pm2_session);
     assert.ok(rotatedCookieJar.pm2_refresh);
     assert.ok(rotatedCookieJar.pm2_csrf);
@@ -362,6 +393,7 @@ test("change-password revokes old refresh tokens and reissues the current sessio
   } finally {
     await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     resetAuthSessionStore();
+    restoreAuthEnvFilePaths();
     for (const [key, value] of Object.entries(originalEnv)) {
       if (value === undefined) {
         delete process.env[key];
@@ -384,6 +416,7 @@ test("change-password rejects weak or whitespace-padded passwords", async () => 
     PM2_PASS_HASH: process.env.PM2_PASS_HASH
   };
   const tempDir = makeTempDir("pm2-manager-auth-");
+  const authEnvPath = useTemporaryAuthEnvFile(tempDir);
   process.env.JWT_SECRET = "test-jwt-secret";
   process.env.COOKIE_SECURE = "false";
   process.env.AUDIT_TRAIL_PATH = path.join(tempDir, "audit.jsonl");
@@ -432,6 +465,7 @@ test("change-password rejects weak or whitespace-padded passwords", async () => 
   } finally {
     await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     resetAuthSessionStore();
+    restoreAuthEnvFilePaths();
     for (const [key, value] of Object.entries(originalEnv)) {
       if (value === undefined) {
         delete process.env[key];
@@ -449,6 +483,7 @@ test("shared access token verifier rejects revoked tokens", () => {
     AUTH_SESSION_STORE_PATH: process.env.AUTH_SESSION_STORE_PATH
   };
   const tempDir = makeTempDir("pm2-manager-auth-");
+  const authEnvPath = useTemporaryAuthEnvFile(tempDir);
   process.env.JWT_SECRET = "test-jwt-secret";
   process.env.AUTH_SESSION_STORE_PATH = path.join(tempDir, "auth-sessions.json");
   resetAuthSessionStore();
@@ -469,6 +504,7 @@ test("shared access token verifier rejects revoked tokens", () => {
     );
   } finally {
     resetAuthSessionStore();
+    restoreAuthEnvFilePaths();
     for (const [key, value] of Object.entries(originalEnv)) {
       if (value === undefined) {
         delete process.env[key];

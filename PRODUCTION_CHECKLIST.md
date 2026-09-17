@@ -6,12 +6,31 @@ Use this before exposing PM2 Manager outside localhost.
 
 - For one-tap installs, confirm the installer generated `.env` secrets automatically.
 - For manual installs, replace every placeholder in `.env`.
+- Keep `.env` out of version control. It is gitignored now; verify with
+  `git check-ignore -v .env` before your first commit.
 - Use `PM2_PASS_HASH`, not `PM2_PASS`, in production.
+  - Changing the password in the UI rewrites `PM2_PASS_HASH` in `.env` on disk.
 - Use a `JWT_SECRET` with at least 32 random characters.
 - Use a `METRICS_TOKEN` with at least 32 random characters.
 - Run `npm run build` before starting PM2 in production.
 - Run `npm run preflight` and fix every failed item.
 - Confirm `/ready` returns HTTP 200 after PM2 starts the dashboard.
+
+## Environment separation
+
+Configuration resolves most-specific-first, and real process env always wins over
+any file:
+
+1. shell / PM2 / systemd environment
+2. `server/.env.<NODE_ENV>` (for example `server/.env.staging`)
+3. `.env.<NODE_ENV>`
+4. `server/.env`
+5. `.env`
+
+`NODE_ENV` comes from the runtime, or from `.env` when it is unset. Supported
+names are `development`, `test`, `staging`, and `production`. Client builds read
+`client/.env.<mode>` (see `client/.env.example`); never put secrets there,
+because everything in those files ships to the browser.
 
 ## Recommended
 
