@@ -286,9 +286,59 @@ function shouldServeClientRoute(req) {
   return routePath === "/" || routePath.startsWith("/dashboard") || accept.includes("text/html");
 }
 
-if (fs.existsSync(clientIndexPath)) {
-  app.use(express.static(clientDistPath, { index: false }));
+function setClientAssetHeaders(res, filePath) {
+  const normalized = filePath.replace(/\\/g, "/");
+  if (normalized.endsWith("/index.html")) {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    return;
+  }
+
+  if (normalized.includes("/assets/")) {
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    return;
+  }
+
+  res.setHeader("Cache-Control", "no-cache");
 }
+
+function sendMissingAssetFallback(req, res) {
+  const assetPath = String(req.path || "");
+  const ext = path.extname(assetPath).toLowerCase();
+
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.set("X-PM2-Dashboard-Asset", "missing");
+
+  if (ext === ".js" || ext === ".mjs") {
+    res
+      .status(404)
+      .type("application/javascript")
+      .send("console.warn('PM2 dashboard asset is stale; reloading the app shell.'); window.location.reload();");
+    return;
+  }
+
+  if (ext === ".css") {
+    res
+      .status(404)
+      .type("text/css")
+      .send("/* PM2 dashboard asset is stale. Refresh the page to load the latest build. */");
+    return;
+  }
+
+  res.status(404).type("text/plain").send("Dashboard asset not found. Refresh the page to load the latest build.");
+}
+
+if (fs.existsSync(clientIndexPath)) {
+  app.use(express.static(clientDistPath, {
+    index: false,
+    setHeaders: setClientAssetHeaders
+  }));
+}
+
+app.use("/assets", (req, res) => {
+  sendMissingAssetFallback(req, res);
+});
 
 app.get("*", (req, res, next) => {
   if (!shouldServeClientRoute(req)) {
@@ -301,6 +351,9 @@ app.get("*", (req, res, next) => {
     return;
   }
 
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
   res.sendFile(clientIndexPath);
 });
 

@@ -1,12 +1,12 @@
 {
   "name": "pm2-dashboard",
-  "version": "1.0.28",
+  "version": "1.0.29",
   "private": true,
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "npm --prefix server run dev",
     "dev:client": "npm --prefix client run dev",
-    "build": "npm --prefix client run build",
+    "build": "node ./scripts/build-client-clean.js",
     "start": "npm --prefix server run start",
     "onetap": "node ./scripts/onetap.js",
     "typecheck": "npm --prefix client run typecheck && npm --prefix server run typecheck",
@@ -27,7 +27,9 @@
     "repair:env": "node ./scripts/env-bootstrap.js",
     "setup:dev": "node ./scripts/npm-safe-install.js all --include-root",
     "setup:clean": "node ./scripts/npm-safe-install.js all --clean",
-    "repair:npm": "node ./scripts/npm-safe-install.js all --clean --verify-cache"
+    "repair:npm": "node ./scripts/npm-safe-install.js all --clean --verify-cache",
+    "build:client": "node ./scripts/build-client-clean.js",
+    "build:client:raw": "npm --prefix client run build"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
