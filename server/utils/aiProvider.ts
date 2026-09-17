@@ -5,13 +5,13 @@ const PROVIDERS = {
     id: "openai-compatible",
     label: "OpenAI compatible",
     baseUrl: "https://api.openai.com/v1",
-    notes: "Works with OpenAI-compatible chat completion APIs such as OpenAI, OpenRouter, LM Studio, Ollama-compatible gateways, and private gateways."
+    notes: "jcode-style OpenAI-compatible chat completions. Works with OpenAI, OpenRouter, LM Studio, Ollama-compatible gateways, and private gateways."
   },
   anthropic: {
     id: "anthropic",
     label: "Anthropic Claude",
     baseUrl: "https://api.anthropic.com",
-    notes: "Uses the Anthropic Messages API format."
+    notes: "Direct Anthropic Messages API provider for Claude models."
   }
 };
 
@@ -31,8 +31,38 @@ function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function firstNonEmpty(...values) {
+  for (const value of values) {
+    const text = asString(value).trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function configuredProvider(value) {
+  return firstNonEmpty(value, process.env.AI_PROVIDER, process.env.LLM_PROVIDER, "openai-compatible");
+}
+
+function modelEnvForProvider(provider) {
+  return provider === "anthropic"
+    ? firstNonEmpty(process.env.AI_MODEL, process.env.ANTHROPIC_MODEL, process.env.CLAUDE_MODEL)
+    : firstNonEmpty(process.env.AI_MODEL, process.env.OPENAI_MODEL, process.env.OPENAI_COMPATIBLE_MODEL);
+}
+
+function apiKeyEnvForProvider(provider) {
+  return provider === "anthropic"
+    ? firstNonEmpty(process.env.AI_API_KEY, process.env.ANTHROPIC_API_KEY, process.env.AI_ANTHROPIC_API_KEY)
+    : firstNonEmpty(process.env.AI_API_KEY, process.env.OPENAI_API_KEY, process.env.OPENAI_COMPATIBLE_API_KEY);
+}
+
+function baseUrlEnvForProvider(provider) {
+  return provider === "anthropic"
+    ? firstNonEmpty(process.env.AI_BASE_URL, process.env.ANTHROPIC_BASE_URL)
+    : firstNonEmpty(process.env.AI_BASE_URL, process.env.OPENAI_BASE_URL, process.env.OPENAI_COMPATIBLE_BASE_URL);
+}
+
 function normalizeProvider(value) {
-  const provider = asString(value).trim().toLowerCase();
+  const provider = configuredProvider(value).trim().toLowerCase();
   if (PROVIDERS[provider]) {
     return provider;
   }
@@ -44,8 +74,8 @@ function isLocalUrl(parsed) {
 }
 
 function normalizeBaseUrl(value, provider) {
-  const fallback = PROVIDERS[provider]?.baseUrl || PROVIDERS["openai-compatible"].baseUrl;
-  const raw = asString(value, fallback).trim() || fallback;
+  const fallback = baseUrlEnvForProvider(provider) || PROVIDERS[provider]?.baseUrl || PROVIDERS["openai-compatible"].baseUrl;
+  const raw = asString(value).trim() || fallback;
   if (raw.length > MAX_BASE_URL_CHARS) {
     throw new Error("AI base URL is too long");
   }
@@ -92,6 +122,44 @@ function validateModel(value) {
     throw new Error("AI model contains invalid characters");
   }
   return model;
+}
+
+function resolveApiKey(value, provider) {
+  return validateApiKey(firstNonEmpty(value, apiKeyEnvForProvider(provider)));
+}
+
+function resolveModel(value, provider) {
+  return validateModel(firstNonEmpty(value, modelEnvForProvider(provider)));
+}
+
+function getServerAiDefaults() {
+  let provider = "openai-compatible";
+  try {
+    provider = normalizeProvider("");
+  } catch (_error) {
+    provider = "openai-compatible";
+  }
+
+  let baseUrl = PROVIDERS[provider]?.baseUrl || PROVIDERS["openai-compatible"].baseUrl;
+  try {
+    baseUrl = normalizeBaseUrl("", provider);
+  } catch (_error) {
+    baseUrl = PROVIDERS[provider]?.baseUrl || PROVIDERS["openai-compatible"].baseUrl;
+  }
+  const model = modelEnvForProvider(provider);
+  return {
+    provider,
+    baseUrl: scrubUrl(baseUrl),
+    model,
+    hasApiKey: Boolean(apiKeyEnvForProvider(provider)),
+    keySource: apiKeyEnvForProvider(provider) ? "server-env" : "browser-input",
+    supportedEnv: {
+      provider: ["AI_PROVIDER", "LLM_PROVIDER"],
+      baseUrl: provider === "anthropic" ? ["AI_BASE_URL", "ANTHROPIC_BASE_URL"] : ["AI_BASE_URL", "OPENAI_BASE_URL", "OPENAI_COMPATIBLE_BASE_URL"],
+      model: provider === "anthropic" ? ["AI_MODEL", "ANTHROPIC_MODEL", "CLAUDE_MODEL"] : ["AI_MODEL", "OPENAI_MODEL", "OPENAI_COMPATIBLE_MODEL"],
+      apiKey: provider === "anthropic" ? ["AI_API_KEY", "ANTHROPIC_API_KEY", "AI_ANTHROPIC_API_KEY"] : ["AI_API_KEY", "OPENAI_API_KEY", "OPENAI_COMPATIBLE_API_KEY"]
+    }
+  };
 }
 
 function normalizeMessages(value) {
@@ -202,8 +270,8 @@ function extractAnthropicText(payload) {
 async function callAiProvider(config, messages, options = {}) {
   const provider = normalizeProvider(config?.provider);
   const baseUrl = normalizeBaseUrl(config?.baseUrl, provider);
-  const apiKey = validateApiKey(config?.apiKey);
-  const model = validateModel(config?.model);
+  const apiKey = resolveApiKey(config?.apiKey, provider);
+  const model = resolveModel(config?.model, provider);
   const temperature = Number.isFinite(Number(config?.temperature)) ? Math.min(1, Math.max(0, Number(config.temperature))) : 0.2;
   const maxTokens = Number.isFinite(Number(config?.maxTokens)) ? Math.min(4000, Math.max(256, Math.floor(Number(config.maxTokens)))) : 1800;
   const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Math.max(5000, Math.floor(Number(options.timeoutMs))) : 90_000;
@@ -286,6 +354,7 @@ async function callAiProvider(config, messages, options = {}) {
 module.exports = {
   PROVIDERS,
   callAiProvider,
+  getServerAiDefaults,
   normalizeProvider,
   normalizeBaseUrl,
   normalizeMessages,

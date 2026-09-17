@@ -490,7 +490,7 @@ function ProductionReadinessPanel({ readiness, loading }) {
           )}
 
           {ok && warnings.length === 0 && (
-            <Banner tone="success">Core production checks passed.</Banner>
+            <Banner tone="success" className="mt-2">Core production checks passed.</Banner>
           )}
         </>
       )}

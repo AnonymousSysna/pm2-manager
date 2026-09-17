@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bot, CheckCircle2, Copy, KeyRound, Play, Send, TerminalSquare, Wrench, Zap } from "lucide-react";
+import { Bot, CheckCircle2, Copy, KeyRound, Play, Send, TerminalSquare, Wrench } from "lucide-react";
 import { aiOperator, processes as processApi } from "../api";
 import toast, { getErrorMessage } from "../lib/toast";
 import Badge from "../components/ui/Badge";
@@ -29,10 +29,10 @@ const providerBaseUrls = {
 };
 
 const suggestedPrompts = [
-  "Fix the dashboard 404 after login",
-  "Repair missing assets after deploy",
-  "Find why PM2 keeps restarting",
-  "Fix Git pull blocked by local changes"
+  "Hello",
+  "What can you help me with?",
+  "What's the problem?",
+  "Spawn a diagnostic agent loop"
 ];
 
 const criticalActions = ["delete", "kill-daemon", "resurrect", "startup", "unstartup", "send-signal", "update-daemon"];
@@ -56,6 +56,10 @@ const statusTone = {
   running: "info",
   blocked: "warning"
 };
+
+function providerShortLabel(provider) {
+  return provider === "anthropic" ? "Claude" : "OpenAI compatible";
+}
 
 function loadSettings() {
   try {
@@ -199,11 +203,12 @@ export default function AIOperator() {
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      content: "Describe the issue. I’ll spawn an agent run."
+      content: "Talk to me normally first. Say “what’s the problem?” or ask for a diagnostic agent loop when you want me to inspect PM2/logs. Nothing runs until you confirm it."
     }
   ]);
   const [prompt, setPrompt] = useState("");
   const [providers, setProviders] = useState([]);
+  const [serverDefaults, setServerDefaults] = useState(null);
   const [processes, setProcesses] = useState([]);
   const [lastActions, setLastActions] = useState([]);
   const [lastExecutions, setLastExecutions] = useState([]);
@@ -224,10 +229,29 @@ export default function AIOperator() {
     let mounted = true;
     aiOperator.providers()
       .then((result) => {
-        if (mounted) setProviders(result.data?.providers || []);
+        if (!mounted) return;
+        const data = result.data || {};
+        const defaults = data.serverDefaults || null;
+        setProviders(data.providers || []);
+        setServerDefaults(defaults);
+        if (defaults) {
+          setSettings((prev) => {
+            const untouched = !prev.model && !prev.apiKey && prev.provider === defaultSettings.provider && prev.baseUrl === defaultSettings.baseUrl;
+            if (!untouched) return prev;
+            return {
+              ...prev,
+              provider: defaults.provider || prev.provider,
+              baseUrl: defaults.baseUrl || prev.baseUrl,
+              model: defaults.model || prev.model
+            };
+          });
+        }
       })
       .catch(() => {
-        if (mounted) setProviders([]);
+        if (mounted) {
+          setProviders([]);
+          setServerDefaults(null);
+        }
       });
     processApi.list()
       .then((result) => {
@@ -241,8 +265,11 @@ export default function AIOperator() {
     };
   }, []);
 
-  const canSpawn = prompt.trim().length >= 8 && !spawning;
-  const connected = Boolean(settings.baseUrl.trim() && settings.model.trim() && settings.apiKey.trim());
+  const canSend = prompt.trim().length > 0 && !spawning;
+  const hasKey = Boolean(settings.apiKey.trim() || serverDefaults?.hasApiKey);
+  const connected = Boolean(settings.baseUrl.trim() && settings.model.trim() && hasKey);
+  const keySource = settings.apiKey.trim() ? "Browser key" : serverDefaults?.hasApiKey ? "Server key" : "No key";
+  const providerLabel = providerShortLabel(settings.provider);
 
   const updateSetting = (name, value) => {
     setSettings((prev) => ({ ...prev, [name]: value }));
@@ -274,14 +301,10 @@ export default function AIOperator() {
     }
   };
 
-  const spawnAgent = async (event) => {
+  const sendMessage = async (event) => {
     event?.preventDefault?.();
     const task = prompt.trim();
-    if (spawning) return;
-    if (task.length < 8) {
-      toast.error("Explain the task first");
-      return;
-    }
+    if (spawning || !task) return;
 
     const userMessage = { role: "user", content: task };
     const nextMessages = [...messages, userMessage];
@@ -293,30 +316,29 @@ export default function AIOperator() {
     setAgentRun({
       status: "running",
       task,
-      thoughts: ["Agent spawned from your request."],
-      logs: [{ level: "info", title: "Starting", message: "Collecting dashboard evidence." }]
+      thoughts: ["Normal chat first: diagnostics start only after a clear problem/agent-loop request."],
+      logs: []
     });
 
     try {
       const result = await toast.promise(
-        () => aiOperator.agentRun({
-          task,
+        () => aiOperator.chat({
           provider: settings.provider,
           baseUrl: settings.baseUrl,
           apiKey: settings.apiKey,
           model: settings.model,
-          executeMode: settings.executeMode,
+          executeMode: "plan",
           messages: nextMessages.filter((message) => ["user", "assistant"].includes(message.role)),
           context: { processes }
         }),
         {
-          loading: settings.executeMode === "write" ? "Agent working..." : settings.executeMode === "read" ? "Agent checking..." : "Agent planning...",
-          success: "Agent finished",
+          loading: "Agent thinking...",
+          success: "Reply ready",
           error: (error) => getErrorMessage(error, "Agent failed")
         }
       );
       const data = result.data || {};
-      const assistantMessage = { role: "assistant", content: data.reply || "Agent run finished." };
+      const assistantMessage = { role: "assistant", content: data.reply || "I’m ready. Tell me what you want to do next." };
       setMessages((prev) => [...prev, assistantMessage]);
       setLastActions(data.actions || []);
       setLastExecutions(data.executions || []);
@@ -339,38 +361,20 @@ export default function AIOperator() {
   };
 
   const runAction = async (action) => {
-    if (criticalActions.includes(action.actionId)) {
-      setPendingAction(action);
-      return;
-    }
-    setRunningActionId(action.actionId);
-    try {
-      const result = await aiOperator.runAction(action.actionId, action.payload || {});
-      if (result.data?.status === "needs_confirmation") {
-        setPendingAction(action);
-        return;
-      }
-      const executionStatus = result.data?.status || (result.success ? "executed" : "failed");
-      setLastExecutions((prev) => [{ ...(result.data || {}), status: executionStatus, success: result.success }, ...prev]);
-      if (!result.success || ["failed", "rejected"].includes(executionStatus)) {
-        toast.error(`${action.actionId} failed`);
-      } else {
-        toast.success(`${action.actionId} ${executionStatus === "accepted" ? "accepted" : "completed"}`);
-      }
-    } catch (error) {
-      toast.error(getErrorMessage(error, `${action.actionId} failed`));
-    } finally {
-      setRunningActionId("");
-    }
+    setPendingAction(action);
   };
 
-  const confirmCriticalAction = async () => {
+  const confirmPlannedAction = async () => {
     if (!pendingAction) return;
     const action = pendingAction;
     setPendingAction(null);
     setRunningActionId(action.actionId);
     try {
       const result = await aiOperator.runAction(action.actionId, action.payload || {}, action.actionId);
+      if (result.data?.status === "needs_confirmation") {
+        setPendingAction(action);
+        return;
+      }
       const executionStatus = result.data?.status || (result.success ? "executed" : "failed");
       setLastExecutions((prev) => [{ ...(result.data || {}), status: executionStatus, success: result.success }, ...prev]);
       if (!result.success || ["failed", "rejected"].includes(executionStatus)) {
@@ -390,7 +394,7 @@ export default function AIOperator() {
       <PageIntro
         title="AI Operator"
         actions={(<>
-          <Badge tone={connected ? "success" : "warning"}>{connected ? "Ready" : "Local agent"}</Badge>
+          <Badge tone={connected ? "success" : "warning"}>{connected ? "AI ready" : "Local fallback"}</Badge>
           <Button type="button" size="sm" variant="outlinePrimary" onClick={() => setConnectionModalOpen(true)}>
             <KeyRound size={14} />
             Connection
@@ -406,11 +410,13 @@ export default function AIOperator() {
         <div className="ai-connection-summary-main">
           <div className="min-w-0">
             <Eyebrow>Agent mode</Eyebrow>
-            <h2 className="panel-heading mt-1">Interactive worker</h2>
+            <h2 className="panel-heading mt-1">Chat-first operator</h2>
+            <p className="mt-1 text-xs font-medium text-text-3">Normal conversation stays normal. “What’s the problem?” starts the diagnostic agent loop.</p>
           </div>
           <div className="ai-connection-pills">
-            <Badge tone={settings.executeMode === "write" ? "warning" : "neutral"}>{settings.executeMode}</Badge>
-            <Badge tone="neutral">{settings.provider === "anthropic" ? "Claude" : "OpenAI"}</Badge>
+            <Badge tone="success">Confirm first</Badge>
+            <Badge tone="neutral">{providerLabel}</Badge>
+            <Badge tone={hasKey ? "success" : "warning"}>{keySource}</Badge>
             {settings.model ? <Badge tone="neutral">{settings.model}</Badge> : null}
           </div>
         </div>
@@ -432,8 +438,9 @@ export default function AIOperator() {
         >
           <section className="ai-connection-modal-card">
             <div className="ai-connection-modal-status">
-              <Badge tone={connected ? "success" : "warning"}>{connected ? "Ready" : "Local agent"}</Badge>
-              <Badge tone="neutral">{settings.provider === "anthropic" ? "Claude" : "OpenAI"}</Badge>
+              <Badge tone={connected ? "success" : "warning"}>{connected ? "AI ready" : "Local fallback"}</Badge>
+              <Badge tone="neutral">{providerLabel}</Badge>
+              <Badge tone={hasKey ? "success" : "warning"}>{keySource}</Badge>
               {settings.model ? <Badge tone="neutral">{settings.model}</Badge> : null}
             </div>
 
@@ -447,31 +454,27 @@ export default function AIOperator() {
 
               <div className="ai-connection-two-col">
                 <Field label="Provider URL" className="ai-compact-field">
-                  <Input className="ai-compact-input" value={settings.baseUrl} onChange={(event) => updateSetting("baseUrl", event.target.value)} placeholder="https://api.openai.com/v1" />
+                  <Input className="ai-compact-input" value={settings.baseUrl} onChange={(event) => updateSetting("baseUrl", event.target.value)} placeholder={settings.provider === "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1"} />
                 </Field>
                 <Field label="Model" className="ai-compact-field">
-                  <Input className="ai-compact-input" value={settings.model} onChange={(event) => updateSetting("model", event.target.value)} placeholder="gpt-4o-mini" />
+                  <Input className="ai-compact-input" value={settings.model} onChange={(event) => updateSetting("model", event.target.value)} placeholder={settings.provider === "anthropic" ? "claude-..." : "gpt-... or provider/model"} />
                 </Field>
               </div>
 
               <Field label="API key" className="ai-compact-field">
-                <Input className="ai-compact-input" type="password" value={settings.apiKey} onChange={(event) => updateSetting("apiKey", event.target.value)} placeholder="sk-..." autoComplete="off" />
+                <Input className="ai-compact-input" type="password" value={settings.apiKey} onChange={(event) => updateSetting("apiKey", event.target.value)} placeholder={serverDefaults?.hasApiKey ? "Leave blank to use server key" : "Paste API key"} autoComplete="off" />
               </Field>
 
-              <Field label="Mode" className="ai-mode-field ai-compact-field">
-                <div className="ai-segmented-control ai-segmented-control-three ai-segmented-control-tight" role="group" aria-label="AI run mode">
-                  <button type="button" aria-pressed={settings.executeMode === "plan"} onClick={() => updateSetting("executeMode", "plan")}>Plan only</button>
-                  <button type="button" aria-pressed={settings.executeMode === "read"} onClick={() => updateSetting("executeMode", "read")}>Auto checks</button>
-                  <button type="button" aria-pressed={settings.executeMode === "write"} onClick={() => updateSetting("executeMode", "write")}>Safe writes</button>
-                </div>
-              </Field>
+              <InsetPanel padding="sm" className="text-xs font-medium text-text-2">
+                jcode-style setup: choose OpenAI compatible or Anthropic Claude, set Provider URL + Model, then use a browser key or leave API key blank when the server has one. Chat stays normal until you ask for diagnostics.
+              </InsetPanel>
 
               <div className="ai-connection-action-row">
                 <label className="ai-remember-key ai-remember-key-compact">
                   <input type="checkbox" checked={settings.rememberKey} onChange={(event) => updateSetting("rememberKey", event.target.checked)} />
                   <span>Remember key</span>
                 </label>
-                <Button type="button" size="sm" variant="outlinePrimary" onClick={testConnection} disabled={testing || !settings.apiKey || !settings.model || !settings.baseUrl}>
+                <Button type="button" size="sm" variant="outlinePrimary" onClick={testConnection} disabled={testing || !hasKey || !settings.model || !settings.baseUrl}>
                   <KeyRound size={14} />
                   {testing ? "Testing" : "Test"}
                 </Button>
@@ -483,14 +486,14 @@ export default function AIOperator() {
 
       <section className="ai-workspace ai-agent-workspace">
         <section className="ai-terminal-panel ai-agent-terminal-panel">
-          <PanelHeader title="Agent task" actions={<Badge tone={settings.executeMode === "write" ? "warning" : "neutral"}>{settings.executeMode}</Badge>} />
+          <PanelHeader title="Operator chat" actions={<Badge tone="success">Chat first</Badge>} />
 
           <div className="operator-messages ai-message-window">
             {messages.map((message, index) => <MessageBubble key={`${message.role}-${index}`} message={message} />)}
             {spawning ? (
               <div className="flex items-center gap-2 text-sm text-text-3">
                 <Bot size={16} className="animate-pulse" />
-                Agent running...
+                Agent thinking...
               </div>
             ) : null}
           </div>
@@ -501,16 +504,16 @@ export default function AIOperator() {
             ))}
           </div>
 
-          <form onSubmit={spawnAgent} className="ai-prompt-form ai-agent-prompt-form">
+          <form onSubmit={sendMessage} className="ai-prompt-form ai-agent-prompt-form">
             <Textarea
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
-              placeholder="Explain the error or task"
+              placeholder="Chat normally, or say “what’s the problem?” to start the agent loop"
               className="ai-prompt-input resize-y"
             />
-            <Button type="submit" disabled={!canSpawn} className="ai-send-button">
-              <Zap size={14} />
-              {spawning ? "Running" : "Spawn agent"}
+            <Button type="submit" disabled={!canSend} className="ai-send-button">
+              <Send size={14} />
+              {spawning ? "Thinking" : "Send"}
             </Button>
           </form>
         </section>
@@ -522,6 +525,7 @@ export default function AIOperator() {
               <CompactMetric label="Processes" value={processes.length} />
               <CompactMetric label="Issues" value={lastSupportContext?.issues?.length ?? "—"} />
               <CompactMetric label="Status" value={agentRun?.status || "Idle"} />
+              <CompactMetric label="Mode" value={agentRun?.mode || "chat"} />
             </div>
           </section>
 
@@ -537,7 +541,7 @@ export default function AIOperator() {
 
           {lastActions.length ? (
             <section className="ai-side-card ai-queue-card">
-              <PanelHeader title="Manual actions" />
+              <PanelHeader title="Suggested actions" />
               <div className="ai-card-list">
                 {lastActions.map((action, index) => (
                   <PlannedActionCard key={`${action.actionId}-${index}`} action={action} onRun={runAction} running={runningActionId === action.actionId} />
@@ -548,7 +552,7 @@ export default function AIOperator() {
 
           {lastExecutions.length ? (
             <section className="ai-side-card ai-queue-card">
-              <PanelHeader title="Execution" />
+              <PanelHeader title="Action result" />
               <div className="ai-card-list">
                 {lastExecutions.map((execution, index) => (
                   <ExecutionCard key={`${execution.actionId}-${index}`} execution={execution} />
@@ -568,11 +572,11 @@ export default function AIOperator() {
 
       {pendingAction && (
         <ConfirmDialog
-          title={`Run critical action: ${pendingAction.actionId}?`}
-          description="This can affect running apps."
-          confirmLabel="Run critical action"
-          confirmVariant="danger"
-          onConfirm={confirmCriticalAction}
+          title={`${criticalActions.includes(pendingAction.actionId) ? "Run critical action" : "Run action"}: ${pendingAction.actionId}?`}
+          description="This will execute on the server. The agent only prepared it; confirm before running anything."
+          confirmLabel={criticalActions.includes(pendingAction.actionId) ? "Run critical action" : "Run action"}
+          confirmVariant={criticalActions.includes(pendingAction.actionId) ? "danger" : "primary"}
+          onConfirm={confirmPlannedAction}
           onClose={() => setPendingAction(null)}
         />
       )}

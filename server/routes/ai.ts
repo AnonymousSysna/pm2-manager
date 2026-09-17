@@ -3,7 +3,7 @@ const { verifyToken } = require("../middleware/auth");
 const { createRateLimiter, readLimiter } = require("../middleware/rateLimit");
 const { asyncHandler } = require("../middleware/asyncHandler");
 const { logger } = require("../utils/logger");
-const { callAiProvider, normalizeMessages, PROVIDERS } = require("../utils/aiProvider");
+const { callAiProvider, normalizeMessages, PROVIDERS, getServerAiDefaults } = require("../utils/aiProvider");
 const { collectSupportContext, createSupportFallbackPlan, makeOperatorSystemPrompt, mergeActionPlans, buildPostRunSummary, parseJsonPlan, executePlannedActions } = require("../utils/aiOperator");
 
 const router = express.Router();
@@ -37,6 +37,42 @@ function isExplainedAgentTask(value) {
 
 function trimAgentText(value, limit = 1200) {
   return String(value || "").trim().slice(0, limit);
+}
+
+function getLatestUserText(messages = []) {
+  const latest = [...messages].reverse().find((message) => message?.role === "user");
+  return String(latest?.content || "").trim();
+}
+
+function isAgentLoopRequest(value) {
+  const text = String(value || "").trim().toLowerCase();
+  if (!text) return false;
+
+  const casualOnly = /^(hi|hello|hey|yo|sup|thanks|thank you|ok|okay|yes|no|test|ping|are you there|how are you)[!?.\s]*$/i.test(text);
+  if (casualOnly) return false;
+
+  const asksForProblem = /\b(what'?s the problem|what is the problem|what happened|why is it broken|root cause|find the issue|find the problem|tell me the issue|any issue|what went wrong)\b/.test(text);
+  const asksForAgent = /\b(spawn|start|run|enter)\b.{0,24}\b(agent|diagnostic|diagnostics|loop|investigation)\b/.test(text) || /\b(agent loop|diagnostic loop|debug loop)\b/.test(text);
+  const asksForDiagnostics = /\b(debug|diagnose|diagnostics|troubleshoot|investigate|inspect logs?|check logs?|check pm2|check server|analyze (this )?(error|logs?|crash|failure))\b/.test(text);
+  const pastedErrorEvidence = /\b(error|exception|traceback|stack trace|enoent|eacces|eaddrinuse|not defined|cannot find module|failed|crash|timeout|404|500|502|503|npm err|vite|typescript|typeerror|referenceerror|pm2|git pull|merge conflict)\b/.test(text) && text.length >= 12;
+
+  return asksForProblem || asksForAgent || asksForDiagnostics || pastedErrorEvidence;
+}
+
+function buildChatSystemPrompt() {
+  return [
+    "You are the chat-first PM2 Manager assistant.",
+    "Reply conversationally and help the operator decide what to do next.",
+    "Stay in normal conversation mode unless the latest user message explicitly asks for diagnostics, asks what the problem is, asks to spawn an agent/loop, or includes concrete error/log output.",
+    "Do not claim that you inspected logs, checked PM2, ran Git, debugged, repaired, deployed, restarted, or changed files unless the server returned that evidence from an agent loop.",
+    "For casual messages, greet the user normally.",
+    "For non-diagnostic tasks, explain the next safe step and ask before any action is run.",
+    "Keep replies short and practical."
+  ].join("\n");
+}
+
+function buildProviderUsage(aiResponse) {
+  return aiResponse?.rawUsage || null;
 }
 
 function summarizeSupportContextForResponse(supportContext) {
@@ -139,18 +175,18 @@ function buildAgentLogs({ supportContext, executions, providerError }) {
   return logs.slice(0, 12);
 }
 
-function getAgentStatus(executions = []) {
-  if (!Array.isArray(executions) || executions.length === 0) return "planned";
-  if (executions.some((execution) => ["failed", "rejected"].includes(execution.status))) return "failed";
-  if (executions.some((execution) => execution.status === "needs_confirmation")) return "blocked";
-  if (executions.some((execution) => ["executed", "accepted"].includes(execution.status))) return "done";
-  return "planned";
-}
 
 router.use(verifyToken);
 
 router.get("/providers", readLimiter, asyncHandler(async (_req, res) => {
-  res.json({ success: true, data: { providers: Object.values(PROVIDERS) }, error: null });
+  res.json({
+    success: true,
+    data: {
+      providers: Object.values(PROVIDERS),
+      serverDefaults: getServerAiDefaults()
+    },
+    error: null
+  });
 }));
 
 router.post("/test", aiLimiter, asyncHandler(async (req, res) => {
@@ -235,12 +271,12 @@ router.post("/agent/run", aiLimiter, asyncHandler(async (req, res) => {
 
   const startedAt = new Date().toISOString();
   const executeMode = normalizeExecuteMode(req.body?.executeMode);
-  const incomingMessages = normalizeMessages(req.body?.messages);
+  const incomingMessages = Array.isArray(req.body?.messages) && req.body.messages.length ? normalizeMessages(req.body.messages) : [];
   const messages = incomingMessages.length ? incomingMessages : [{ role: "user", content: task }];
   const context = req.body?.context && typeof req.body.context === "object" ? req.body.context : {};
   const userText = `${task}\n${messages.map((message) => message.content).join("\n")}`;
   const supportContext = await collectSupportContext({ ...context, messages, userText });
-  const fallbackPlan = createSupportFallbackPlan(supportContext, userText);
+  const fallbackPlan = createSupportFallbackPlan(supportContext, task);
   const systemPrompt = makeOperatorSystemPrompt({ ...context, supportContext });
   const providerMessages = [
     {
@@ -258,7 +294,7 @@ router.post("/agent/run", aiLimiter, asyncHandler(async (req, res) => {
     aiResponse = await callAiProvider(getProviderConfig(req.body || {}), providerMessages, {
       timeoutMs: Number.isFinite(Number(process.env.AI_TIMEOUT_MS)) ? Math.max(5000, Math.floor(Number(process.env.AI_TIMEOUT_MS))) : 90_000
     });
-    plan = mergeActionPlans(parseJsonPlan(aiResponse.content), fallbackPlan, userText);
+    plan = mergeActionPlans(parseJsonPlan(aiResponse.content), fallbackPlan, task);
   } catch (error) {
     providerError = error?.message || "AI provider call failed";
     aiResponse = {
@@ -273,16 +309,11 @@ router.post("/agent/run", aiLimiter, asyncHandler(async (req, res) => {
     };
   }
 
-  const executions = await executePlannedActions(plan.actions, executeMode);
-  const shouldRefreshContext = executions.some((execution) => ["executed", "accepted", "failed"].includes(execution.status));
-  const executionText = executions.map((execution) => execution.output || execution.reason || "").join("\n");
-  const postContext = shouldRefreshContext
-    ? await collectSupportContext({ ...context, messages, userText: `${userText}\n${executionText}` })
-    : supportContext;
-  const operatorSummary = buildPostRunSummary(plan, executions, postContext);
-  const thoughts = buildAgentThoughts({ task, supportContext: postContext, plan, executions, executeMode, providerError });
-  const logs = buildAgentLogs({ supportContext: postContext, executions, providerError });
-  const finalReply = [plan.reply, operatorSummary].filter(Boolean).join("\n\n");
+  const executions = await executePlannedActions(plan.actions, "plan");
+  const operatorSummary = buildPostRunSummary(plan, executions, supportContext);
+  const thoughts = buildAgentThoughts({ task, supportContext, plan, executions, executeMode: "plan", providerError });
+  const logs = buildAgentLogs({ supportContext, executions, providerError });
+  const finalReply = [plan.reply, operatorSummary, "Agent loop finished with feedback only. Nothing was executed. Choose a prepared action to run it."].filter(Boolean).join("\n\n");
 
   logger.info("ai_agent_run", {
     provider: aiResponse.provider,
@@ -303,11 +334,11 @@ router.post("/agent/run", aiLimiter, asyncHandler(async (req, res) => {
       actions: plan.actions,
       executions,
       riskNotes: plan.riskNotes,
-      supportContext: summarizeSupportContextForResponse(postContext),
+      supportContext: summarizeSupportContextForResponse(supportContext),
       agentRun: {
         runId: `agent_${Date.now().toString(36)}`,
-        status: getAgentStatus(executions),
-        mode: executeMode,
+        status: "planned",
+        mode: "plan",
         task,
         startedAt,
         finishedAt: new Date().toISOString(),
@@ -320,13 +351,70 @@ router.post("/agent/run", aiLimiter, asyncHandler(async (req, res) => {
 }));
 
 router.post("/chat", aiLimiter, asyncHandler(async (req, res) => {
-  const executeMode = normalizeExecuteMode(req.body?.executeMode);
   const messages = normalizeMessages(req.body?.messages);
   const context = req.body?.context && typeof req.body.context === "object" ? req.body.context : {};
+  const latestUserText = getLatestUserText(messages);
   const userText = messages.map((message) => message.content).join("\n");
-  const supportContext = await collectSupportContext({ ...context, messages, userText });
-  const fallbackPlan = createSupportFallbackPlan(supportContext, userText);
-  const systemPrompt = makeOperatorSystemPrompt({ ...context, supportContext });
+  const shouldEnterAgentLoop = isAgentLoopRequest(latestUserText);
+
+  if (!messages.length) {
+    res.status(400).json({ success: false, data: null, error: "Type a message first." });
+    return;
+  }
+
+  if (!shouldEnterAgentLoop) {
+    let aiResponse;
+    let reply = "Hey — tell me what you want to check or change, and I’ll ask before running anything.";
+    try {
+      aiResponse = await callAiProvider(getProviderConfig(req.body || {}), [
+        { role: "system", content: buildChatSystemPrompt() },
+        ...messages.filter((message) => message.role !== "system")
+      ], {
+        timeoutMs: Number.isFinite(Number(process.env.AI_TIMEOUT_MS)) ? Math.max(5000, Math.floor(Number(process.env.AI_TIMEOUT_MS))) : 60_000
+      });
+      reply = trimAgentText(aiResponse.content, 4000) || reply;
+    } catch (error) {
+      aiResponse = {
+        provider: req.body?.provider || "local-chat",
+        model: req.body?.model || "chat-first-fallback",
+        endpoint: "local-chat",
+        rawUsage: null
+      };
+      logger.warn("ai_chat_provider_fallback", { error: error?.message || "AI provider failed" });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        provider: aiResponse.provider,
+        model: aiResponse.model,
+        endpoint: aiResponse.endpoint,
+        usage: buildProviderUsage(aiResponse),
+        reply,
+        actions: [],
+        riskNotes: [],
+        supportContext: null,
+        executions: [],
+        agentRun: {
+          runId: `chat_${Date.now().toString(36)}`,
+          status: "idle",
+          mode: "chat",
+          task: userText,
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+          thoughts: ["Normal chat mode: no diagnostics, logs, PM2, Git, build checks, or server actions were started."],
+          logs: []
+        }
+      },
+      error: null
+    });
+    return;
+  }
+
+  const startedAt = new Date().toISOString();
+  const supportContext = await collectSupportContext({ ...context, messages, userText: latestUserText });
+  const fallbackPlan = createSupportFallbackPlan(supportContext, latestUserText);
+  const systemPrompt = `${makeOperatorSystemPrompt({ ...context, supportContext })}\nYou are in chat-first planning mode. Prepare suggestions only. Do not execute actions. Ask the user to confirm from the prepared actions before anything runs.`;
   const providerMessages = [
     { role: "system", content: systemPrompt },
     ...messages.filter((message) => message.role !== "system")
@@ -338,34 +426,30 @@ router.post("/chat", aiLimiter, asyncHandler(async (req, res) => {
     aiResponse = await callAiProvider(getProviderConfig(req.body || {}), providerMessages, {
       timeoutMs: Number.isFinite(Number(process.env.AI_TIMEOUT_MS)) ? Math.max(5000, Math.floor(Number(process.env.AI_TIMEOUT_MS))) : 90_000
     });
-    plan = mergeActionPlans(parseJsonPlan(aiResponse.content), fallbackPlan, userText);
+    plan = mergeActionPlans(parseJsonPlan(aiResponse.content), fallbackPlan, latestUserText);
   } catch (error) {
     aiResponse = {
       provider: req.body?.provider || "offline-diagnostics",
-      model: req.body?.model || "support-agent",
-      endpoint: "local-support-diagnostics",
+      model: req.body?.model || "support-planner",
+      endpoint: "local-support-planner",
       rawUsage: null
     };
     plan = {
       ...fallbackPlan,
-      reply: `${fallbackPlan.reply}\n\nAI provider call failed, so I used the local support diagnosis instead. ${error?.message || ""}`.trim()
+      reply: `${fallbackPlan.reply}\n\nAI provider call failed, so I prepared a local plan only. ${error?.message || ""}`.trim()
     };
   }
-  const executions = await executePlannedActions(plan.actions, executeMode);
-  const shouldRefreshContext = executions.some((execution) => ["executed", "accepted", "failed"].includes(execution.status));
-  const executionText = executions.map((execution) => execution.output || execution.reason || "").join("\n");
-  const postContext = shouldRefreshContext
-    ? await collectSupportContext({ ...context, messages, userText: `${userText}\n${executionText}` })
-    : supportContext;
-  const operatorSummary = buildPostRunSummary(plan, executions, postContext);
-  const finalReply = [plan.reply, operatorSummary].filter(Boolean).join("\n\n");
 
-  logger.info("ai_operator_request", {
+  const executions = await executePlannedActions(plan.actions, "plan");
+  const operatorSummary = buildPostRunSummary(plan, executions, supportContext);
+  const finalReply = [plan.reply, operatorSummary, "Agent loop finished with feedback only. Nothing was executed. Choose a prepared action to run it."].filter(Boolean).join("\n\n");
+  const thoughts = buildAgentThoughts({ task: latestUserText, supportContext, plan, executions, executeMode: "plan", providerError: "" });
+  const logs = buildAgentLogs({ supportContext, executions, providerError: "" });
+
+  logger.info("ai_operator_chat_plan", {
     provider: aiResponse.provider,
     model: aiResponse.model,
-    executeMode,
-    actions: plan.actions.map((action) => action.actionId),
-    executions: executions.map((execution) => ({ actionId: execution.actionId, status: execution.status }))
+    actions: plan.actions.map((action) => action.actionId)
   });
 
   res.json({
@@ -374,24 +458,22 @@ router.post("/chat", aiLimiter, asyncHandler(async (req, res) => {
       provider: aiResponse.provider,
       model: aiResponse.model,
       endpoint: aiResponse.endpoint,
-      usage: aiResponse.rawUsage,
+      usage: buildProviderUsage(aiResponse),
       reply: finalReply,
       actions: plan.actions,
       riskNotes: plan.riskNotes,
-      supportContext: {
-        version: postContext.version,
-        processName: postContext.processName,
-        build: postContext.build,
-        env: postContext.env,
-        issues: postContext.issues,
-        git: postContext.git,
-        pm2: {
-          status: postContext.pm2?.status,
-          jlistOk: postContext.pm2?.jlistOk,
-          processCount: Array.isArray(postContext.pm2?.processes) ? postContext.pm2.processes.length : 0
-        }
-      },
-      executions
+      supportContext: summarizeSupportContextForResponse(supportContext),
+      executions,
+      agentRun: {
+        runId: `plan_${Date.now().toString(36)}`,
+        status: "planned",
+        mode: "agent-loop",
+        task: userText,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        thoughts,
+        logs
+      }
     },
     error: null
   });
