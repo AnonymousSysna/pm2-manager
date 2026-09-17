@@ -116,10 +116,12 @@ because everything in those files ships to the browser.
 - A prop a component accepts must be honoured. `Modal` accepts
   `description`; it now renders it and points `aria-describedby` at it.
   `Field` never honoured `description`, so the prop is gone rather than
-  declared and dropped.
-- Tests assert the copy users actually see. When a label changes on purpose the
-  assertion moves with it in the same change, so the suite keeps catching
-  regressions instead of drifting out of date.
+  declared and dropped, and `PageLayout`'s `PageIntro` and `PanelHeader`
+  have lost the `description` they accepted and discarded.
+- `props-honoured.test.ts` walks every primitive in that folder and fails
+  when a destructured prop name never appears again in its own file. That is
+  the check that would have caught `description: _description` on the day it
+  was written, in all three components that had it.
 
 ## Overview cognitive load
 
