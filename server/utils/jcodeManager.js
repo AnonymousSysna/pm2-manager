@@ -19,6 +19,73 @@ const STATE_PATH = path.resolve(
   process.env.JCODE_STATE_PATH || path.resolve(__dirname, "../../logs/jcode-extension.json")
 );
 
+function pathDelimiter() {
+  return process.platform === "win32" ? ";" : ":";
+}
+
+function uniqueValues(values) {
+  const seen = new Set();
+  return values.filter((value) => {
+    const normalized = String(value || "").trim();
+    if (!normalized || seen.has(normalized)) {
+      return false;
+    }
+    seen.add(normalized);
+    return true;
+  });
+}
+
+function getHomeDir() {
+  return process.env.HOME || process.env.USERPROFILE || os.homedir() || "";
+}
+
+function getJcodeCandidateDirs() {
+  const homeDir = getHomeDir();
+  const candidates = [
+    process.env.JCODE_BIN_DIR,
+    process.env.JCODE_HOME ? path.join(process.env.JCODE_HOME, "bin") : null,
+    homeDir ? path.join(homeDir, ".local", "bin") : null,
+    homeDir ? path.join(homeDir, "bin") : null,
+    "/usr/local/bin",
+    "/usr/bin",
+    "/opt/homebrew/bin"
+  ];
+
+  if (process.platform === "win32") {
+    candidates.push(
+      process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "Programs", "jcode") : null,
+      process.env.APPDATA ? path.join(process.env.APPDATA, "jcode") : null
+    );
+  }
+
+  return uniqueValues(candidates);
+}
+
+function withJcodePathEnv(baseEnv = process.env) {
+  const env = { ...baseEnv };
+  const pathKey = Object.keys(env).find((key) => key.toLowerCase() === "path") || "PATH";
+  const currentPath = String(env[pathKey] || "");
+  env[pathKey] = uniqueValues([...getJcodeCandidateDirs(), ...currentPath.split(pathDelimiter())]).join(pathDelimiter());
+  return env;
+}
+
+function getJcodeBinaryCandidates() {
+  const explicit = process.env.JCODE_BIN_PATH || process.env.JCODE_BINARY || "";
+  const binaryName = process.platform === "win32" ? "jcode.exe" : "jcode";
+  return uniqueValues([
+    explicit,
+    ...getJcodeCandidateDirs().map((dir) => path.join(dir, binaryName))
+  ]);
+}
+
+function fileExists(filePath) {
+  try {
+    return Boolean(filePath) && fs.existsSync(filePath) && fs.statSync(filePath).isFile();
+  } catch (_error) {
+    return false;
+  }
+}
+
 function getPlatformName() {
   if (process.platform === "win32") {
     return "windows";
@@ -93,23 +160,27 @@ function runCommand(command, args, options = {}) {
 }
 
 async function commandExists(command) {
-  const probe = process.platform === "win32" ? "where" : "which";
-  try {
-    await runCommand(probe, [command]);
-    return true;
-  } catch (_error) {
-    return false;
-  }
+  return Boolean(await commandPath(command));
 }
 
 async function commandPath(command) {
   const probe = process.platform === "win32" ? "where" : "which";
   try {
-    const result = await runCommand(probe, [command]);
+    const result = await runCommand(probe, [command], { env: withJcodePathEnv() });
     return String(result.stdout || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean)[0] || null;
   } catch (_error) {
     return null;
   }
+}
+
+async function resolveJcodeBinary() {
+  const pathResult = await commandPath("jcode");
+  if (pathResult) {
+    return pathResult;
+  }
+
+  const candidate = getJcodeBinaryCandidates().find(fileExists);
+  return candidate || null;
 }
 
 async function readState() {
@@ -164,18 +235,21 @@ function sanitizeOutput(value) {
 
 async function getJcodeStatus() {
   const platform = getPlatformName();
-  const installed = await commandExists("jcode");
+  const binaryPath = await resolveJcodeBinary();
+  const installed = Boolean(binaryPath);
   const state = await readState();
   const gatewayPid = Number(state.gatewayPid || 0) || null;
   const gatewayRunning = gatewayPid ? isPidRunning(gatewayPid) : false;
   const gatewayPort = normalizePort(state.gatewayPort || process.env.JCODE_GATEWAY_PORT || 7643);
 
   let version = null;
-  let binaryPath = null;
   if (installed) {
-    binaryPath = await commandPath("jcode");
     try {
-      const result = await runCommand("jcode", ["--version"], { timeoutMs: 10_000, allowNonZero: true });
+      const result = await runCommand(binaryPath, ["--version"], {
+        timeoutMs: 10_000,
+        allowNonZero: true,
+        env: withJcodePathEnv()
+      });
       version = sanitizeOutput(result.stdout || result.stderr).split(/\r?\n/)[0] || null;
     } catch (_error) {
       version = null;
@@ -243,7 +317,10 @@ async function installJcode(payload = {}) {
   const platform = getPlatformName();
   const runner = buildInstallRunner(platform);
   try {
-    const result = await runCommand(runner.command, runner.args, { timeoutMs: INSTALL_TIMEOUT_MS });
+    const result = await runCommand(runner.command, runner.args, {
+      timeoutMs: INSTALL_TIMEOUT_MS,
+      env: withJcodePathEnv()
+    });
     const after = await getJcodeStatus();
     const nextState = await readState();
     nextState.lastAction = {
@@ -261,7 +338,7 @@ async function installJcode(payload = {}) {
         status: after.data,
         output: sanitizeOutput(result.stdout || result.stderr)
       },
-      error: after.data?.installed ? null : "JCode installer finished, but the jcode command was not found on PATH"
+      error: after.data?.installed ? null : "JCode installer finished, but PM2 Manager could not find the jcode binary in PATH or common install locations"
     };
   } catch (error) {
     const nextState = await readState();
@@ -304,13 +381,22 @@ async function startJcodeGateway(payload = {}) {
 
   const port = normalizePort(payload.port || process.env.JCODE_GATEWAY_PORT || 7643);
   const serverName = String(payload.serverName || process.env.JCODE_SERVER_NAME || "pm2-manager").trim() || "pm2-manager";
+  const binaryPath = await resolveJcodeBinary();
+  if (!binaryPath) {
+    return {
+      success: false,
+      data: null,
+      error: "Install JCode first"
+    };
+  }
+
   const args = ["serve", "--server-name", serverName];
-  const child = spawn("jcode", args, {
+  const child = spawn(binaryPath, args, {
     cwd: process.env.JCODE_WORKING_DIR || process.cwd(),
-    env: {
+    env: withJcodePathEnv({
       ...process.env,
       JCODE_GATEWAY_PORT: String(port)
-    },
+    }),
     detached: true,
     stdio: "ignore",
     windowsHide: true
@@ -428,10 +514,20 @@ async function runJcodeAction(payload = {}) {
   }
 
   try {
-    const result = await runCommand("jcode", args, {
+    const binaryPath = await resolveJcodeBinary();
+    if (!binaryPath) {
+      return {
+        success: false,
+        data: null,
+        error: "Install JCode first"
+      };
+    }
+
+    const result = await runCommand(binaryPath, args, {
       cwd: process.env.JCODE_WORKING_DIR || process.cwd(),
       timeoutMs: action === "smoke-test" ? 60_000 : COMMAND_TIMEOUT_MS,
-      allowNonZero: true
+      allowNonZero: true,
+      env: withJcodePathEnv()
     });
     const output = sanitizeOutput(`${result.stdout || ""}\n${result.stderr || ""}`);
     const ok = result.code === 0;
