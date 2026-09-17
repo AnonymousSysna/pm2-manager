@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import toast, { getErrorMessage } from "../lib/toast";
-import { auth, pm2Admin, alerts as alertsApi, processes as processApi } from "../api";
+import { auth, pm2Admin, alerts as alertsApi, processes as processApi, system as systemApi } from "../api";
 import Banner from "../components/ui/Banner";
 import Button from "../components/ui/Button";
 import Checkbox from "../components/ui/Checkbox";
@@ -12,6 +12,7 @@ import InsetPanel from "../components/ui/InsetPanel";
 import { ConfirmDialog } from "../components/ui/Modal";
 import RangeInput from "../components/ui/RangeInput";
 import Select from "../components/ui/Select";
+import { Skeleton } from "../components/ui/Skeleton";
 import { PageIntro, PanelHeader } from "../components/ui/PageLayout";
 
 export default function Settings() {
@@ -29,6 +30,8 @@ export default function Settings() {
   const [channelEnabled, setChannelEnabled] = useState(true);
   const [startupLoading, setStartupLoading] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
+  const [readiness, setReadiness] = useState(null);
+  const [readinessLoading, setReadinessLoading] = useState(true);
   const fileRef = useRef(null);
 
   useEffect(() => {
@@ -53,6 +56,20 @@ export default function Settings() {
       .catch(() => {
         // Keep settings usable without channel list.
       });
+
+    systemApi
+      .readiness()
+      .then((result) => {
+        setReadiness(result.data || null);
+      })
+      .catch((error) => {
+        setReadiness({
+          ok: false,
+          issues: [getErrorMessage(error, "Unable to read production readiness")],
+          warnings: []
+        });
+      })
+      .finally(() => setReadinessLoading(false));
   }, []);
 
   const executeAction = async (label, fn) => {
@@ -257,6 +274,8 @@ export default function Settings() {
         description="Persist PM2 state, tune dashboard polling, manage alert webhooks, and change the dashboard password."
       />
 
+      <ProductionReadinessPanel readiness={readiness} loading={readinessLoading} />
+
       <section className="page-panel">
         <PanelHeader title="PM2 Daemon Controls" className="mb-3" />
         <div className="flex flex-wrap gap-2">
@@ -416,3 +435,70 @@ export default function Settings() {
   );
 }
 
+
+function ProductionReadinessPanel({ readiness, loading }) {
+  const issues = Array.isArray(readiness?.issues) ? readiness.issues : [];
+  const warnings = Array.isArray(readiness?.warnings) ? readiness.warnings : [];
+  const ok = Boolean(readiness?.ok) && issues.length === 0;
+
+  return (
+    <section className="page-panel space-y-3">
+      <PanelHeader
+        title="Production Readiness"
+        description="Configuration, secret, cookie, and runtime checks before exposing this dashboard."
+      />
+      {loading ? (
+        <div className="grid gap-2 md:grid-cols-3" aria-hidden="true">
+          <Skeleton className="h-14 w-full" />
+          <Skeleton className="h-14 w-full" />
+          <Skeleton className="h-14 w-full" />
+        </div>
+      ) : (
+        <>
+          <div className="grid gap-2 md:grid-cols-3">
+            <InsetPanel padding="sm">
+              <p className="text-xs uppercase tracking-[0.16em] text-text-3">Config</p>
+              <p className={`mt-1 text-sm font-semibold ${ok ? "text-success-300" : "text-danger-300"}`}>
+                {ok ? "Ready" : "Needs attention"}
+              </p>
+            </InsetPanel>
+            <InsetPanel padding="sm">
+              <p className="text-xs uppercase tracking-[0.16em] text-text-3">Mode</p>
+              <p className="mt-1 text-sm font-semibold text-text-1">
+                {readiness?.production ? "Production" : "Development"}
+              </p>
+            </InsetPanel>
+            <InsetPanel padding="sm">
+              <p className="text-xs uppercase tracking-[0.16em] text-text-3">PM2 Queue</p>
+              <p className="mt-1 text-sm font-semibold text-text-1">
+                {Number(readiness?.pm2Queue?.queuedOperations || 0)} queued
+              </p>
+            </InsetPanel>
+          </div>
+
+          {issues.length > 0 && (
+            <Banner tone="danger">
+              <p className="font-semibold">Fix these before public production use:</p>
+              <ul className="mt-1 list-disc space-y-1 pl-5 text-xs">
+                {issues.map((issue) => <li key={issue}>{issue}</li>)}
+              </ul>
+            </Banner>
+          )}
+
+          {warnings.length > 0 && (
+            <Banner tone="warning">
+              <p className="font-semibold">Recommended hardening:</p>
+              <ul className="mt-1 list-disc space-y-1 pl-5 text-xs">
+                {warnings.map((warning) => <li key={warning}>{warning}</li>)}
+              </ul>
+            </Banner>
+          )}
+
+          {ok && warnings.length === 0 && (
+            <Banner tone="success">Core production checks passed.</Banner>
+          )}
+        </>
+      )}
+    </section>
+  );
+}

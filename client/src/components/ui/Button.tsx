@@ -21,10 +21,10 @@ const outlineToneByVariant = {
 };
 
 const sizes = {
-  sm: "px-2.5 py-1.5 text-xs",
-  md: "px-3 py-2 text-sm",
-  "sm-icon": "h-7 w-7 rounded p-0",
-  icon: "h-8 w-8 p-0"
+  sm: "min-h-8 px-2.5 py-1.5 text-xs",
+  md: "min-h-10 px-3 py-2 text-sm",
+  "sm-icon": "h-8 w-8 rounded p-0",
+  icon: "h-10 w-10 p-0"
 };
 
 export default function Button({

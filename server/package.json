@@ -1,13 +1,14 @@
 {
   "name": "pm2-dashboard-server",
-  "version": "1.0.0",
+  "version": "1.0.4",
   "main": "index.ts",
   "type": "commonjs",
   "scripts": {
     "dev": "tsx watch index.ts",
     "start": "tsx index.ts",
     "test": "tsx --test tests/**/*.test.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "preflight": "tsx scripts/preflight.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

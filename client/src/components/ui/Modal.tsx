@@ -11,8 +11,9 @@ const sizeMap = {
 };
 
 const dialogPanelClasses = "border border-border bg-surface text-text-1 shadow-xl";
-const dialogHeaderClasses = "mb-4 flex items-start justify-between gap-3";
-const dialogFooterClasses = "mt-5 flex flex-wrap justify-end gap-2";
+const dialogHeaderClasses = "flex shrink-0 items-start justify-between gap-3 border-b border-border/70 pb-3";
+const dialogBodyClasses = "min-h-0 flex-1 overflow-y-auto py-4";
+const dialogFooterClasses = "flex shrink-0 flex-wrap justify-end gap-2 border-t border-border/70 pt-3";
 
 export default function Modal({
   title,
@@ -61,7 +62,7 @@ export default function Modal({
           aria-modal="true"
           aria-labelledby={titleId}
           aria-describedby={description ? descriptionId : undefined}
-          className={cn("absolute right-0 top-0 h-full w-full max-w-xl border-l p-5", dialogPanelClasses, className)}
+          className={cn("absolute right-0 top-0 flex h-full w-full max-w-xl flex-col border-l p-4", dialogPanelClasses, className)}
         >
           <div className={dialogHeaderClasses}>
             <div className="min-w-0 flex-1">
@@ -74,7 +75,7 @@ export default function Modal({
               </Button>
             ) : null}
           </div>
-          <div className={bodyClassName}>{children}</div>
+          <div className={cn(dialogBodyClasses, bodyClassName)}>{children}</div>
           {actions ? <div className={dialogFooterClasses}>{actions}</div> : null}
         </aside>
       </div>
@@ -98,7 +99,7 @@ export default function Modal({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
-        className={cn("relative z-10 w-full rounded-xl p-5", dialogPanelClasses, sizeMap[size] || sizeMap.md, className)}
+        className={cn("relative z-10 flex max-h-[calc(100vh-2rem)] w-full flex-col rounded-xl p-4", dialogPanelClasses, sizeMap[size] || sizeMap.md, className)}
       >
         <div className={dialogHeaderClasses}>
           <div className="min-w-0 flex-1">
@@ -111,7 +112,7 @@ export default function Modal({
             </Button>
           ) : null}
         </div>
-        <div className={bodyClassName}>{children}</div>
+        <div className={cn(dialogBodyClasses, bodyClassName)}>{children}</div>
         {actions ? <div className={dialogFooterClasses}>{actions}</div> : null}
       </div>
     </div>

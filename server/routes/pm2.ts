@@ -10,9 +10,15 @@ const withPermissionHint =
   typeof permissionHints?.withPermissionHint === "function"
     ? permissionHints.withPermissionHint
     : (message) => String(message || "Operation failed");
-const { readLimiter, criticalWriteLimiter } = require("../middleware/rateLimit");
+const { readLimiter, writeLimiter, criticalWriteLimiter } = require("../middleware/rateLimit");
 const { asyncHandler } = require("../middleware/asyncHandler");
 const { trackPm2Operation } = require("../middleware/metrics");
+const { redactSecretsFromText } = require("../utils/urlSafety");
+const {
+  getPm2FeatureCatalog,
+  buildPm2FeatureInvocation,
+  requiresCriticalAcknowledgement
+} = require("../utils/pm2FeatureCatalog");
 
 const router = express.Router();
 
@@ -93,11 +99,11 @@ function combineOutput(stdout = "", stderr = "") {
 }
 
 function truncateOutput(output = "", limit = ACTION_OUTPUT_LIMIT) {
-  return String(output || "").slice(-limit);
+  return redactSecretsFromText(String(output || "")).slice(-limit);
 }
 
 function formatCommand(command, args = []) {
-  return [String(command || "").trim(), ...args.map((item) => String(item || "").trim())]
+  return [String(command || "").trim(), ...args.map((item) => redactSecretsFromText(String(item || "").trim()))]
     .filter(Boolean)
     .join(" ");
 }
@@ -231,6 +237,68 @@ async function detectStartupEnabled() {
 
   return { supported: true, enabled: false, manager: "systemd", service: candidates[0], output: "" };
 }
+
+
+router.get("/features", asyncHandler(async (_req, res) => {
+  res.json({
+    success: true,
+    data: getPm2FeatureCatalog(),
+    error: null
+  });
+}));
+
+router.post("/features/run", writeLimiter, criticalWriteLimiter, asyncHandler(async (req, res) => {
+  let invocation;
+  try {
+    invocation = buildPm2FeatureInvocation(req.body?.actionId, req.body?.payload || {});
+    if (requiresCriticalAcknowledgement(invocation) && req.body?.acknowledge !== invocation.id) {
+      res.status(400).json({
+        success: false,
+        data: {
+          actionId: invocation.id,
+          requiredAcknowledgement: invocation.id
+        },
+        error: "This PM2 action can disrupt processes. Confirm the action before running it."
+      });
+      return;
+    }
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      data: null,
+      error: error?.message || "Invalid PM2 feature action"
+    });
+    return;
+  }
+
+  const action = await runPm2Cli(invocation.args, {
+    outputLimit: invocation.outputLimit || ACTION_OUTPUT_LIMIT,
+    timeoutMs: invocation.timeoutMs || COMMAND_TIMEOUT_MS
+  });
+  const success = isCommandSuccessful(action);
+  let parsed = null;
+
+  if (success && invocation.parseJson) {
+    try {
+      parsed = JSON.parse(action.stdout || "null");
+    } catch (_error) {
+      parsed = null;
+    }
+  }
+
+  trackPm2Operation(`feature:${invocation.id}`, success);
+  res.status(success ? 200 : 500).json({
+    success,
+    data: {
+      actionId: invocation.id,
+      label: invocation.label,
+      risk: invocation.risk,
+      parsed,
+      ...toActionData(action)
+    },
+    error: success ? null : withPm2CliFailure(action.output || `${invocation.label} failed`, action)
+  });
+}));
 
 router.post("/save", criticalWriteLimiter, asyncHandler(async (_req, res) => {
   const action = await runPm2Cli(["save"]);

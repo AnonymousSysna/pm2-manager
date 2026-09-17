@@ -231,7 +231,7 @@ export default function CreateProcess() {
 
   const updateCloneUrl = (value) => {
     const gitUrl = String(value || "");
-    const inferred = inferRepoName(gitUrl);
+    const inferred = gitUrl.trim() ? inferRepoName(gitUrl) : "";
     setForm((prev) => {
       const previousInferred = inferRepoName(prev.git_clone_url);
       const next = { ...prev, git_clone_url: gitUrl };
@@ -574,14 +574,14 @@ export default function CreateProcess() {
   return (
     <section className="mx-auto max-w-3xl space-y-4">
       <PageIntro
-        title="Create Process"
-        description="Point PM2 at a script, folder, or git repo, then set runtime, environment, and restart behavior before launch."
+        title="Add process"
+        description="Choose a source, confirm runtime, then launch."
       />
 
       <div className="page-panel">
-        <PanelHeader title="Guided Setup" className="mb-3" />
+        <PanelHeader title="Launch flow" description="Start simple. Advanced settings stay tucked away until needed." className="mb-3" />
 
-        <InsetCard className="mb-4 grid gap-2 md:grid-cols-[1fr,auto,auto]">
+        <InsetCard className="flow-strip mb-4 grid gap-2 md:grid-cols-[1fr,auto,auto]">
           <Select value={selectedTemplate} onChange={(e) => {
             const value = e.target.value;
             setSelectedTemplate(value);
@@ -589,13 +589,13 @@ export default function CreateProcess() {
               loadTemplate(value);
             }
           }}>
-            <option value="">Select process template</option>
+            <option value="">Use a saved template</option>
             {templateNames.map((name) => (
               <option key={name} value={name}>{name}</option>
             ))}
           </Select>
-          <Button type="button" variant="secondary" onClick={saveTemplate}>Save Template</Button>
-          <Button type="button" variant="danger" onClick={deleteTemplate} disabled={!selectedTemplate}>Delete Template</Button>
+          <Button type="button" variant="secondary" onClick={saveTemplate}>Save</Button>
+          <Button type="button" variant="danger" onClick={deleteTemplate} disabled={!selectedTemplate}>Delete</Button>
         </InsetCard>
 
         <div className="mb-4 flex flex-wrap gap-2">
@@ -608,11 +608,11 @@ export default function CreateProcess() {
           {step === 1 && (
             <>
               <InsetCard>
-                <SubsectionTitle className="mb-2 text-sm">Choose Source Type</SubsectionTitle>
+                <SubsectionTitle className="mb-2 text-sm">Source</SubsectionTitle>
                 <div className="flex flex-wrap gap-2">
-                  <ModeButton active={mode === "script"} onClick={() => setMode("script")}>Script Path</ModeButton>
-                  <ModeButton active={mode === "project"} onClick={() => setMode("project")}>Project Directory</ModeButton>
-                  <ModeButton active={mode === "git"} onClick={() => setMode("git")}>Git Clone</ModeButton>
+                  <ModeButton active={mode === "script"} onClick={() => setMode("script")}>Script</ModeButton>
+                  <ModeButton active={mode === "project"} onClick={() => setMode("project")}>Folder</ModeButton>
+                  <ModeButton active={mode === "git"} onClick={() => setMode("git")}>Git</ModeButton>
                 </div>
               </InsetCard>
 
@@ -640,7 +640,7 @@ export default function CreateProcess() {
                     />
                   </Field>
                   <SupportingCopy size="xs">
-                    If this directory contains <code>index.html</code> but no <code>package.json</code>, PM2 Manager will auto-host it as a static site on the port you choose.
+                    Static sites are detected automatically when the folder has <code>index.html</code> and no <code>package.json</code>.
                   </SupportingCopy>
                 </>
               )}
@@ -671,7 +671,7 @@ export default function CreateProcess() {
                     />
                   </Field>
                   <SupportingCopy size="xs">
-                    Plain static repos are supported. If the clone contains <code>index.html</code> and no <code>package.json</code>, PM2 Manager will auto-serve it instead of expecting an npm start script.
+                    Static repos are supported too. PM2 Manager auto-serves them when no <code>package.json</code> exists.
                   </SupportingCopy>
 
                   <Field label=".env File Content (Optional)">
@@ -686,7 +686,7 @@ export default function CreateProcess() {
                         Invalid `.env` syntax on line(s): {envFileValidationErrors.slice(0, 5).map((item) => item.line).join(", ")}.
                       </StatusText>
                     ) : (
-                      <SupportingCopy size="xs" className="mt-1">Validated live while typing (`KEY=VALUE`).</SupportingCopy>
+                      <SupportingCopy size="xs" className="mt-1">Checked while typing.</SupportingCopy>
                     )}
                   </Field>
                 </>
@@ -696,16 +696,16 @@ export default function CreateProcess() {
 
           {step === 2 && (
             <>
-              <InsetCard>
-                <SubsectionTitle className="text-sm">Recommended Runtime</SubsectionTitle>
+              <InsetCard className="flow-strip">
+                <SubsectionTitle className="text-sm">Runtime match</SubsectionTitle>
                 <SupportingCopy className="mt-1">
                   {runtimeHint.reason}
-                  {" -> "}
-                  interpreter <code>{runtimeHint.interpreter}</code>, mode <code>{runtimeHint.execMode}</code>
+                  {" · "}
+                  <code>{runtimeHint.interpreter}</code> / <code>{runtimeHint.execMode}</code>
                 </SupportingCopy>
                 <div className="mt-2">
                   <Button type="button" variant="info" size="sm" onClick={applyRuntimeHint}>
-                    Apply Recommendation
+                    Apply
                   </Button>
                 </div>
               </InsetCard>
@@ -751,7 +751,7 @@ export default function CreateProcess() {
                       placeholder="20, 20.12, or 20.12.2"
                     />
                     <SupportingCopy size="xs" className="mt-1">
-                      If set, install/build/start uses this Node runtime version (good for avoiding old-node build failures).
+                      Keeps installs and builds on the expected Node version.
                     </SupportingCopy>
                   </Field>
                   {String(form.node_version || "").trim() && (
@@ -791,7 +791,7 @@ export default function CreateProcess() {
                 <Input type="number" value={form.port} onChange={(e) => update("port", e.target.value)} />
                 {(mode === "project" || mode === "git") && (
                   <SupportingCopy size="xs" className="mt-1">
-                    For auto-detected static sites, this port is used by the built-in static server. If left blank, PM2 Manager uses <code>3000</code>.
+                    Static sites use this port. Blank uses <code>3000</code>.
                   </SupportingCopy>
                 )}
               </Field>
@@ -818,7 +818,7 @@ export default function CreateProcess() {
                 <div className="flex items-center justify-between gap-2">
                   <SubsectionTitle className="text-sm">Advanced Settings</SubsectionTitle>
                   <Button type="button" variant="secondary" size="sm" onClick={() => setShowAdvanced((prev) => !prev)}>
-                    {showAdvanced ? "Hide Advanced" : "Show Advanced"}
+                    {showAdvanced ? "Hide" : "Show"}
                   </Button>
                 </div>
 
@@ -860,14 +860,14 @@ export default function CreateProcess() {
 
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <SubsectionTitle className="text-sm">Environment Variables</SubsectionTitle>
+                        <SubsectionTitle className="text-sm">Environment</SubsectionTitle>
                         <Button
                           type="button"
                           variant="secondary"
                           size="sm"
                           onClick={() => setRevealSensitiveEnv((prev) => !prev)}
                         >
-                          {revealSensitiveEnv ? "Mask Sensitive Values" : "Reveal Sensitive Values"}
+                          {revealSensitiveEnv ? "Mask" : "Reveal"}
                         </Button>
                       </div>
                       {form.envRows.map((row, index) => (
@@ -897,7 +897,7 @@ export default function CreateProcess() {
                         variant="secondary"
                         onClick={() => update("envRows", [...form.envRows, { ...defaultEnvRow }])}
                       >
-                        Add Variable
+                        Add variable
                       </Button>
                     </div>
                   </div>
@@ -910,7 +910,7 @@ export default function CreateProcess() {
             <div className="space-y-3">
               <InsetCard>
                 <SubsectionTitle className="text-sm">Review</SubsectionTitle>
-                <SupportingCopy className="mt-1">Check generated config before launch.</SupportingCopy>
+                <SupportingCopy className="mt-1">Check the config before launch.</SupportingCopy>
               </InsetCard>
               <pre className="max-h-96 overflow-auto rounded border border-border bg-surface-2 p-3 text-xs text-text-2">
                 {JSON.stringify(buildPayload(), null, 2)}
@@ -936,7 +936,7 @@ export default function CreateProcess() {
                 variant="success"
                 disabled={isLaunching || (showAdvanced && Boolean(maxMemoryRestartError)) || (mode === "git" && envFileValidationErrors.length > 0)}
               >
-                {isLaunching ? "Launching..." : "Launch Process"}
+                {isLaunching ? "Launching..." : "Launch"}
               </Button>
             )}
           </div>
@@ -945,8 +945,8 @@ export default function CreateProcess() {
 
       {isLaunching && (
         <Modal
-          title="This may take a moment"
-          description="Preparing process, installing dependencies, and starting services."
+          title="Launching"
+          description="Preparing files, dependencies, and PM2 start."
           onClose={() => {}}
           showCloseButton={false}
           disableClose
@@ -963,7 +963,7 @@ export default function CreateProcess() {
               <Eyebrow className="mb-2">Live Steps</Eyebrow>
               <div className="max-h-48 space-y-1 overflow-y-auto">
                 {liveCreateSteps.length === 0 && (
-                  <SupportingCopy size="xs">Waiting for first server step...</SupportingCopy>
+                  <SupportingCopy size="xs">Waiting for the first server step...</SupportingCopy>
                 )}
                 {liveCreateSteps.map((step) => {
                   const status = String(step.status || "").trim();
@@ -993,7 +993,7 @@ export default function CreateProcess() {
                 onClick={() => navigate(`/dashboard/logs?process=${encodeURIComponent(form.name || "")}`)}
                 disabled={!String(form.name || "").trim()}
               >
-                Open Logs
+                Open logs
               </Button>
             </div>
           </div>
@@ -1002,8 +1002,8 @@ export default function CreateProcess() {
 
       {templateDialog?.mode === "save" && (
         <Modal
-          title="Save Template"
-          description="Save the current create-process configuration as a reusable template."
+          title="Save template"
+          description="Save this setup for the next process."
           onClose={() => setTemplateDialog(null)}
           size="sm"
           actions={(
@@ -1012,7 +1012,7 @@ export default function CreateProcess() {
                 Cancel
               </Button>
               <Button type="button" variant="success" onClick={confirmSaveTemplate} disabled={!String(templateDialog?.value || "").trim()}>
-                Save Template
+                Save
               </Button>
             </>
           )}
@@ -1029,9 +1029,9 @@ export default function CreateProcess() {
 
       {templateDialog?.mode === "delete" && (
         <ConfirmDialog
-          title="Delete Template"
+          title="Delete template"
           description={`Delete template "${selectedTemplate}"? This cannot be undone.`}
-          confirmLabel="Delete Template"
+          confirmLabel="Delete"
           onClose={() => setTemplateDialog(null)}
           onConfirm={confirmDeleteTemplate}
         />

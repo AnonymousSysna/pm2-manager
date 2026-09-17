@@ -346,3 +346,54 @@ test("info route validates PM2 via CLI and returns the resolved PM2 home", async
     }
   }
 });
+
+test("features route exposes guarded PM2 capability catalog", async () => {
+  const route = loadPm2RouteFresh();
+  const response = await invokeRoute(route, "get", "/features");
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.payload.success, true);
+  assert.ok(response.payload.data.features.length >= 30);
+  assert.ok(response.payload.data.categories.some((item) => item.id === "lifecycle"));
+});
+
+test("feature run requires acknowledgement for critical actions", async () => {
+  const harness = loadPm2RouteWithMockedSpawn({ code: 0, stdout: "should not run" });
+
+  try {
+    const response = await invokeRoute(harness.route, "post", "/features/run", {
+      body: { actionId: "kill-daemon", payload: {} }
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.payload.success, false);
+    assert.equal(response.payload.data.requiredAcknowledgement, "kill-daemon");
+    assert.equal(harness.calls.length, 0);
+  } finally {
+    harness.restore();
+  }
+});
+
+test("feature run executes allowlisted PM2 command args", async () => {
+  const harness = loadPm2RouteWithMockedSpawn(({ args }) => ({
+    code: 0,
+    stdout: `ran ${args.slice(-3).join(" ")}`
+  }));
+
+  try {
+    const response = await invokeRoute(harness.route, "post", "/features/run", {
+      body: { actionId: "restart-update-env", payload: { target: "api" } }
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.payload.success, true);
+    assert.equal(response.payload.data.actionId, "restart-update-env");
+    assert.equal(
+      response.payload.data.command,
+      `npm ${expectedNpmArgs(["restart", "api", "--update-env"]).join(" ")}`
+    );
+    assert.deepEqual(harness.calls[0].args, expectedNpmArgs(["restart", "api", "--update-env"]));
+  } finally {
+    harness.restore();
+  }
+});

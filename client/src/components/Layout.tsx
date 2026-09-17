@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Bell, Globe, History, Menu, Plus, Puzzle, ScrollText, Settings, LogOut, Moon, Sun, X } from "lucide-react";
+import { Activity, Bell, Bot, Globe, History, Menu, Plus, Puzzle, ScrollText, Settings, LogOut, Moon, Sun, X, TerminalSquare } from "lucide-react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useSocket } from "../hooks/useSocket";
 import { auth } from "../api";
@@ -9,25 +9,29 @@ import NavItem from "./ui/NavItem";
 import { Eyebrow } from "./ui/Typography";
 
 const staticLinks = [
-  { to: "/dashboard", label: "Operations", icon: Activity },
-  { to: "/dashboard/create", label: "Add Process", icon: Plus },
+  { to: "/dashboard", label: "Overview", icon: Activity },
+  { to: "/dashboard/create", label: "Add", icon: Plus },
   { to: "/dashboard/notifications", label: "Alerts", icon: Bell },
-  { to: "/dashboard/logs", label: "Process Logs", icon: ScrollText },
-  { to: "/dashboard/history", label: "Audit Trail", icon: History },
-  { to: "/dashboard/settings", label: "Runtime Settings", icon: Settings },
+  { to: "/dashboard/logs", label: "Logs", icon: ScrollText },
+  { to: "/dashboard/history", label: "History", icon: History },
+  { to: "/dashboard/settings", label: "Settings", icon: Settings },
+  { to: "/dashboard/ai", label: "AI Operator", icon: Bot },
+  { to: "/dashboard/pm2-features", label: "PM2 Features", icon: TerminalSquare },
   { to: "/dashboard/extensions", label: "Extensions", icon: Puzzle },
   { to: "/dashboard/caddy", label: "Caddy", icon: Globe }
 ];
 
 const pageTitleMap = {
-  "/dashboard": "Operations Console",
+  "/dashboard": "Overview",
   "/dashboard/create": "Add Process",
-  "/dashboard/notifications": "Alert Center",
-  "/dashboard/logs": "Process Logs",
-  "/dashboard/history": "Audit Trail",
-  "/dashboard/settings": "Runtime Settings",
+  "/dashboard/notifications": "Alerts",
+  "/dashboard/logs": "Logs",
+  "/dashboard/history": "History",
+  "/dashboard/settings": "Settings",
+  "/dashboard/ai": "AI Operator",
+  "/dashboard/pm2-features": "PM2 Features",
   "/dashboard/extensions": "Extensions",
-  "/dashboard/caddy": "Caddy Reverse Proxy"
+  "/dashboard/caddy": "Caddy Proxy"
 };
 
 function NavLinks({ pathname, links, onNavigate }) {
@@ -113,9 +117,9 @@ export default function Layout() {
 
       <div className="mx-auto flex w-full max-w-layout gap-4 px-4 py-4 md:px-6 md:py-6">
         <aside className="sticky top-header hidden h-[calc(100vh-theme(spacing.header)-theme(spacing.6))] w-64 shrink-0 rounded-xl border border-border bg-surface p-4 md:flex md:flex-col">
-          <div className="mb-4 flex items-center gap-2 border-b border-border pb-3 text-sm text-text-3">
+          <div className="mb-4 flex items-center gap-2 border-b border-border pb-3 text-xs uppercase tracking-[0.16em] text-text-3">
             <span className="h-2 w-2 rounded-full bg-brand-500" />
-            Navigation
+            Workflow
           </div>
           <NavLinks pathname={location.pathname} links={staticLinks} />
           <Button type="button" variant="secondary" onClick={logout} className="mt-auto w-full justify-start">

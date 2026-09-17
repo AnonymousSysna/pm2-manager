@@ -199,12 +199,26 @@ export const processes = {
   flush: (name: string) => api.post<ApiResult<any>>(`/api/v1/processes/${encodeURIComponent(name)}/flush`).then(unwrap)
 };
 
+export const system = {
+  readiness: () => api.get<ApiResult<any>>("/api/v1/system/readiness", { validateStatus: (status) => status < 600 }).then(unwrap)
+};
+
 export const pm2Admin = {
+  features: () => api.get<ApiResult<any>>("/api/v1/pm2/features").then(unwrap),
+  runFeature: (actionId: string, payload: Record<string, unknown> = {}, acknowledge = "") =>
+    api.post<ApiResult<any>>("/api/v1/pm2/features/run", { actionId, payload, acknowledge }).then(unwrap),
   save: () => api.post<ApiResult<any>>("/api/v1/pm2/save").then(unwrap),
   startup: () => api.post<ApiResult<any>>("/api/v1/pm2/startup").then(unwrap),
   resurrect: () => api.post<ApiResult<any>>("/api/v1/pm2/resurrect").then(unwrap),
   kill: () => api.post<ApiResult<any>>("/api/v1/pm2/kill").then(unwrap),
   info: () => api.get<ApiResult<any>>("/api/v1/pm2/info").then(unwrap)
+};
+
+
+export const aiOperator = {
+  providers: () => api.get<ApiResult<any>>("/api/v1/ai/providers").then(unwrap),
+  test: (payload: Record<string, unknown>) => api.post<ApiResult<any>>("/api/v1/ai/test", payload).then(unwrap),
+  chat: (payload: Record<string, unknown>) => api.post<ApiResult<any>>("/api/v1/ai/chat", payload).then(unwrap)
 };
 
 export const alerts = {

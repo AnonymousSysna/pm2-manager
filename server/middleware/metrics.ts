@@ -31,18 +31,20 @@ function observeDuration(map, labels, value) {
   });
 }
 
+const { scrubUrl } = require("../utils/urlSafety");
+
 function metricsMiddleware(req, res, next) {
   const start = process.hrtime.bigint();
   res.on("finish", () => {
     const elapsedMs = Number(process.hrtime.bigint() - start) / 1e6;
     incCounter(registry.requestsTotal, {
       method: req.method,
-      route: req.route?.path || req.path || req.originalUrl,
+      route: req.route?.path || req.path || scrubUrl(req.originalUrl),
       status: String(res.statusCode)
     });
     observeDuration(registry.requestDurationMs, {
       method: req.method,
-      route: req.route?.path || req.path || req.originalUrl
+      route: req.route?.path || req.path || scrubUrl(req.originalUrl)
     }, elapsedMs);
   });
   next();

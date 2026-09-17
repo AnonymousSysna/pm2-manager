@@ -1,4 +1,5 @@
 const { logger, serializeError } = require("../utils/logger");
+const { scrubUrl } = require("../utils/urlSafety");
 
 class AppError extends Error {
   constructor(message, status = 500, expose = false) {
@@ -13,18 +14,23 @@ function notFoundHandler(req, res) {
   res.status(404).json({
     success: false,
     data: null,
-    error: `Route not found: ${req.method} ${req.originalUrl}`
+    error: `Route not found: ${req.method} ${scrubUrl(req.originalUrl)}`,
+    requestId: req.requestId || null
   });
 }
 
-function errorHandler(error, req, res, _next) {
-  const status = Number(error.status) || 500;
+function errorHandler(error, req, res, next) {
+  if (res.headersSent) {
+    next(error);
+    return;
+  }
+  const status = Number(error.status || error.statusCode) || 500;
   const expose = Boolean(error.expose) || status < 500;
   const message = expose ? error.message : "Internal server error";
 
   logger.error("request_failed", {
     method: req.method,
-    path: req.originalUrl,
+    path: scrubUrl(req.originalUrl),
     status,
     ip: req.ip,
     requestId: req.requestId || null,
@@ -34,7 +40,8 @@ function errorHandler(error, req, res, _next) {
   res.status(status).json({
     success: false,
     data: null,
-    error: message
+    error: message,
+    requestId: req.requestId || null
   });
 }
 
@@ -43,4 +50,3 @@ module.exports = {
   errorHandler,
   notFoundHandler
 };
-

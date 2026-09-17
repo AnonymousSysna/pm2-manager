@@ -56,6 +56,7 @@ const {
   normalizeVersion
 } = require("../utils/nodeRuntimeManager");
 const { getUserSocketRoom } = require("../utils/socketSessions");
+const { redactSecretsFromText } = require("../utils/urlSafety");
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
 const COMMAND_TIMEOUT_MS = Number.isFinite(Number(process.env.COMMAND_TIMEOUT_MS))
@@ -617,7 +618,7 @@ async function directoryIsEmpty(targetPath) {
 }
 
 function compactOutput(output = "") {
-  return String(output || "")
+  return redactSecretsFromText(String(output || ""))
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
@@ -1546,7 +1547,7 @@ async function createProcess(config, actorContext = "unknown") {
           label,
           success: false,
           durationMs,
-          error: error.message
+          error: redactSecretsFromText(error.message)
         });
         emitCreateStep({
           stepId,
@@ -1770,12 +1771,12 @@ async function createProcess(config, actorContext = "unknown") {
                   );
                 } catch (_retryError) {
                   throw new Error(
-                    `${error.message}\nHint: missing dependency "${missingModule}". Auto-install + retry failed in ${installTargetDir}.`
+                    `${redactSecretsFromText(error.message)}\nHint: missing dependency "${missingModule}". Auto-install + retry failed in ${installTargetDir}.`
                   );
                 }
               } else {
                 throw new Error(
-                  `${error.message}\nHint: missing dependency "${missingModule}". If this is a nested app (for example apps/${safeName}), run npm install in that app directory or enable "Run npm install before start".`
+                  `${redactSecretsFromText(error.message)}\nHint: missing dependency "${missingModule}". If this is a nested app (for example apps/${safeName}), run npm install in that app directory or enable "Run npm install before start".`
                 );
               }
             }
@@ -1881,7 +1882,7 @@ async function createProcess(config, actorContext = "unknown") {
             label: "pm2:start",
             success: false,
             durationMs,
-            error: error.message
+            error: redactSecretsFromText(error.message)
           });
           emitCreateStep({
             stepId,
@@ -2330,7 +2331,7 @@ async function runNpmScriptForProcess(name, scriptName, args = []) {
         [...getNpmInstallArgs({ includeDev: true }), ...args],
         cwd
       );
-      return { command: "npm install", cwd, output: result.stdout.slice(-4000) };
+      return { command: "npm install", cwd, output: redactSecretsFromText(result.stdout).slice(-4000) };
     }
 
     const packageJson = JSON.parse(await fs.promises.readFile(packageJsonPath, "utf8"));
@@ -2340,7 +2341,7 @@ async function runNpmScriptForProcess(name, scriptName, args = []) {
     }
 
     const result = await runCommand(npmCmd, ["run", scriptName, ...args], cwd);
-    return { command: `npm run ${scriptName}`, cwd, output: result.stdout.slice(-4000) };
+    return { command: `npm run ${scriptName}`, cwd, output: redactSecretsFromText(result.stdout).slice(-4000) };
   });
   trackPm2Operation(`processes.npm.${scriptName}`, result.success);
   return result;
@@ -2377,7 +2378,7 @@ async function deployProcess(name, options = {}, actorContext = "unknown") {
     return {
       success: false,
       data: null,
-      error: error.message || "Invalid deploy options"
+      error: redactSecretsFromText(error.message) || "Invalid deploy options"
     };
   }
   const installDependencies = options.installDependencies !== false;
@@ -2418,14 +2419,14 @@ async function deployProcess(name, options = {}, actorContext = "unknown") {
           label,
           success: true,
           durationMs: Date.now() - startedAt,
-          output: String(output.stdout || output.stderr || "").slice(-4000)
+          output: redactSecretsFromText(String(output.stdout || output.stderr || "")).slice(-4000)
         });
       } catch (error) {
         steps.push({
           label,
           success: false,
           durationMs: Date.now() - startedAt,
-          error: error.message
+          error: redactSecretsFromText(error.message)
         });
         throw error;
       }
@@ -2637,7 +2638,7 @@ async function rollbackProcess(name, options = {}, actorContext = "unknown") {
     return {
       success: false,
       data: null,
-      error: error.message || "Invalid rollback options"
+      error: redactSecretsFromText(error.message) || "Invalid rollback options"
     };
   }
   const restartMode = String(options.restartMode || "restart").trim() === "reload" ? "reload" : "restart";
@@ -2678,7 +2679,7 @@ async function rollbackProcess(name, options = {}, actorContext = "unknown") {
           label,
           success: false,
           durationMs: Date.now() - startedAt,
-          error: error.message
+          error: redactSecretsFromText(error.message)
         });
         throw error;
       }

@@ -124,15 +124,15 @@ export default function OperationsOverviewPanel({
   const firstAttentionProcess = attentionItems[0]?.processName || "";
 
   return (
-    <section className="page-panel space-y-4">
+    <section className="page-panel space-y-3">
       <PanelHeader
-        title="Operations Overview"
-        description="Open the incidents that matter first: failing health checks, stopped services, and recent alert noise."
+        title="Triage"
+        description="Fix the riskiest service first. Stable systems stay quiet."
         actions={(
           <>
             <Button type="button" size="sm" variant="secondary" onClick={onOpenHistory}>
               <History size={14} />
-              Review history
+              History
             </Button>
             <Badge tone={attentionCount > 0 ? "warning" : "success"}>
               {attentionCount > 0 ? `${attentionCount} process${attentionCount === 1 ? " needs" : "es need"} attention` : "Fleet stable"}
@@ -141,39 +141,43 @@ export default function OperationsOverviewPanel({
         )}
       />
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="compact-stat-grid">
         <ActionBlock
-          title={attentionCount > 0 ? `${attentionCount} process${attentionCount === 1 ? " needs" : "es need"} attention` : "No active incidents"}
+          label="Attention"
+          title={attentionCount > 0 ? `${attentionCount} service${attentionCount === 1 ? "" : "s"}` : "Clear"}
           tone={attentionCount > 0 ? "warning" : "success"}
           detail={attentionCount > 0 ? summarizeNames(Array.from(attentionProcessNames)) : `${stats?.online ?? 0} of ${stats?.total ?? 0} processes are online.`}
-          actionLabel={firstAttentionProcess ? "Open first incident logs" : null}
+          actionLabel={firstAttentionProcess ? "Open logs" : null}
           onAction={firstAttentionProcess ? () => onOpenLogs(firstAttentionProcess) : null}
         />
         <ActionBlock
-          title={failingHealthNames.length > 0 ? `${failingHealthNames.length} failing health check${failingHealthNames.length === 1 ? "" : "s"}` : "Health checks clear"}
+          label="Health"
+          title={failingHealthNames.length > 0 ? `${failingHealthNames.length} failing` : "Clear"}
           tone={failingHealthNames.length > 0 ? "danger" : "success"}
-          detail={failingHealthNames.length > 0 ? summarizeNames(failingHealthNames) : "No unhealthy probes are blocking traffic right now."}
-          actionLabel={failingHealthNames[0] ? "Tail failing process" : null}
+          detail={failingHealthNames.length > 0 ? summarizeNames(failingHealthNames) : "No unhealthy probes."}
+          actionLabel={failingHealthNames[0] ? "Open logs" : null}
           onAction={failingHealthNames[0] ? () => onOpenLogs(failingHealthNames[0]) : null}
         />
         <ActionBlock
-          title={stoppedOrErroredNames.length > 0 ? `${stoppedOrErroredNames.length} stopped or errored` : "No stopped services"}
+          label="Runtime"
+          title={stoppedOrErroredNames.length > 0 ? `${stoppedOrErroredNames.length} stopped` : "Running"}
           tone={stoppedOrErroredNames.length > 0 ? "warning" : "success"}
-          detail={stoppedOrErroredNames.length > 0 ? summarizeNames(stoppedOrErroredNames) : "Every tracked service is running or intentionally idle."}
-          actionLabel={stoppedOrErroredNames[0] ? "Inspect deployment history" : "Review history"}
+          detail={stoppedOrErroredNames.length > 0 ? summarizeNames(stoppedOrErroredNames) : "No stopped services."}
+          actionLabel={stoppedOrErroredNames[0] ? "Review" : "History"}
           onAction={() => onOpenHistory()}
         />
         <ActionBlock
-          title={`${alerts.length} recent alert${alerts.length === 1 ? "" : "s"}`}
+          label="Alerts"
+          title={`${alerts.length} recent`}
           tone={alerts.length > 0 ? "info" : "neutral"}
-          detail={alerts.length > 0 ? summarizeNames(alertProcessNames) : "No threshold alerts have fired in the current socket session."}
-          actionLabel="Open history"
+          detail={alerts.length > 0 ? summarizeNames(alertProcessNames) : "No alert noise."}
+          actionLabel="History"
           onAction={() => onOpenHistory()}
         />
       </div>
 
-      <InsetCard className="rounded-xl bg-surface-2/50">
-        <div className="mb-3 flex items-center justify-between gap-2">
+      <InsetCard className="flow-strip">
+        <div className="mb-2 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             {attentionCount > 0 ? (
               <AlertTriangle size={16} className="text-warning-300" />
@@ -181,7 +185,7 @@ export default function OperationsOverviewPanel({
               <ShieldCheck size={16} className="text-success-300" />
             )}
             <SubsectionTitle className="text-sm">
-              {attentionCount > 0 ? "Attention queue" : "No active incidents"}
+              {attentionCount > 0 ? "Attention queue" : "Quiet state"}
             </SubsectionTitle>
           </div>
           {attentionCount > 0 && (
@@ -198,7 +202,7 @@ export default function OperationsOverviewPanel({
         ) : (
           <div className="space-y-2">
             {attentionItems.map((item) => (
-              <InsetCard key={item.key} tone="surface" className="flex flex-col gap-3 lg:flex-row lg:items-center">
+              <InsetCard key={item.key} tone="surface" padding="sm" className="flex flex-col gap-2 lg:flex-row lg:items-center">
                 <div className="flex min-w-0 flex-1 items-start gap-3">
                   <ServerCrash size={16} className={item.tone === "danger" ? "text-danger-300" : item.tone === "warning" ? "text-warning-300" : "text-info-300"} />
                   <div className="min-w-0">
@@ -238,11 +242,12 @@ function summarizeNames(names = []) {
   return `${names.slice(0, 3).join(", ")}, +${names.length - 3} more`;
 }
 
-function ActionBlock({ title, detail, tone, actionLabel, onAction }) {
+function ActionBlock({ label, title, detail, tone, actionLabel, onAction }) {
   return (
-    <InsetCard className="rounded-xl bg-surface-2/60">
-      <div className="flex h-full flex-col gap-3">
+    <InsetCard className="rounded-xl bg-surface-2/50" padding="sm">
+      <div className="flex h-full flex-col gap-2">
         <div>
+          <SupportingCopy size="xs" className="uppercase tracking-[0.16em]">{label}</SupportingCopy>
           <Badge tone={tone}>{title}</Badge>
           <SupportingCopy size="xs" className="mt-2">{detail}</SupportingCopy>
         </div>

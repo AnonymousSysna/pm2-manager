@@ -13,6 +13,8 @@ const History = lazy(() => import("./pages/History"));
 const Notifications = lazy(() => import("./pages/Notifications"));
 const Extensions = lazy(() => import("./pages/Extensions"));
 const Caddy = lazy(() => import("./pages/Caddy"));
+const PM2Features = lazy(() => import("./pages/PM2Features"));
+const AIOperator = lazy(() => import("./pages/AIOperator"));
 
 function PageSkeleton({ titleWidth = "w-40", blocks = 3 }) {
   return (
@@ -178,6 +180,22 @@ export default function App() {
             element={(
               <LazyRoute fallback={<PageSkeleton titleWidth="w-48" blocks={3} />}>
                 <Caddy />
+              </LazyRoute>
+            )}
+          />
+          <Route
+            path="ai"
+            element={(
+              <LazyRoute fallback={<PageSkeleton titleWidth="w-36" blocks={4} />}>
+                <AIOperator />
+              </LazyRoute>
+            )}
+          />
+          <Route
+            path="pm2-features"
+            element={(
+              <LazyRoute fallback={<PageSkeleton titleWidth="w-48" blocks={4} />}>
+                <PM2Features />
               </LazyRoute>
             )}
           />

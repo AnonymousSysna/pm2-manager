@@ -565,6 +565,13 @@ export default function Dashboard() {
     navigate(target);
   };
 
+  const openPm2FeaturesForProcess = (name = "") => {
+    const target = name
+      ? `/dashboard/pm2-features?process=${encodeURIComponent(name)}`
+      : "/dashboard/pm2-features";
+    navigate(target);
+  };
+
   const toggleSelected = (name, checked) => {
     setSelectedNames((prev) => {
       if (checked) {
@@ -934,14 +941,14 @@ export default function Dashboard() {
   return (
     <div className="space-y-4">
       <PageIntro
-        title="Operations Console"
-        description="See which processes need attention, jump into logs or deploy history, and restart or inspect a service without leaving the dashboard."
+        title="Overview"
+        description="Start with what needs attention, then act on the exact process."
         actions={(
           <>
             <Button type="button" variant="secondary" onClick={() => openDeploymentHistory()}>
-              Review history
+              History
             </Button>
-            <Button type="button" variant="outlineInfo" onClick={() => navigate("/dashboard/create")}>
+            <Button type="button" variant="primary" onClick={() => navigate("/dashboard/create")}>
               Add process
             </Button>
           </>
@@ -979,7 +986,8 @@ export default function Dashboard() {
               loadingAction,
               callAction,
               onOpenLogs: openLogsForProcess,
-              onOpenApp: openAppForPort
+              onOpenApp: openAppForPort,
+              onOpenPm2Features: openPm2FeaturesForProcess
             }}
             formatters={{ bytesToMB, durationLabel }}
           />

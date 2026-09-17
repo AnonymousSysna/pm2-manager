@@ -15,6 +15,7 @@ Web app for operating PM2-managed services with real-time monitoring, deployment
 - Alert channel management and notification history
 - Process metadata and `.env` editing
 - PM2 daemon actions
+- AI Operator for provider-backed PM2 guidance and guarded execution
 - Optional Caddy install / status / reverse proxy management
 - Interpreter detection
 
@@ -154,6 +155,34 @@ You do not need Caddy for the base app to run.
 - Re-run the one-tap installer with SSL options, or
 - Install Caddy manually and configure reverse proxy later
 
+
+## AI Operator
+
+The dashboard includes an **AI Operator** page at `/dashboard/ai`. It lets an authenticated operator paste an AI provider URL, API key, and model, then chat about PM2 operations in a Codex-like terminal flow.
+
+Supported request formats:
+
+- OpenAI-compatible `/chat/completions` APIs
+- Anthropic Claude `/v1/messages` APIs
+
+The AI Operator is deliberately not a raw shell. It maps AI suggestions to the guarded PM2 feature catalog, validates every action, redacts output, and keeps critical actions behind confirmation. Use these modes depending on trust level:
+
+- **Plan only** for normal review
+- **Auto-run checks only** for diagnostics
+- **Auto-run checks + safe writes** when you want the AI to run non-critical PM2 actions
+
+Provider API keys are not stored on the backend. The browser can optionally remember a key in local storage, but this should only be used on a trusted machine. See `AI_OPERATOR_SECURITY.md` before exposing this dashboard publicly.
+
+Optional AI environment controls:
+
+```env
+AI_RATE_LIMIT_MAX=20
+AI_TIMEOUT_MS=90000
+AI_MAX_ACTIONS=4
+AI_ACTION_OUTPUT_LIMIT=6000
+AI_ALLOW_HTTP=0
+```
+
 ## Updating an Existing Install
 
 This is the safe update flow:
@@ -197,6 +226,33 @@ npm run pm2:restart
 tail -n 100 logs/err.log
 tail -n 100 logs/out.log
 ```
+
+## Production Readiness
+
+Before exposing the dashboard outside localhost, use the Settings → Production Readiness panel or call:
+
+```bash
+curl -i http://localhost:8000/ready
+```
+
+For a detailed authenticated check inside the app, open Settings → Production Readiness. For terminal validation before launch, run:
+
+```bash
+npm run preflight
+```
+
+The server now fails fast when required secrets are missing, placeholder values are still present, or production uses `PM2_PASS` instead of `PM2_PASS_HASH`. For public deployments, use HTTPS through Caddy or another reverse proxy, set `COOKIE_SECURE=1`, and put the exact browser origin in `CORS_ALLOWED_ORIGINS` when the frontend and API are not on the same origin.
+
+Security hardening included by default:
+
+- JWT auth cookies with CSRF protection
+- Strict security headers and production CSP
+- Redacted structured logs
+- No-store API responses
+- PM2 operation timeout and queue protection
+- `/health` for liveness and `/ready` for readiness
+- Authenticated `/api/v1/system/readiness` for detailed config checks
+- A `PRODUCTION_CHECKLIST.md` file for deployment review
 
 ## Local Development
 
@@ -517,3 +573,25 @@ npm --prefix client test
 
 - In production mode, the server serves `client/dist`
 - Set strong values for `PM2_USER`, `PM2_PASS_HASH` or `PM2_PASS`, `JWT_SECRET`, and `METRICS_TOKEN` before exposing the app
+
+## PM2 Feature Workspace
+
+The dashboard now includes **PM2 Features** at `/dashboard/pm2-features` for commands that do not belong in the daily Overview flow.
+See `PM2_FEATURE_COVERAGE.md` for the full command coverage and safety notes.
+
+Covered groups:
+
+- Observe: `status`, `jlist`, `prettylist`, `describe`, `pid`, `env`, `conf`, `report`, `ping`, version.
+- Lifecycle: start existing, stop, restart, restart with `--update-env`, reload, graceful reload, reset, delete, scale, send signal, trigger.
+- Logs: one-shot log tail, flush, and `reloadLogs`.
+- Persistence: save, resurrect, startup, unstartup, update daemon, kill daemon.
+- Ecosystem: generate ecosystem files, `startOrRestart`, `startOrReload`, `startOrGracefulReload`.
+- Deploy: `pm2 deploy <ecosystem> <environment> <action>`.
+- Modules: install/uninstall modules plus `pm2 get` and `pm2 set` for module config.
+
+High-impact actions require an explicit confirmation in the UI and an acknowledgement token in the API request. Long-running interactive PM2 commands such as `pm2 monit` and `pm2 web` are intentionally represented by dashboard monitoring panels or documented as manual operations instead of being launched inside the web request lifecycle.
+
+Additional PM2 endpoints:
+
+- `GET /api/v1/pm2/features`
+- `POST /api/v1/pm2/features/run`

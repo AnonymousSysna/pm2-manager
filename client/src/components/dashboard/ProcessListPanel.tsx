@@ -1,4 +1,5 @@
-import { ExternalLink, FileCog, History, Play, RefreshCw, ScrollText, Square, Rocket, Settings2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ExternalLink, FileCog, History, MoreHorizontal, Play, RefreshCw, ScrollText, Square, Rocket, Settings2, TerminalSquare } from "lucide-react";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 import Checkbox from "../ui/Checkbox";
@@ -19,12 +20,39 @@ export default function ProcessListPanel({
   const { allSelected, selectedCount } = selection;
   const { query, setQuery, toggleSelectAllFiltered, runBulkAction } = controls;
   const { bytesToMB, durationLabel } = formatters;
+  const [openActionMenu, setOpenActionMenu] = useState("");
+  const panelRef = useRef(null);
+  const actionMenu = { openActionMenu, setOpenActionMenu };
+
+  useEffect(() => {
+    if (!openActionMenu) {
+      return undefined;
+    }
+
+    const onPointerDown = (event) => {
+      if (!panelRef.current?.contains(event.target)) {
+        setOpenActionMenu("");
+      }
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setOpenActionMenu("");
+      }
+    };
+
+    document.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [openActionMenu]);
 
   return (
-    <section className="page-panel space-y-4 process-control-panel">
+    <section ref={panelRef} className="page-panel space-y-3 process-control-panel">
       <PanelHeader
-        title="Process Control"
-        description="Filter the PM2 list, select a batch, and open inspect, logs, deploy, or rules for one process."
+        title="Processes"
+        description="Search, check load, then use the smallest safe action."
         actions={(
           <Input
             value={query}
@@ -35,7 +63,7 @@ export default function ProcessListPanel({
         )}
       />
 
-      <InsetCard className="rounded-xl bg-surface-2/60">
+      <InsetCard className="rounded-xl bg-surface-2/45" padding="sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-2 text-xs text-text-2">
             <Badge tone={selectedCount > 0 ? "info" : "neutral"}>{selectedCount} selected</Badge>
@@ -69,6 +97,7 @@ export default function ProcessListPanel({
             key={item.proc.name}
             item={item}
             controls={controls}
+            actionMenu={actionMenu}
             bytesToMB={bytesToMB}
             durationLabel={durationLabel}
           />
@@ -124,11 +153,12 @@ export default function ProcessListPanel({
                   <td className="px-3 py-4">
                     <RuntimeSummary proc={proc} summary={summary} durationLabel={durationLabel} />
                   </td>
-                  <td className="px-3 py-4 min-w-[23rem]">
+                  <td className="px-3 py-4 min-w-[18rem]">
                     <RowActions
                       item={item}
                       layout="table"
                       controls={controls}
+                      actionMenu={actionMenu}
                     />
                   </td>
                 </tr>
@@ -151,28 +181,27 @@ export default function ProcessListPanel({
 function ProcessCard({
   item,
   controls,
+  actionMenu,
   bytesToMB,
   durationLabel
 }) {
   const { proc, summary } = item;
 
   return (
-    <InsetCard as="article" className="rounded-xl bg-surface-2/60">
+    <article className="compact-process-card">
       <ProcessIdentity item={item} controls={controls} showSelector showPortButton />
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <LoadSummary proc={proc} bytesToMB={bytesToMB} />
-        <RuntimeSummary proc={proc} summary={summary} durationLabel={durationLabel} />
-      </div>
+      <CompactMetrics proc={proc} summary={summary} bytesToMB={bytesToMB} durationLabel={durationLabel} />
 
-      <div className="mt-4">
+      <div className="mt-3">
         <RowActions
           item={item}
           compact
           controls={controls}
+          actionMenu={actionMenu}
         />
       </div>
-    </InsetCard>
+    </article>
   );
 }
 
@@ -236,6 +265,32 @@ function LoadSummary({ proc, bytesToMB }) {
   );
 }
 
+function CompactMetrics({ proc, summary, bytesToMB, durationLabel }) {
+  return (
+    <div className="metric-thread mt-3">
+      <div className="metric-thread-item">
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <SupportingCopy size="xs">CPU</SupportingCopy>
+          <span className="font-semibold text-text-1">{proc.cpu}%</span>
+        </div>
+        <ProgressBar value={proc.cpu} tone={proc.cpu >= 80 ? "warning" : "success"} />
+      </div>
+      <MetricThreadItem label="Memory" value={bytesToMB(proc.memory)} />
+      <MetricThreadItem label="Uptime" value={durationLabel(summary.upMs || proc.uptime || 0)} />
+      <MetricThreadItem label="Restarts" value={proc.restarts ?? 0} />
+    </div>
+  );
+}
+
+function MetricThreadItem({ label, value }) {
+  return (
+    <div className="metric-thread-item">
+      <SupportingCopy size="xs">{label}</SupportingCopy>
+      <p className="mt-1 truncate font-semibold text-text-1">{value}</p>
+    </div>
+  );
+}
+
 function RuntimeSummary({ proc, summary, durationLabel }) {
   return (
     <InsetCard tone="surface">
@@ -266,7 +321,8 @@ function RowActions({
   item,
   compact = false,
   layout = "default",
-  controls
+  controls,
+  actionMenu
 }) {
   const { proc, hasDotEnv } = item;
   const {
@@ -278,14 +334,22 @@ function RowActions({
     loadingAction,
     callAction,
     onOpenLogs,
-    onOpenApp
+    onOpenApp,
+    onOpenPm2Features
   } = controls;
   const isOnline = proc.status === "online";
   const canOpenApp = Number(proc.port) > 0;
   const isTableLayout = layout === "table";
+  const menuKey = `${proc.name}:${layout}`;
+  const isMenuOpen = actionMenu?.openActionMenu === menuKey;
+  const closeMenu = () => actionMenu?.setOpenActionMenu?.("");
+  const runAndClose = (fn) => {
+    closeMenu();
+    fn?.();
+  };
 
   return (
-    <div className={`space-y-2 ${isTableLayout ? "min-w-[21rem]" : ""}`}>
+    <div className={`action-menu-anchor space-y-2 ${isTableLayout ? "min-w-[18rem]" : ""}`}>
       <div className={`flex flex-wrap ${isTableLayout ? "gap-1.5" : "gap-2"} ${compact ? "" : isTableLayout ? "" : "max-w-[38rem]"}`}>
         <Button type="button" size="sm" variant="outlineInfo" onClick={() => openDetails(proc)}>
           <Settings2 size={14} />
@@ -305,23 +369,6 @@ function RowActions({
           <ScrollText size={14} />
           Logs
         </Button>
-        <Button type="button" size="sm" variant="secondary" disabled={loadingAction[`${proc.name}:deploy`]} onClick={() => openDeployModal(proc)}>
-          <Rocket size={14} />
-          Deploy
-        </Button>
-        {hasDotEnv && (
-          <Button type="button" size="sm" variant="secondary" onClick={() => openDotEnvModal(proc)}>
-            <FileCog size={14} />
-            Env
-          </Button>
-        )}
-        <Button type="button" size="sm" variant="secondary" onClick={() => openDeploymentHistoryForProcess(proc.name)}>
-          <History size={14} />
-          History
-        </Button>
-      </div>
-
-      <div className={`flex flex-wrap ${isTableLayout ? "gap-1.5" : "gap-2"}`}>
         <Button
           type="button"
           size="sm"
@@ -332,17 +379,54 @@ function RowActions({
           {isOnline ? <Square size={14} /> : <Play size={14} />}
           {isOnline ? "Stop" : "Start"}
         </Button>
-        <Button type="button" size="sm" variant="secondary" onClick={() => openMetaModal(proc)}>
-          Rules
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          aria-expanded={isMenuOpen}
+          onClick={() => actionMenu?.setOpenActionMenu?.(isMenuOpen ? "" : menuKey)}
+        >
+          <MoreHorizontal size={14} />
+          More
         </Button>
-        {canOpenApp && (
-          <Button type="button" size="sm" variant="secondary" onClick={() => onOpenApp(proc.port)}>
-            <ExternalLink size={14} />
-            Open app
-          </Button>
-        )}
       </div>
+
+      {isMenuOpen && (
+        <div className="action-menu action-menu-popover grid gap-1 sm:grid-cols-2">
+          <ActionMenuItem icon={<Rocket size={14} />} disabled={loadingAction[`${proc.name}:deploy`]} onClick={() => runAndClose(() => openDeployModal(proc))}>
+            Deploy
+          </ActionMenuItem>
+          {hasDotEnv && (
+            <ActionMenuItem icon={<FileCog size={14} />} onClick={() => runAndClose(() => openDotEnvModal(proc))}>
+              Env file
+            </ActionMenuItem>
+          )}
+          <ActionMenuItem icon={<History size={14} />} onClick={() => runAndClose(() => openDeploymentHistoryForProcess(proc.name))}>
+            History
+          </ActionMenuItem>
+          <ActionMenuItem icon={<TerminalSquare size={14} />} onClick={() => runAndClose(() => onOpenPm2Features?.(proc.name))}>
+            PM2 tools
+          </ActionMenuItem>
+          <ActionMenuItem onClick={() => runAndClose(() => openMetaModal(proc))}>
+            Rules
+          </ActionMenuItem>
+          {canOpenApp && (
+            <ActionMenuItem icon={<ExternalLink size={14} />} onClick={() => runAndClose(() => onOpenApp(proc.port))}>
+              Open app
+            </ActionMenuItem>
+          )}
+        </div>
+      )}
     </div>
+  );
+}
+
+function ActionMenuItem({ icon, children, disabled = false, onClick }) {
+  return (
+    <button type="button" className="action-menu-item" disabled={disabled} onClick={onClick}>
+      {icon ? <span className="shrink-0 text-text-3">{icon}</span> : null}
+      <span className="min-w-0 truncate">{children}</span>
+    </button>
   );
 }
 

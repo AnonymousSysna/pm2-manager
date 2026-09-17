@@ -6,3 +6,4 @@ client/dist/
 .gitignore
 npm-cli/
 AGENTS.md
+/*.md

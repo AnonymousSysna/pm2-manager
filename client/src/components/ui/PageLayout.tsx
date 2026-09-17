@@ -12,7 +12,7 @@ export function PageIntro({ title, description, actions, className }: HeaderProp
   return (
     <section className={cn("page-panel page-intro", className)}>
       <div className="panel-title-row">
-        <div>
+        <div className="min-w-0">
           <h1 className="page-heading">{title}</h1>
           {description ? <p className="panel-muted mt-1">{description}</p> : null}
         </div>
@@ -25,7 +25,7 @@ export function PageIntro({ title, description, actions, className }: HeaderProp
 export function PanelHeader({ title, description, actions, className }: HeaderProps) {
   return (
     <div className={cn("panel-title-row", className)}>
-      <div>
+      <div className="min-w-0">
         <h2 className="panel-heading">{title}</h2>
         {description ? <p className="panel-muted mt-1">{description}</p> : null}
       </div>
