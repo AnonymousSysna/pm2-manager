@@ -4,6 +4,7 @@ const path = require("path");
 const express = require("express");
 const pm2Package = require("pm2/package.json");
 const { spawn } = require("child_process");
+const { toSpawnTarget, terminateChildTree } = require("../utils/commandSpawn");
 const { verifyToken } = require("../middleware/auth");
 const permissionHints = require("../utils/permissionHints.js");
 const withPermissionHint =
@@ -70,7 +71,10 @@ function runCommand(command: string, args: string[], timeoutOrOptions: number | 
   const { cwd, timeoutMs } = normalizeRunCommandOptions(timeoutOrOptions);
 
   return new Promise<RunCommandResult>((resolve, reject) => {
-    const child = spawn(command, args, {
+    // On Windows an npm invocation is npm.cmd, which spawn cannot launch
+    // directly; toSpawnTarget decides when the shell is required.
+    const target = toSpawnTarget(command, args);
+    const child = spawn(target.command, target.args, {
       cwd,
       stdio: ["ignore", "pipe", "pipe"]
     });
@@ -80,8 +84,9 @@ function runCommand(command: string, args: string[], timeoutOrOptions: number | 
 
     const timeout = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGTERM");
-      setTimeout(() => child.kill("SIGKILL"), 2000).unref();
+      // Runs through the shell on Windows, so the whole tree has to go.
+      terminateChildTree(child);
+      setTimeout(() => terminateChildTree(child), 2000).unref();
     }, timeoutMs);
 
     child.stdout.on("data", (chunk) => {

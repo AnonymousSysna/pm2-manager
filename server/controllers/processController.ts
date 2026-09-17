@@ -3,6 +3,7 @@ const net = require("net");
 const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
+const { toSpawnTarget, terminateChildTree } = require("../utils/commandSpawn");
 const pm2 = require("pm2");
 const { withPM2 } = require("../utils/pm2Client");
 const permissionHints = require("../utils/permissionHints.js");
@@ -731,7 +732,9 @@ function runCommand(command: string, args: string[], cwd: string, options: Comma
     ? { ...process.env, ...options.env }
     : process.env;
   return new Promise<CommandResult>((resolve, reject) => {
-    const child = spawn(command, args, {
+    // npm scripts run through npm.cmd on Windows, which needs the shell.
+    const target = toSpawnTarget(command, args);
+    const child = spawn(target.command, target.args, {
       cwd,
       env: childEnv,
       stdio: ["ignore", "pipe", "pipe"]
@@ -743,8 +746,9 @@ function runCommand(command: string, args: string[], cwd: string, options: Comma
 
     const timeout = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGTERM");
-      setTimeout(() => child.kill("SIGKILL"), 3000).unref();
+      // npm scripts run through the shell on Windows, so kill the tree.
+      terminateChildTree(child);
+      setTimeout(() => terminateChildTree(child), 3000).unref();
     }, COMMAND_TIMEOUT_MS);
 
     child.stdout.on("data", (data) => {

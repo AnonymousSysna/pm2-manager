@@ -246,6 +246,30 @@ because everything in those files ships to the browser.
   in an unknown state. `npm run preflight` refuses to start without `PM2_USER`,
   `PM2_PASS_HASH`, `JWT_SECRET`, and `METRICS_TOKEN`.
 
+## Health endpoints
+
+- `/health` and `/ready` both run the same PM2 probe and must always answer. On
+  Windows the npm shim is a `.cmd` file, and `spawn("npm.cmd", ...)` throws
+  `EINVAL` synchronously on Node 20.12+ instead of emitting an `error` event, so a
+  probe awaiter that only listened for the event never settled: measured against a
+  real production boot, `GET /ready` and `GET /health` never responded (client gave
+  up at 12s) and the process logged an unhandled rejection. They now answer 200 in
+  ~1.3s, including `pm2Connected: true`.
+- Two rules make that hold: the probe is wrapped in a guard so a throwing probe
+  becomes a 503 `not_ready`/`degraded` answer rather than a hanging request, and
+  `server/utils/commandSpawn.ts` is the single place that knows how to launch a
+  command on this platform. On Windows a `.cmd`/`.bat` launches through
+  `cmd.exe /d /s /c "<command line>"` with no `shell: true` (so no DEP0190 warning
+  and no shell-interpolated user input).
+- A shell launch is a process tree, so timeouts end the tree with
+  `taskkill /pid <pid> /t /f`; `child.kill()` alone left a wedged `pm2 jlist`
+  behind.
+- `server/routes/health.ts` keeps both payloads byte-identical to the previous
+  inline handlers (plus `pm2Queue` on `/health`), and
+  `server/tests/{commandSpawn,healthProbe,healthRoutes}.test.ts` cover the shell
+  wrapping and quoting, a missing binary that still settles, the timeout tree kill,
+  and both 200 and 503 responses.
+
 ## Operational safety
 
 - Use the dashboard triage order: attention first, then logs, then action.

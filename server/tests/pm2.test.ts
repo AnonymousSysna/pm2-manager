@@ -5,6 +5,7 @@ const os = require("os");
 const path = require("path");
 const { EventEmitter } = require("events");
 const { PassThrough } = require("stream");
+const { toSpawnTarget } = require("../utils/commandSpawn");
 
 function loadPm2RouteFresh() {
   const routePath = require.resolve("../routes/pm2");
@@ -18,6 +19,18 @@ function expectedNpmExecutable(platform = process.platform) {
 
 function expectedNpmArgs(pm2Args = []) {
   return ["--prefix", "server", "exec", "pm2", "--", ...pm2Args];
+}
+
+function expectedNpmLaunch(pm2Args = [], platform = process.platform) {
+  return toSpawnTarget(expectedNpmExecutable(platform), expectedNpmArgs(pm2Args), platform);
+}
+
+// The route always runs `npm exec pm2 -- <args>`; the platform decides whether
+// that is a direct spawn or a `cmd.exe` launch of the npm shim.
+function isExpectedNpmLaunch(call, pm2Args, platform = process.platform) {
+  const expected = expectedNpmLaunch(pm2Args, platform);
+  return call.command === expected.command &&
+    JSON.stringify(call.args) === JSON.stringify(expected.args);
 }
 
 function createMockSpawn(behavior, calls) {
@@ -236,8 +249,9 @@ for (const routeCase of [
       assert.match(response.payload.data?.output || "", new RegExp(routeCase.pm2Args[0]));
 
       assert.equal(harness.calls.length, 1);
-      assert.equal(harness.calls[0].command, expectedNpmExecutable());
-      assert.deepEqual(harness.calls[0].args, expectedNpmArgs(routeCase.pm2Args));
+      const launch = expectedNpmLaunch(routeCase.pm2Args);
+      assert.equal(harness.calls[0].command, launch.command);
+      assert.deepEqual(harness.calls[0].args, launch.args);
       assert.equal(harness.calls[0].options.cwd, path.resolve(__dirname, "..", ".."));
     } finally {
       harness.restore();
@@ -262,8 +276,7 @@ test("startup route preserves elevated instructions and does not run save when s
     }
 
     if (
-      command === expectedNpmExecutable() &&
-      JSON.stringify(args) === JSON.stringify(expectedNpmArgs(["startup"]))
+      isExpectedNpmLaunch({ command, args }, ["startup"])
     ) {
       return {
         code: 1,
@@ -288,8 +301,7 @@ test("startup route preserves elevated instructions and does not run save when s
 
     assert.equal(
       harness.calls.some((entry) =>
-        entry.command === expectedNpmExecutable() &&
-        JSON.stringify(entry.args) === JSON.stringify(expectedNpmArgs(["save"]))
+        isExpectedNpmLaunch(entry, ["save"])
       ),
       false
     );
@@ -314,8 +326,7 @@ test("info route validates PM2 via CLI and returns the resolved PM2 home", async
 
   const harness = loadPm2RouteWithMockedSpawn(({ command, args }) => {
     if (
-      command === expectedNpmExecutable() &&
-      JSON.stringify(args) === JSON.stringify(expectedNpmArgs(["jlist"]))
+      isExpectedNpmLaunch({ command, args }, ["jlist"])
     ) {
       return {
         code: 0,
@@ -334,8 +345,9 @@ test("info route validates PM2 via CLI and returns the resolved PM2 home", async
     assert.equal(response.payload.data?.pm2Home, path.resolve(customPm2Home));
     assert.notEqual(response.payload.data?.pm2Home, os.homedir());
     assert.equal(harness.calls.length, 1);
-    assert.equal(harness.calls[0].command, expectedNpmExecutable());
-    assert.deepEqual(harness.calls[0].args, expectedNpmArgs(["jlist"]));
+    const launch = expectedNpmLaunch(["jlist"]);
+    assert.equal(harness.calls[0].command, launch.command);
+    assert.deepEqual(harness.calls[0].args, launch.args);
     assert.equal(harness.calls[0].options.cwd, path.resolve(__dirname, "..", ".."));
   } finally {
     harness.restore();
@@ -392,7 +404,7 @@ test("feature run executes allowlisted PM2 command args", async () => {
       response.payload.data.command,
       `npm ${expectedNpmArgs(["restart", "api", "--update-env"]).join(" ")}`
     );
-    assert.deepEqual(harness.calls[0].args, expectedNpmArgs(["restart", "api", "--update-env"]));
+    assert.deepEqual(harness.calls[0].args, expectedNpmLaunch(["restart", "api", "--update-env"]).args);
   } finally {
     harness.restore();
   }

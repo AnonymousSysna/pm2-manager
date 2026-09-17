@@ -1,7 +1,6 @@
 const fs = require("fs");
 const path = require("path");
 const http = require("http");
-const { spawn } = require("child_process");
 const express = require("express");
 const cors = require("cors");
 const { Server } = require("socket.io");
@@ -9,7 +8,7 @@ const crypto = require("crypto");
 const { logger } = require("./utils/logger");
 const { createGracefulShutdown } = require("./utils/gracefulShutdown");
 const { normalizeOrigin, scrubUrl } = require("./utils/urlSafety");
-const { assertEnvironmentReady, getEnvironmentReport } = require("./utils/envGuard");
+const { assertEnvironmentReady } = require("./utils/envGuard");
 const { securityHeaders } = require("./middleware/securityHeaders");
 const { errorHandler, notFoundHandler } = require("./middleware/errorHandler");
 const { metricsMiddleware, renderMetrics } = require("./middleware/metrics");
@@ -39,7 +38,7 @@ const clientErrorRoutes = require("./routes/clientErrors");
 const { registerPM2Monitor } = require("./socket/pm2Monitor");
 const { registerJcodeTerminal } = require("./socket/jcodeTerminal");
 const { isIpAllowed, getRequestIp } = require("./utils/ipAccess");
-const { getPM2QueueState } = require("./utils/pm2Client");
+const { registerHealthRoutes } = require("./routes/health");
 
 const app = express();
 const server = http.createServer(app);
@@ -49,9 +48,6 @@ const configuredOrigins = String(process.env.CORS_ALLOWED_ORIGINS || "")
   .split(",")
   .map((v) => v.trim())
   .filter(Boolean);
-const HEALTHCHECK_TIMEOUT_MS = Number.isFinite(Number(process.env.HEALTHCHECK_TIMEOUT_MS))
-  ? Math.max(1000, Math.floor(Number(process.env.HEALTHCHECK_TIMEOUT_MS)))
-  : 5000;
 
 function isLocalDevOrigin(origin) {
   const normalized = normalizeOrigin(origin);
@@ -90,83 +86,6 @@ function isCorsOriginAllowed(origin) {
   }) || isLocalDevOrigin(normalized);
 }
 
-function npmCommand() {
-  return process.platform === "win32" ? "npm.cmd" : "npm";
-}
-
-interface HealthCommandOptions {
-  cwd?: string;
-  timeoutMs?: number;
-}
-
-interface HealthCommandResult {
-  ok: boolean;
-  code: number | null;
-  timedOut: boolean;
-  output: string;
-}
-
-function runHealthCommand(command: string, args: string[], options: HealthCommandOptions = {}): Promise<HealthCommandResult> {
-  const cwd = options.cwd || path.resolve(__dirname, "..");
-  const timeoutMs = options.timeoutMs || HEALTHCHECK_TIMEOUT_MS;
-
-  return new Promise<HealthCommandResult>((resolve) => {
-    let output = "";
-    let finished = false;
-    const child = spawn(command, args, {
-      cwd,
-      env: process.env,
-      windowsHide: true
-    });
-
-    const done = (result) => {
-      if (finished) {
-        return;
-      }
-      finished = true;
-      clearTimeout(timeout);
-      resolve({
-        ok: Boolean(result.ok),
-        code: result.code ?? null,
-        timedOut: Boolean(result.timedOut),
-        output: output.trim()
-      });
-    };
-
-    const timeout = setTimeout(() => {
-      try {
-        child.kill();
-      } catch (_error) {
-        // Best effort; the process may already have exited.
-      }
-      done({ ok: false, timedOut: true });
-    }, timeoutMs);
-    if (typeof timeout.unref === "function") {
-      timeout.unref();
-    }
-
-    child.stdout?.on("data", (chunk) => {
-      output += chunk.toString();
-    });
-    child.stderr?.on("data", (chunk) => {
-      output += chunk.toString();
-    });
-    child.on("error", (error) => {
-      output += error.message;
-      done({ ok: false, code: null });
-    });
-    child.on("close", (code) => {
-      done({ ok: code === 0, code });
-    });
-  });
-}
-
-function probePm2Health() {
-  return runHealthCommand(npmCommand(), ["--prefix", "server", "exec", "pm2", "--", "jlist"], {
-    cwd: path.resolve(__dirname, ".."),
-    timeoutMs: HEALTHCHECK_TIMEOUT_MS
-  });
-}
 
 const metricsReadLimiter = createRateLimiter({
   windowMs: 60 * 1000,
@@ -214,40 +133,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get("/health", async (_req, res) => {
-  const pm2Probe = await probePm2Health();
-  const payload = {
-    status: pm2Probe.ok ? "ok" : "degraded",
-    pm2Connected: pm2Probe.ok,
-    uptime: process.uptime(),
-    port: PORT,
-    timestamp: Date.now(),
-    pm2Queue: getPM2QueueState(),
-    error: null
-  };
-
-  if (!pm2Probe.ok) {
-    payload.error = pm2Probe.timedOut
-      ? `PM2 health probe timed out after ${HEALTHCHECK_TIMEOUT_MS}ms`
-      : pm2Probe.output || "PM2 health probe failed";
-  }
-
-  res.status(pm2Probe.ok ? 200 : 503).json(payload);
-});
-
-app.get("/ready", async (_req, res) => {
-  const config = getEnvironmentReport();
-  const pm2Probe = await probePm2Health();
-  const ready = config.ok && pm2Probe.ok;
-
-  res.status(ready ? 200 : 503).json({
-    status: ready ? "ready" : "not_ready",
-    pm2Connected: pm2Probe.ok,
-    uptime: process.uptime(),
-    pm2Queue: getPM2QueueState(),
-    timestamp: Date.now()
-  });
-});
+registerHealthRoutes(app, { port: PORT });
 
 app.get("/metrics", metricsReadLimiter, (req, res) => {
   const ip = getRequestIp(req);
