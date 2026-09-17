@@ -124,3 +124,59 @@ test("a valid environment is required for readiness even when pm2 is up", async 
   const health = await call(app, "/health");
   assert.equal(health.statusCode, 200, "/health reports reachability, not configuration");
 });
+
+test("three polls inside the cache window cost one probe", async () => {
+  let calls = 0;
+  const app = mount({
+    probePm2Health: async () => {
+      calls += 1;
+      return { ok: true, code: 0, timedOut: false, output: "" };
+    },
+    probeCacheOptions: { ttlMs: 60000 }
+  });
+
+  await call(app, "/ready");
+  await call(app, "/health");
+  await call(app, "/ready");
+
+  assert.equal(calls, 1, "a poller must not pay for an npm startup per request");
+});
+
+test("a result older than the window is probed again", async () => {
+  let calls = 0;
+  let clock = 5000;
+  const app = mount({
+    probePm2Health: async () => {
+      calls += 1;
+      return { ok: true, code: 0, timedOut: false, output: "" };
+    },
+    probeCacheOptions: { ttlMs: 1000, now: () => clock }
+  });
+
+  const ready = await call(app, "/ready");
+  assert.equal(ready.statusCode, 200);
+  assert.equal(calls, 1);
+
+  clock += 1001;
+  const health = await call(app, "/health");
+  assert.equal(health.statusCode, 200);
+  assert.equal(calls, 2, "a stale answer is refreshed rather than served forever");
+});
+
+test("a cached probe failure keeps both endpoints answering", async () => {
+  let calls = 0;
+  const app = mount({
+    probePm2Health: async () => {
+      calls += 1;
+      throw new Error("pm2 binary missing");
+    },
+    probeCacheOptions: { ttlMs: 60000 }
+  });
+
+  const ready = await call(app, "/ready");
+  assert.equal(ready.statusCode, 503);
+  const health = await call(app, "/health");
+  assert.equal(health.statusCode, 503);
+  assert.match(health.payload.error, /pm2 binary missing/);
+  assert.equal(calls, 1, "the failure is replayed from the cache");
+});

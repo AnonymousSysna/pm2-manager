@@ -268,6 +268,13 @@ because everything in those files ships to the browser.
 - A shell launch is a process tree, so timeouts end the tree with
   `taskkill /pid <pid> /t /f`; `child.kill()` alone left a wedged `pm2 jlist`
   behind.
+- The probe is cached for `HEALTHCHECK_CACHE_MS` (default 2000, 0 disables) with
+  single-flight, so polling is free instead of one `npm` startup per request.
+  Measured against a real production server: five sequential `/ready` calls were
+  1442/1438/1440/1447/1442ms before and 2/1/1/1/1ms after, and ten concurrent calls
+  went from 2989ms with 26 node processes to 8ms with none. The window is a maximum
+  age, so a restarted or dead pm2 daemon is still noticed within a poll or two;
+  failures are cached too, so a broken probe cannot be hammered.
 - `server/routes/health.ts` keeps both payloads byte-identical to the previous
   inline handlers (plus `pm2Queue` on `/health`), and
   `server/tests/{commandSpawn,healthProbe,healthRoutes}.test.ts` cover the shell

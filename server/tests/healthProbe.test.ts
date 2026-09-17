@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const path = require("path");
 
 const { runHealthCommand, probePm2Health } = require("../utils/healthProbe");
+const { createProbeCache } = require("../utils/healthProbe");
 
 const repoRoot = path.resolve(__dirname, "..", "..");
 
@@ -72,4 +73,75 @@ test("the probe always settles, whatever the command does", async () => {
   assert.equal(typeof result.output, "string");
   assert.equal(typeof result.timedOut, "boolean");
   assert.ok(elapsed < 30000, `the probe took ${elapsed}ms; it must not wait on the daemon`);
+});
+
+function countedProbe() {
+  let calls = 0;
+  return {
+    calls: () => calls,
+    probe: async () => {
+      calls += 1;
+      return { ok: true, code: 0, timedOut: false, output: `call-${calls}` };
+    }
+  };
+}
+
+test("the cache reuses a settled answer until the window expires", async () => {
+  const { probe, calls } = countedProbe();
+  let clock = 1000;
+  const cache = createProbeCache(probe, { ttlMs: 2000, now: () => clock });
+
+  const first = await cache.read();
+  assert.equal(calls(), 1);
+  assert.equal(cache.takenAt(), 1000);
+
+  clock += 1999;
+  assert.deepEqual(await cache.read(), first, "inside the window the answer is reused");
+  assert.equal(calls(), 1);
+
+  clock += 1;
+  const refreshed = await cache.read();
+  assert.equal(calls(), 2, "the window is a maximum age, not a minimum");
+  assert.notEqual(refreshed.output, first.output);
+});
+
+test("concurrent readers share the one run already in flight", async () => {
+  let release: (value: { ok: boolean }) => void = () => {};
+  const pending = new Promise<{ ok: boolean }>((resolve) => {
+    release = resolve;
+  });
+  let calls = 0;
+  const cache = createProbeCache(
+    async () => {
+      calls += 1;
+      return pending;
+    },
+    { ttlMs: 2000 }
+  );
+
+  const readers = [cache.read(), cache.read(), cache.read()];
+  assert.equal(calls, 1, "only the first reader starts a probe");
+  release({ ok: true });
+  await Promise.all(readers);
+  assert.equal(calls, 1);
+});
+
+test("a failing probe is cached too, so a poller cannot hammer a broken daemon", async () => {
+  let calls = 0;
+  let clock = 0;
+  const cache = createProbeCache(
+    async () => {
+      calls += 1;
+      throw new Error(`boom-${calls}`);
+    },
+    { ttlMs: 1000, now: () => clock }
+  );
+
+  await assert.rejects(() => cache.read(), /boom-1/);
+  await assert.rejects(() => cache.read(), /boom-1/, "the cached failure is replayed");
+  assert.equal(calls, 1);
+
+  clock = 1001;
+  await assert.rejects(() => cache.read(), /boom-2/);
+  assert.equal(calls, 2, "the failure is retried once the window expires");
 });

@@ -11,6 +11,12 @@
  *     is worse than one that reports unhealthy: PM2 and the installer both poll it.
  *   - it must not swallow the process. The child is killed on timeout, so a wedged
  *     pm2 daemon costs one probe interval, not the dashboard.
+ *   - it must not run once per poll. The probe costs a full `npm` startup (~1.4s
+ *     measured), so a load balancer polling `/ready` every few seconds would pay
+ *     that every time, and a burst of polls would start a burst of npm processes
+ *     (measured: 10 concurrent polls reached 26 node processes). `createProbeCache`
+ *     answers from the last result for a short window and shares one in-flight run
+ *     between concurrent callers, which makes a poll cost nothing.
  */
 
 import { spawn } from "node:child_process";
@@ -20,6 +26,14 @@ import { toSpawnTarget, terminateChildTree } from "./commandSpawn";
 const HEALTHCHECK_TIMEOUT_MS = Number.isFinite(Number(process.env.HEALTHCHECK_TIMEOUT_MS))
   ? Math.max(1000, Math.floor(Number(process.env.HEALTHCHECK_TIMEOUT_MS)))
   : 5000;
+
+/**
+ * How long a probe result may be reused. Short enough that a restarted or dead pm2
+ * daemon is noticed within a poll or two, long enough that polling is free.
+ */
+const HEALTHCHECK_CACHE_MS = Number.isFinite(Number(process.env.HEALTHCHECK_CACHE_MS))
+  ? Math.max(0, Math.floor(Number(process.env.HEALTHCHECK_CACHE_MS)))
+  : 2000;
 
 export interface HealthCommandOptions {
   cwd?: string;
@@ -118,4 +132,69 @@ export function probePm2Health(options: HealthCommandOptions = {}): Promise<Heal
   });
 }
 
-export { HEALTHCHECK_TIMEOUT_MS };
+export interface ProbeCacheOptions {
+  ttlMs?: number;
+  now?: () => number;
+}
+
+export interface ProbeCache<T> {
+  read: () => Promise<T>;
+  /** When the cached answer was taken, or null before the first settled read. */
+  takenAt: () => number | null;
+}
+
+/**
+ * Reuse a settled probe result for `ttlMs`, and let concurrent callers share the
+ * one run already in flight. Successes and failures are both cached: a broken
+ * probe is exactly when hammering it with a new process per poll hurts most.
+ */
+export function createProbeCache<T>(probe: () => Promise<T>, options: ProbeCacheOptions = {}): ProbeCache<T> {
+  const ttlMs = options.ttlMs ?? HEALTHCHECK_CACHE_MS;
+  const now = options.now ?? Date.now;
+  let settledAt: number | null = null;
+  // The settled answer is kept as a replay thunk, so success and failure are stored
+  // the same way and one expired window discards both.
+  let replay: (() => Promise<T>) | null = null;
+  let inFlight: Promise<T> | null = null;
+
+  function stored(): Promise<T> | null {
+    const fresh = settledAt !== null && now() - settledAt < ttlMs;
+    if (!replay || !fresh) {
+      return null;
+    }
+    return replay();
+  }
+
+  return {
+    read() {
+      const cached = stored();
+      if (cached) {
+        return cached;
+      }
+      if (inFlight) {
+        return inFlight;
+      }
+
+      inFlight = probe().then(
+        (value) => {
+          replay = () => Promise.resolve(value);
+          settledAt = now();
+          inFlight = null;
+          return value;
+        },
+        (error) => {
+          replay = () => Promise.reject(error);
+          settledAt = now();
+          inFlight = null;
+          throw error;
+        }
+      );
+      return inFlight;
+    },
+    takenAt() {
+      return settledAt;
+    }
+  };
+}
+
+export { HEALTHCHECK_TIMEOUT_MS, HEALTHCHECK_CACHE_MS };

@@ -9,10 +9,14 @@
  *
  * `probePm2Health`, `getEnvironmentReport`, and `getPM2QueueState` are injected so
  * the routes can be exercised without a pm2 daemon or a real environment.
+ *
+ * Both endpoints read the probe through one cache, so a poller pays for at most one
+ * `npm` startup per cache window instead of one per request.
  */
 
-import { HEALTHCHECK_TIMEOUT_MS, probePm2Health } from "../utils/healthProbe";
+import { HEALTHCHECK_TIMEOUT_MS, createProbeCache, probePm2Health } from "../utils/healthProbe";
 import type { HealthCommandResult } from "../utils/healthProbe";
+import type { ProbeCacheOptions } from "../utils/healthProbe";
 
 // Both modules are CommonJS, so their exports are typed here at the use site.
 const { getEnvironmentReport } = require("../utils/envGuard") as {
@@ -27,6 +31,7 @@ export interface HealthRouteDeps {
   probePm2Health?: () => Promise<HealthCommandResult>;
   getEnvironmentReport?: () => { ok: boolean };
   getPM2QueueState?: () => unknown;
+  probeCacheOptions?: ProbeCacheOptions;
 }
 
 function describeProbeFailure(probe: HealthCommandResult): string {
@@ -37,14 +42,17 @@ function describeProbeFailure(probe: HealthCommandResult): string {
 }
 
 export function registerHealthRoutes(app, deps: HealthRouteDeps = {}) {
-  const probe = deps.probePm2Health || probePm2Health;
+  const probe = createProbeCache<HealthCommandResult>(
+    deps.probePm2Health || probePm2Health,
+    deps.probeCacheOptions
+  );
   const readEnvironment = deps.getEnvironmentReport || getEnvironmentReport;
   const readQueueState = deps.getPM2QueueState || getPM2QueueState;
   const port = deps.port ?? Number(process.env.PORT || 8000);
 
   async function runProbe(): Promise<HealthCommandResult> {
     try {
-      return await probe();
+      return await probe.read();
     } catch (error) {
       return {
         ok: false,
