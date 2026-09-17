@@ -23,6 +23,7 @@ function emitSessionStatus(socket, session = null) {
     pty: Boolean(session?.pty),
     command: session?.command || null,
     cwd: session?.cwd || null,
+    socketPath: session?.socketPath || null,
     startedAt: session?.startedAt || null
   });
 }
@@ -95,10 +96,18 @@ function registerJcodeTerminal(io) {
         pty: Boolean(meta.pty),
         command: meta.command || "jcode",
         cwd: meta.cwd || null,
+        socketPath: meta.socketPath || null,
         startedAt: Date.now()
       };
       sessions.set(socket.id, session);
 
+      if (meta.prelude) {
+        socket.emit("jcode:terminal:output", {
+          stream: "system",
+          data: `${meta.prelude}\n`,
+          timestamp: Date.now()
+        });
+      }
       socket.emit("jcode:terminal:output", {
         stream: "system",
         data: `Connected to ${session.command}${session.pty ? " through a server PTY" : ""}.\n`,

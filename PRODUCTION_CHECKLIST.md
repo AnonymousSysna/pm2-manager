@@ -58,4 +58,4 @@ Use this before exposing PM2 Manager outside localhost.
 - Open the selected public port in the VPS firewall/security group.
 - Use a subdomain instead if you want standard HTTPS on port `443` without showing a port in the URL.
 
-- JCode browser terminal: install JCode first, then verify `/dashboard/jcode` starts a session, accepts input, and stops cleanly on disconnect.
+- JCode browser terminal: install JCode first, then verify `/dashboard/jcode` starts/reuses the JCode server, attaches with `jcode connect`, accepts input, and stops cleanly on disconnect. On root/PM2 hosts, set `JCODE_RUNTIME_DIR` when `/run/user/<uid>` is unavailable.

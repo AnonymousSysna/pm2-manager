@@ -609,4 +609,4 @@ Run `npm run setup` from the repository root after cloning. This installs client
 
 ### JCode extension terminal
 
-The JCode dashboard tab can now start an interactive JCode session inside the browser. Press **Start session** to launch the server-side `jcode` terminal client and stream output through the existing authenticated Socket.IO connection. The JCode gateway controls remain available for `jcode serve`, pairing, and provider setup, but the main workflow is now terminal-first.
+The JCode dashboard tab can now start an interactive JCode session inside the browser. Press **Start session** to start or reuse the local JCode server first, then attach with `jcode connect` through the existing authenticated Socket.IO terminal bridge. This avoids the first-run hang where a raw `jcode` client could stop at “Connecting to server...” under PM2/root when the runtime socket directory was missing. The JCode gateway controls remain available for pairing and thin clients, but the main workflow is now terminal-first.

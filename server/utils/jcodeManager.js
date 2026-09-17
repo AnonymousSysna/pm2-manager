@@ -39,6 +39,97 @@ function getHomeDir() {
   return process.env.HOME || process.env.USERPROFILE || os.homedir() || "";
 }
 
+function getCurrentUid() {
+  try {
+    if (typeof process.getuid === "function") {
+      return process.getuid();
+    }
+  } catch (_error) {
+    // Ignore UID lookup failures on non-Unix platforms.
+  }
+
+  try {
+    const user = os.userInfo();
+    if (Number.isInteger(user?.uid)) {
+      return user.uid;
+    }
+  } catch (_error) {
+    // os.userInfo can fail in restricted containers.
+  }
+
+  return "user";
+}
+
+function directoryExists(directoryPath) {
+  try {
+    return Boolean(directoryPath) && fs.existsSync(directoryPath) && fs.statSync(directoryPath).isDirectory();
+  } catch (_error) {
+    return false;
+  }
+}
+
+function getJcodeRuntimeDir(baseEnv = process.env) {
+  const explicit = String(baseEnv.JCODE_RUNTIME_DIR || "").trim();
+  if (explicit) {
+    return path.resolve(explicit.replace(/^~/, getHomeDir()));
+  }
+
+  const runtimeDir = String(baseEnv.XDG_RUNTIME_DIR || "").trim();
+  if (runtimeDir && directoryExists(runtimeDir)) {
+    return runtimeDir;
+  }
+
+  return path.join(os.tmpdir(), `pm2-manager-jcode-runtime-${getCurrentUid()}`);
+}
+
+function ensureJcodeRuntimeDir(baseEnv = process.env) {
+  if (process.platform === "win32") {
+    return null;
+  }
+
+  const runtimeDir = getJcodeRuntimeDir(baseEnv);
+  fs.mkdirSync(runtimeDir, { recursive: true, mode: 0o700 });
+  try {
+    fs.chmodSync(runtimeDir, 0o700);
+  } catch (_error) {
+    // chmod is best-effort; some mounted filesystems do not support it.
+  }
+  return runtimeDir;
+}
+
+function getJcodeSocketPath(env = process.env) {
+  const runtimeDir = ensureJcodeRuntimeDir(env);
+  return runtimeDir ? path.join(runtimeDir, "jcode.sock") : null;
+}
+
+function isSocketReady(socketPath) {
+  if (!socketPath) {
+    return false;
+  }
+
+  try {
+    const stat = fs.statSync(socketPath);
+    return typeof stat.isSocket === "function" ? stat.isSocket() : stat.isFile();
+  } catch (_error) {
+    return false;
+  }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForJcodeSocket(socketPath, timeoutMs = 12_000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (isSocketReady(socketPath)) {
+      return true;
+    }
+    await sleep(250);
+  }
+  return isSocketReady(socketPath);
+}
+
 function getJcodeCandidateDirs() {
   const homeDir = getHomeDir();
   const candidates = [
@@ -66,6 +157,11 @@ function withJcodePathEnv(baseEnv = process.env) {
   const pathKey = Object.keys(env).find((key) => key.toLowerCase() === "path") || "PATH";
   const currentPath = String(env[pathKey] || "");
   env[pathKey] = uniqueValues([...getJcodeCandidateDirs(), ...currentPath.split(pathDelimiter())]).join(pathDelimiter());
+
+  if (process.platform !== "win32") {
+    env.XDG_RUNTIME_DIR = ensureJcodeRuntimeDir(env);
+  }
+
   return env;
 }
 
@@ -270,6 +366,11 @@ async function getJcodeStatus() {
         pid: gatewayRunning ? gatewayPid : null,
         port: gatewayPort,
         url: getGatewayUrl(gatewayPort)
+      },
+      runtime: {
+        dir: process.platform === "win32" ? null : getJcodeRuntimeDir(),
+        socketPath: process.platform === "win32" ? null : getJcodeSocketPath(withJcodePathEnv()),
+        serverPid: state.jcodeServerPid && isPidRunning(state.jcodeServerPid) ? state.jcodeServerPid : null
       },
       lastAction: state.lastAction || null,
       lastOutput: state.lastOutput || ""
@@ -560,6 +661,68 @@ async function runJcodeAction(payload = {}) {
 }
 
 
+async function ensureJcodeServer(binaryPath, cwd, env) {
+  if (process.platform === "win32") {
+    return { success: true, started: false, socketPath: null, message: "" };
+  }
+
+  const socketPath = getJcodeSocketPath(env);
+  if (isSocketReady(socketPath)) {
+    return {
+      success: true,
+      started: false,
+      socketPath,
+      message: `Using JCode server socket ${socketPath}.`
+    };
+  }
+
+  const serverName = String(process.env.JCODE_SERVER_NAME || "pm2-manager").trim() || "pm2-manager";
+  const child = spawn(binaryPath, ["serve", "--server-name", serverName], {
+    cwd,
+    env,
+    detached: true,
+    stdio: "ignore",
+    windowsHide: true
+  });
+  child.unref();
+
+  const startTimeoutMs = Number.isFinite(Number(process.env.JCODE_SERVER_START_TIMEOUT_MS))
+    ? Math.max(2000, Math.floor(Number(process.env.JCODE_SERVER_START_TIMEOUT_MS)))
+    : 12_000;
+  const ready = await waitForJcodeSocket(socketPath, startTimeoutMs);
+  const state = await readState();
+  const nextState = {
+    ...state,
+    jcodeServerPid: child.pid,
+    lastAction: {
+      action: "terminal-server-start",
+      ok: ready,
+      at: Date.now()
+    },
+    lastOutput: ready
+      ? `Started JCode server PID ${child.pid} at ${socketPath}`
+      : `JCode server PID ${child.pid} did not create ${socketPath} before timeout`
+  };
+  await writeState(nextState);
+
+  if (!ready) {
+    return {
+      success: false,
+      started: true,
+      socketPath,
+      message: "",
+      error: `JCode server did not become ready. Expected socket: ${socketPath}`
+    };
+  }
+
+  return {
+    success: true,
+    started: true,
+    socketPath,
+    message: `Started JCode server PID ${child.pid} at ${socketPath}.`
+  };
+}
+
 function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'"'"'`)}'`;
 }
@@ -604,12 +767,6 @@ async function createJcodeTerminalProcess(payload = {}) {
 
   const mode = normalizeTerminalMode(payload.mode);
   const resumeName = String(payload.resume || "").trim();
-  const args = [];
-  if (mode === "connect") {
-    args.push("connect");
-  } else if (mode === "resume" && resumeName) {
-    args.push("--resume", resumeName.slice(0, 80));
-  }
 
   const cols = normalizeTerminalSize(payload.cols, 100, 40, 240);
   const rows = normalizeTerminalSize(payload.rows, 30, 12, 80);
@@ -622,6 +779,32 @@ async function createJcodeTerminalProcess(payload = {}) {
     LINES: String(rows),
     FORCE_COLOR: process.env.FORCE_COLOR || "1"
   });
+
+  const args = [];
+  let prelude = "";
+  if (mode === "start" || mode === "connect") {
+    const server = await ensureJcodeServer(binaryPath, cwd, env);
+    if (!server.success) {
+      return {
+        success: false,
+        child: null,
+        error: `${server.error || "JCode server failed to start"}. Try setting JCODE_RUNTIME_DIR to a writable folder and restart PM2 Manager.`
+      };
+    }
+    prelude = server.message || "";
+    args.push("connect");
+  } else if (mode === "resume" && resumeName) {
+    const server = await ensureJcodeServer(binaryPath, cwd, env);
+    if (!server.success) {
+      return {
+        success: false,
+        child: null,
+        error: `${server.error || "JCode server failed to start"}. Try setting JCODE_RUNTIME_DIR to a writable folder and restart PM2 Manager.`
+      };
+    }
+    prelude = server.message || "";
+    args.push("--resume", resumeName.slice(0, 80));
+  }
 
   let command = binaryPath;
   let spawnArgs = args;
@@ -658,7 +841,9 @@ async function createJcodeTerminalProcess(payload = {}) {
         cwd,
         rows,
         cols,
-        mode
+        mode,
+        prelude,
+        socketPath: process.platform === "win32" ? null : getJcodeSocketPath(env)
       }
     };
   } catch (error) {
@@ -678,5 +863,7 @@ module.exports = {
   runJcodeAction,
   resolveJcodeBinary,
   withJcodePathEnv,
-  createJcodeTerminalProcess
+  createJcodeTerminalProcess,
+  getJcodeRuntimeDir,
+  getJcodeSocketPath
 };

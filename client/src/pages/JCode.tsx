@@ -181,7 +181,7 @@ export default function JCode() {
       return;
     }
     if (socketRef.current) {
-      socketRef.current.emit("jcode:terminal:start", { rows: 30, cols: 110, mode: "start" });
+      socketRef.current.emit("jcode:terminal:start", { rows: 30, cols: 110, mode: "connect" });
       return;
     }
 
@@ -196,7 +196,7 @@ export default function JCode() {
 
     socket.on("connect", () => {
       setTerminalState("connecting");
-      socket.emit("jcode:terminal:start", { rows: 30, cols: 110, mode: "start" });
+      socket.emit("jcode:terminal:start", { rows: 30, cols: 110, mode: "connect" });
     });
 
     socket.on("connect_error", (error) => {
@@ -361,7 +361,7 @@ export default function JCode() {
             <div className="min-w-0">
               <SubsectionTitle>Start a real JCode session inside the dashboard</SubsectionTitle>
               <SupportingCopy>
-                Press Start session to launch the JCode terminal client on the server and stream it here. Nothing starts until you press the button.
+                Press Start session to launch the JCode server, then attach the terminal client here. Nothing starts until you press the button.
               </SupportingCopy>
               <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
                 <Badge tone={installed ? "success" : "warning"}>{installed ? status?.version || "Installed" : "Needs install"}</Badge>
@@ -377,7 +377,7 @@ export default function JCode() {
               <SubsectionTitle className="text-sm">Install first, then start a session</SubsectionTitle>
             </div>
             <p className="text-xs leading-5 text-text-3">
-              Install runs only after confirmation. Start session opens JCode directly in the terminal below.
+              Install runs only after confirmation. Start session starts the JCode server first, then connects the terminal below.
             </p>
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant={installed ? "secondary" : "primary"} size="sm" disabled={loading || installing || installed} onClick={installJcode}>
@@ -398,8 +398,8 @@ export default function JCode() {
 
         <div className="jcode-terminal-shell mt-3">
           <div className="jcode-terminal-toolbar">
-            <span>{terminalMeta?.command || "jcode"}</span>
-            <span>{terminalMeta?.pid ? `PID ${terminalMeta.pid}` : terminalState}</span>
+            <span>{terminalMeta?.command || "jcode connect"}</span>
+            <span>{terminalMeta?.socketPath || (terminalMeta?.pid ? `PID ${terminalMeta.pid}` : terminalState)}</span>
           </div>
           <div ref={terminalRef} className="jcode-terminal-screen" aria-live="polite">
             {terminalOutput ? (
