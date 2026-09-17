@@ -1551,3 +1551,13 @@
     @apply shrink-0;
   }
 }
+
+@layer components {
+  .ai-evidence-list {
+    @apply mt-2 grid gap-1.5;
+  }
+
+  .ai-evidence-row {
+    @apply flex min-w-0 items-center gap-2;
+  }
+}

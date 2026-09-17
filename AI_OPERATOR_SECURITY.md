@@ -40,3 +40,22 @@ Other protections:
 - Restrict `AUTH_ALLOWED_IPS` when the dashboard is public.
 - Use short-lived provider keys or provider-side spending limits where available.
 - Do not enable "Remember key" on shared machines.
+
+## Support-agent diagnostics
+
+The AI Operator now gathers a bounded diagnostics snapshot before each chat request: PM2 status, dashboard PM2 logs, Git status, production env-key presence, and frontend build/static asset state. Secret values are never sent to the AI provider; only presence/absence and redacted command output are included.
+
+The local support layer can prepare guarded repair actions such as env bootstrap, dependency repair, build, and dashboard restart. These actions still pass through the same risk-mode gates: Plan only prepares actions, Auto checks runs read-only diagnostics, and Safe writes can run non-critical repairs.
+
+## Worker loop
+
+The AI Operator now has an explicit worker path for real support tasks. When the operator clicks **Auto repair** or asks the AI to fix a deployment/runtime error, the backend collects evidence, builds an action plan, runs only allowed safe actions for the selected mode, then collects a final snapshot and returns what changed.
+
+The built-in `auto-repair` action can run a bounded sequence based on detected evidence:
+
+1. restore generated production env values when they are missing,
+2. repair/install dependencies only when dependency errors are detected,
+3. rebuild the dashboard UI when static assets or SPA fallback are broken,
+4. restart the dashboard after safe repairs.
+
+It does not run raw shell commands, destructive PM2 actions, or critical daemon changes. Those still require explicit confirmation through the existing action guard.

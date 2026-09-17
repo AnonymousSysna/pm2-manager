@@ -224,6 +224,9 @@ export const pm2Admin = {
 export const aiOperator = {
   providers: () => api.get<ApiResult<any>>("/api/v1/ai/providers").then(unwrap),
   test: (payload: Record<string, unknown>) => api.post<ApiResult<any>>("/api/v1/ai/test", payload).then(unwrap),
+  diagnose: (payload: Record<string, unknown> = {}) => api.post<ApiResult<any>>("/api/v1/ai/diagnose", payload).then(unwrap),
+  runAction: (actionId: string, payload: Record<string, unknown> = {}, acknowledge = "") =>
+    api.post<ApiResult<any>>("/api/v1/ai/actions/run", { actionId, payload, acknowledge }, { validateStatus: (status) => status < 600 }).then(unwrap),
   chat: (payload: Record<string, unknown>) => api.post<ApiResult<any>>("/api/v1/ai/chat", payload).then(unwrap)
 };
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Bot, Copy, KeyRound, Play, Send, Zap } from "lucide-react";
-import { aiOperator, pm2Admin, processes as processApi } from "../api";
+import { Bot, Copy, KeyRound, Play, Send, Wrench, Zap } from "lucide-react";
+import { aiOperator, processes as processApi } from "../api";
 import toast, { getErrorMessage } from "../lib/toast";
 import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
@@ -29,10 +29,10 @@ const providerBaseUrls = {
 };
 
 const suggestedPrompts = [
-  "Check unstable apps",
-  "Open suspicious logs",
-  "Restart stopped apps",
-  "Save PM2 list"
+  "Diagnose current dashboard",
+  "Fix build error",
+  "Check missing assets",
+  "Repair env and restart"
 ];
 
 const criticalActions = ["delete", "kill-daemon", "resurrect", "startup", "unstartup", "send-signal", "update-daemon"];
@@ -47,6 +47,7 @@ const riskTone = {
 
 const statusTone = {
   executed: "success",
+  accepted: "success",
   planned: "neutral",
   needs_confirmation: "warning",
   rejected: "danger",
@@ -160,7 +161,7 @@ export default function AIOperator() {
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      content: "Connect a provider, then ask what to check or run."
+      content: "Paste an error, ask for a fix, or click Auto repair."
     }
   ]);
   const [prompt, setPrompt] = useState("");
@@ -169,10 +170,13 @@ export default function AIOperator() {
   const [lastActions, setLastActions] = useState([]);
   const [lastExecutions, setLastExecutions] = useState([]);
   const [lastUsage, setLastUsage] = useState(null);
+  const [lastSupportContext, setLastSupportContext] = useState(null);
   const [pendingAction, setPendingAction] = useState(null);
   const [runningActionId, setRunningActionId] = useState("");
   const [sending, setSending] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [diagnosing, setDiagnosing] = useState(false);
+  const [working, setWorking] = useState(false);
   const [connectionModalOpen, setConnectionModalOpen] = useState(false);
 
   useEffect(() => {
@@ -200,7 +204,8 @@ export default function AIOperator() {
     };
   }, []);
 
-  const canSend = settings.baseUrl.trim() && settings.model.trim() && settings.apiKey.trim() && prompt.trim() && !sending;
+  const busy = sending || diagnosing || working;
+  const canSend = prompt.trim() && !busy;
   const connected = Boolean(settings.baseUrl.trim() && settings.model.trim() && settings.apiKey.trim());
 
   const updateSetting = (name, value) => {
@@ -233,36 +238,45 @@ export default function AIOperator() {
     }
   };
 
-  const sendPrompt = async (event) => {
-    event?.preventDefault?.();
-    if (!canSend) return;
+  const runOperatorPrompt = async (text, modeOverride = settings.executeMode) => {
+    const trimmed = String(text || "").trim();
+    if (!trimmed || sending) return;
 
-    const userMessage = { role: "user", content: prompt.trim() };
+    const userMessage = { role: "user", content: trimmed };
     const nextMessages = [...messages, userMessage];
     setMessages(nextMessages);
     setPrompt("");
     setSending(true);
+    if (modeOverride === "write") setWorking(true);
     setLastActions([]);
     setLastExecutions([]);
 
     try {
-      const result = await aiOperator.chat({
-        provider: settings.provider,
-        baseUrl: settings.baseUrl,
-        apiKey: settings.apiKey,
-        model: settings.model,
-        executeMode: settings.executeMode,
-        messages: nextMessages.filter((message) => ["user", "assistant"].includes(message.role)),
-        context: { processes }
-      });
+      const result = await toast.promise(
+        () => aiOperator.chat({
+          provider: settings.provider,
+          baseUrl: settings.baseUrl,
+          apiKey: settings.apiKey,
+          model: settings.model,
+          executeMode: modeOverride,
+          messages: nextMessages.filter((message) => ["user", "assistant"].includes(message.role)),
+          context: { processes }
+        }),
+        {
+          loading: modeOverride === "write" ? "AI is checking and applying safe fixes..." : modeOverride === "read" ? "AI is checking the server..." : "AI is preparing a plan...",
+          success: modeOverride === "write" ? "AI finished the safe work" : "AI response ready",
+          error: (error) => getErrorMessage(error, "AI request failed")
+        }
+      );
       const data = result.data || {};
       const assistantMessage = { role: "assistant", content: data.reply || "I prepared a response." };
       setMessages((prev) => [...prev, assistantMessage]);
       setLastActions(data.actions || []);
       setLastExecutions(data.executions || []);
       setLastUsage(data.usage || null);
-      if ((data.executions || []).some((item) => item.status === "executed")) {
-        toast.success("AI operator executed approved action(s)");
+      setLastSupportContext(data.supportContext || null);
+      if ((data.executions || []).some((item) => ["executed", "accepted"].includes(item.status))) {
+        toast.success("AI completed approved work");
       }
     } catch (error) {
       const message = getErrorMessage(error, "AI request failed");
@@ -270,6 +284,44 @@ export default function AIOperator() {
       toast.error(message);
     } finally {
       setSending(false);
+      setWorking(false);
+    }
+  };
+
+  const sendPrompt = async (event) => {
+    event?.preventDefault?.();
+    if (!canSend) return;
+    await runOperatorPrompt(prompt, settings.executeMode);
+  };
+
+  const workNow = async () => {
+    if (busy) return;
+    await runOperatorPrompt("Diagnose the dashboard and apply safe fixes that are allowed. Do not run critical or destructive actions.", "write");
+  };
+
+  const diagnoseNow = async () => {
+    if (diagnosing || sending) return;
+    setDiagnosing(true);
+    setLastActions([]);
+    setLastExecutions([]);
+    try {
+      const result = await toast.promise(
+        () => aiOperator.diagnose({ messages, processes }),
+        {
+          loading: "Checking dashboard...",
+          success: "Diagnosis ready",
+          error: (error) => getErrorMessage(error, "Diagnosis failed")
+        }
+      );
+      const data = result.data || {};
+      setLastActions(data.actions || []);
+      setLastExecutions(data.executions || []);
+      setLastSupportContext(data.supportContext || null);
+      setMessages((prev) => [...prev, { role: "assistant", content: data.reply || "I checked the dashboard." }]);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Diagnosis failed"));
+    } finally {
+      setDiagnosing(false);
     }
   };
 
@@ -280,9 +332,18 @@ export default function AIOperator() {
     }
     setRunningActionId(action.actionId);
     try {
-      const result = await pm2Admin.runFeature(action.actionId, action.payload || {});
-      setLastExecutions((prev) => [{ ...(result.data || {}), status: result.success ? "executed" : "failed", success: result.success }, ...prev]);
-      toast.success(`${action.actionId} completed`);
+      const result = await aiOperator.runAction(action.actionId, action.payload || {});
+      if (result.data?.status === "needs_confirmation") {
+        setPendingAction(action);
+        return;
+      }
+      const executionStatus = result.data?.status || (result.success ? "executed" : "failed");
+      setLastExecutions((prev) => [{ ...(result.data || {}), status: executionStatus, success: result.success }, ...prev]);
+      if (!result.success || ["failed", "rejected"].includes(executionStatus)) {
+        toast.error(`${action.actionId} failed`);
+      } else {
+        toast.success(`${action.actionId} ${executionStatus === "accepted" ? "accepted" : "completed"}`);
+      }
     } catch (error) {
       toast.error(getErrorMessage(error, `${action.actionId} failed`));
     } finally {
@@ -296,9 +357,14 @@ export default function AIOperator() {
     setPendingAction(null);
     setRunningActionId(action.actionId);
     try {
-      const result = await pm2Admin.runFeature(action.actionId, action.payload || {}, action.actionId);
-      setLastExecutions((prev) => [{ ...(result.data || {}), status: result.success ? "executed" : "failed", success: result.success }, ...prev]);
-      toast.success(`${action.actionId} completed`);
+      const result = await aiOperator.runAction(action.actionId, action.payload || {}, action.actionId);
+      const executionStatus = result.data?.status || (result.success ? "executed" : "failed");
+      setLastExecutions((prev) => [{ ...(result.data || {}), status: executionStatus, success: result.success }, ...prev]);
+      if (!result.success || ["failed", "rejected"].includes(executionStatus)) {
+        toast.error(`${action.actionId} failed`);
+      } else {
+        toast.success(`${action.actionId} ${executionStatus === "accepted" ? "accepted" : "completed"}`);
+      }
     } catch (error) {
       toast.error(getErrorMessage(error, `${action.actionId} failed`));
     } finally {
@@ -313,7 +379,15 @@ export default function AIOperator() {
         actions={(
           <>
             <Badge tone={connected ? "success" : "warning"}>{connected ? "Ready" : "Setup needed"}</Badge>
-            <Button type="button" size="sm" variant="secondary" onClick={copyTranscript}>
+            <Button type="button" size="sm" onClick={workNow} disabled={busy}>
+              <Zap size={14} />
+              {working ? "Working" : "Auto repair"}
+            </Button>
+            <Button type="button" size="sm" variant="outlinePrimary" onClick={diagnoseNow} disabled={busy}>
+              <Wrench size={14} />
+              {diagnosing ? "Checking" : "Diagnose"}
+            </Button>
+            <Button type="button" size="sm" variant="secondary" onClick={copyTranscript} disabled={busy}>
               <Copy size={14} />
               Copy
             </Button>
@@ -428,7 +502,7 @@ export default function AIOperator() {
             {sending ? (
               <div className="flex items-center gap-2 text-sm text-text-3">
                 <Bot size={16} className="animate-pulse" />
-                Working...
+                AI is working...
               </div>
             ) : null}
           </div>
@@ -445,12 +519,12 @@ export default function AIOperator() {
             <Textarea
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
-              placeholder="Ask what to check or run"
+              placeholder="Paste an error, ask what broke, or tell it what to fix"
               className="ai-prompt-input resize-y"
             />
             <Button type="submit" disabled={!canSend} className="ai-send-button">
               {settings.executeMode === "plan" ? <Send size={14} /> : <Zap size={14} />}
-              {sending ? "Working" : settings.executeMode === "plan" ? "Ask" : "Ask + run"}
+              {sending ? "Working" : settings.executeMode === "write" ? "Ask + work" : connected ? settings.executeMode === "plan" ? "Ask" : "Ask + checks" : "Diagnose"}
             </Button>
           </form>
         </section>
@@ -460,9 +534,19 @@ export default function AIOperator() {
             <PanelHeader title="Context" />
             <div className="ai-context-grid">
               <CompactMetric label="Processes" value={processes.length} />
-              <CompactMetric label="Providers" value={providers.length || 2} />
+              <CompactMetric label="Issues" value={lastSupportContext?.issues?.length ?? "—"} />
               <CompactMetric label="Mode" value={settings.executeMode} />
             </div>
+            {lastSupportContext?.issues?.length ? (
+              <div className="ai-evidence-list">
+                {lastSupportContext.issues.slice(0, 3).map((issue) => (
+                  <InsetPanel key={issue.id} padding="sm" className="ai-evidence-row">
+                    <Badge tone={issue.severity === "danger" ? "danger" : issue.severity === "warning" ? "warning" : "neutral"}>{issue.severity}</Badge>
+                    <span className="truncate text-xs font-medium text-text-2">{issue.title}</span>
+                  </InsetPanel>
+                ))}
+              </div>
+            ) : null}
           </section>
 
           <section className="ai-side-card ai-queue-card">
